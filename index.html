@@ -362,8 +362,8 @@
   <!-- ============ STEP1 ============ -->
   <div class="tab-content" id="tab-step1">
     <p style="font-size:13px;color:#666;margin-bottom:20px;line-height:1.6;">
-      Amazonセラーセントラルからダウンロードした未出荷注文レポートを<br>
-      ヤマトB2クラウド取込用CSVに変換します。
+      Amazonの未出荷注文レポートと楽天市場の通常購入データCSVを<br>
+      ヤマトB2クラウド取込用CSV（1ファイル）に変換します。どちらか一方だけでも変換できます。
     </p>
     <div class="settings-row">
       <div class="field">
@@ -379,14 +379,14 @@
         </select>
       </div>
     </div>
-    <div class="section-label">店舗・未出荷レポート</div>
+    <div class="section-label">注文データ（Amazon未出荷レポート／楽天市場CSV）</div>
     <div class="store-sections" id="s1-storeSections"></div>
     <button class="btn-primary btn-orange" id="s1-convertBtn" disabled>変換して保存</button>
     <div class="results" id="s1-results"></div>
     <hr class="divider">
     <div class="section-label">出力ファイル</div>
     <div class="info-box">
-      ファイル名: <strong>b2cloud_YYYYMMDD_HHMMSS.csv</strong>（全店舗統合・1ファイル）<br>
+      ファイル名: <strong>b2cloud_YYYYMMDD_HHMMSS.csv</strong>（Amazon全店舗＋楽天市場 統合・1ファイル、Amazon分→楽天市場分の順）<br>
       ブラウザのダウンロードとして直接保存されます（フォルダ選択なし）。
     </div>
     <div class="section-label" style="margin-top:14px;">依頼主情報（設定中）</div>
@@ -1305,6 +1305,7 @@ const s1Results  = document.getElementById('s1-results');
 const s1InfoList = document.getElementById('s1-storeInfoList');
 
 let s1Buffers = {};
+let s1RakutenBuffer = null;   // 楽天市場 通常購入データCSV（任意・1ファイル）
 
 // ============================================================
 // 商品サムネイル：SKU→画像URL マッピング
@@ -1389,6 +1390,44 @@ function renderStep1Sections() {
     wrap.appendChild(hdr); wrap.appendChild(dz); wrap.appendChild(fi);
     s1Sections.appendChild(wrap);
   });
+
+  // 楽天市場（任意）：通常購入データCSVを1ファイル受け付ける。
+  // Amazon店舗のドロップゾーンと視覚区別するため赤系アクセント（drop-red）を使用。
+  s1RakutenBuffer = null;
+  const rkWrap = document.createElement('div');
+  rkWrap.className = 'store-section';
+  const rkHdr = document.createElement('div');
+  rkHdr.className = 'store-section-header';
+  rkHdr.textContent = '楽天市場（任意）';
+  rkHdr.style.color = '#c0392b';
+  const rkDz = document.createElement('div');
+  rkDz.className = 'dropzone drop-red';
+  rkDz.innerHTML = `<div class="dropzone-icon">🛒</div>
+    <div class="dropzone-text">通常購入データCSVをドロップ<br>またはクリックして選択</div>
+    <div class="dropzone-hint">楽天市場RMS「通常購入データ」CSV ／ 未指定ならAmazon分のみ変換</div>`;
+  const rkFi = document.createElement('input');
+  rkFi.type='file'; rkFi.accept='.csv'; rkFi.style.display='none';
+  const rkLoad = file => {
+    const reader = new FileReader();
+    reader.onload = e => {
+      s1RakutenBuffer = e.target.result;
+      rkDz.classList.add('has-file');
+      rkDz.querySelector('.dropzone-text').textContent = `✓ ${file.name}`;
+      s1Convert.disabled = !(Object.values(s1Buffers).some(Boolean) || s1RakutenBuffer);
+      s1Results.innerHTML = '';
+    };
+    reader.readAsArrayBuffer(file);
+  };
+  rkDz.addEventListener('click', () => rkFi.click());
+  rkDz.addEventListener('dragover', e => { e.preventDefault(); rkDz.classList.add('drag-over'); });
+  rkDz.addEventListener('dragleave', () => rkDz.classList.remove('drag-over'));
+  rkDz.addEventListener('drop', e => {
+    e.preventDefault(); rkDz.classList.remove('drag-over');
+    if (e.dataTransfer.files[0]) rkLoad(e.dataTransfer.files[0]);
+  });
+  rkFi.addEventListener('change', e => { if (e.target.files[0]) rkLoad(e.target.files[0]); });
+  rkWrap.appendChild(rkHdr); rkWrap.appendChild(rkDz); rkWrap.appendChild(rkFi);
+  s1Sections.appendChild(rkWrap);
 }
 
 function s1LoadFile(file, key, dz) {
@@ -1397,7 +1436,7 @@ function s1LoadFile(file, key, dz) {
     s1Buffers[key] = e.target.result;
     dz.classList.add('has-file');
     dz.querySelector('.dropzone-text').textContent = `✓ ${file.name}`;
-    s1Convert.disabled = !Object.values(s1Buffers).some(Boolean);
+    s1Convert.disabled = !(Object.values(s1Buffers).some(Boolean) || s1RakutenBuffer);
     s1Results.innerHTML = '';
   };
   reader.readAsArrayBuffer(file);
@@ -1435,24 +1474,61 @@ s1Convert.addEventListener('click', async () => {
   // 除外が1件以上あれば警告ブロックを出す（0件なら何も描画しない）
   renderShipMethodExcludedSection(allExcluded);
 
-  if (!allRecords.length) return;
+  // ---- 楽天市場分（任意）：通常購入データCSVがあればB2行を生成 ----
+  // MCF（CONSUMER-）は parseRakutenCsv の段階で除外済み＝B2 CSVにも入らない。
+  // 配送方法が不明で送り状種類コードを決められない注文はB2行から除外して警告する。
+  let rakutenB2Rows = [];
+  if (s1RakutenBuffer) {
+    const item = document.createElement('div');
+    try {
+      const parsed = parseRakutenCsv(decodeBuffer(s1RakutenBuffer));
+      const rData  = buildRakutenPickingData(parsed.groups);
+      const sender = getRakutenSenderStore(stores);
+      if (!sender) throw new Error('依頼主設定がありません（設定タブから登録してください）');
+      const usable = rData.orders.filter(o => rakutenInvoiceCode(o) !== '');
+      const noCode = rData.orders.filter(o => rakutenInvoiceCode(o) === '');
+      rakutenB2Rows = usable.map(o => buildRakutenB2Row(o, shipDate, sender));
+      item.className = 'result-item success';
+      item.textContent = `✓ 楽天市場：${rakutenB2Rows.length}件（依頼主: ${sender.name}）`;
+      s1Results.appendChild(item);
+      renderRakutenWarningSection(s1Results, 's1-rk-mcf',
+        `⚠ 楽天市場：MCF出荷分（CONSUMER-）のためB2から除外: ${parsed.mcfExcluded.length}件`,
+        ['注文番号', 'ひとことメモ', '商品名'],
+        parsed.mcfExcluded.map(x => [x.orderNumber, x.memo, x.productName]), 'error');
+      renderRakutenWarningSection(s1Results, 's1-rk-unknown',
+        `⚠ 楽天市場：配送方法が不明のためB2から除外（手動対応してください）: ${noCode.length}件`,
+        ['注文番号', '配送方法'],
+        noCode.map(o => [o.orderNumber, o.shipMethodRaw || '（空）']), 'error');
+    } catch(e) {
+      item.className = 'result-item error';
+      item.textContent = `⚠ 楽天市場：${e.message}`;
+      s1Results.appendChild(item);
+    }
+  }
 
-  // 統一ソート：B2 CSV 行順 と ピッキング順 の両方に同一順序を適用
-  const sorted  = sortOrderRecords(allRecords);
+  if (!allRecords.length && !rakutenB2Rows.length) return;
 
-  // 商品群番号を単一マップで採番（ピッキングtotal番号列と B2記事欄が共有＝二重採番禁止）
-  const skuNumMap = buildSkuNumberMap(sorted);
-  // B2記事欄（記事列=index32）のみを (NNN×q) 形式へ上書き。他の列・値・行順は一切不変。
-  for (const r of sorted) { r.b2Row[32] = buildKijiForRecord(r, skuNumMap); }
-  const allRows = sorted.map(r => r.b2Row);
+  // ---- Amazon分（従来処理そのまま・出力行は不変） ----
+  let amazonRows = [];
+  if (allRecords.length) {
+    // 統一ソート：B2 CSV 行順 と ピッキング順 の両方に同一順序を適用
+    const sorted  = sortOrderRecords(allRecords);
 
-  // PICKING: no-PII のピッキングデータ（total）を生成し印刷ボタンを常設
-  const pickingData = buildPickingItems(enrichPickingItems(sorted), skuNumMap);
-  renderPickingButton(pickingData);
-  // 画像URL登録用の画面一覧（各行にURL入力欄）を生成（トグルで開閉）
-  renderImageRegisterSection(pickingData);
+    // 商品群番号を単一マップで採番（ピッキングtotal番号列と B2記事欄が共有＝二重採番禁止）
+    const skuNumMap = buildSkuNumberMap(sorted);
+    // B2記事欄（記事列=index32）のみを (NNN×q) 形式へ上書き。他の列・値・行順は一切不変。
+    for (const r of sorted) { r.b2Row[32] = buildKijiForRecord(r, skuNumMap); }
+    amazonRows = sorted.map(r => r.b2Row);
 
-  const csvText = [toCsvLine(B2_HEADER), ...allRows.map(toCsvLine)].join('\r\n') + '\r\n';
+    // PICKING: no-PII のピッキングデータ（total）を生成し印刷ボタンを常設
+    const pickingData = buildPickingItems(enrichPickingItems(sorted), skuNumMap);
+    renderPickingButton(pickingData);
+    // 画像URL登録用の画面一覧（各行にURL入力欄）を生成（トグルで開閉）
+    renderImageRegisterSection(pickingData);
+  }
+
+  // 出力順：Amazon分 → 楽天市場分（Amazon分の行順・行内容は従来と完全一致のまま末尾に追加）
+  const csvText = [toCsvLine(B2_HEADER), ...amazonRows.map(toCsvLine), ...rakutenB2Rows.map(toCsvLine)].join('\r\n') + '\r\n';
   const filename = `b2cloud_${dateStr}_${nowStamp().hms}.csv`;
 
   // 単純ダウンロード（フォルダ選択ダイアログなし）
@@ -1460,7 +1536,7 @@ s1Convert.addEventListener('click', async () => {
     downloadBlob(filename, new Blob([toSjisUint8(csvText)], { type: 'text/csv' }));
     const ok = document.createElement('div');
     ok.className = 'result-item success'; ok.style.marginTop = '6px';
-    ok.textContent = `✓ ${filename}（${totalCount}件）をダウンロードしました`;
+    ok.textContent = `✓ ${filename}（${totalCount + rakutenB2Rows.length}件）をダウンロードしました`;
     s1Results.appendChild(ok);
   } catch(e) {
     const err = document.createElement('div');
@@ -1785,7 +1861,15 @@ function parseRakutenCsv(csvText) {
     const qty = parseInt(gc(row, '個数') || '1', 10) || 1;
 
     if (!groups.has(orderNumber)) {
-      groups.set(orderNumber, { orderNumber, shipMethodRaw: method, shipType, lines: [] });
+      groups.set(orderNumber, { orderNumber, shipMethodRaw: method, shipType, lines: [],
+        // B2クラウド取込CSV生成（S1統合）用のお届け先情報。ピッキング表示では未使用。
+        recipient: {
+          lastName:  gc(row, '送付先姓'),
+          firstName: gc(row, '送付先名'),
+          phone1: gc(row, '送付先電話番号1'), phone2: gc(row, '送付先電話番号2'), phone3: gc(row, '送付先電話番号3'),
+          postal1: gc(row, '送付先郵便番号1'), postal2: gc(row, '送付先郵便番号2'),
+          pref: gc(row, '送付先住所都道府県'), city: gc(row, '送付先住所郡市区'), rest: gc(row, '送付先住所それ以降の住所')
+        } });
     }
     groups.get(orderNumber).lines.push({ name: productName, quantity: qty, sku: skuKey });
   }
@@ -1811,6 +1895,7 @@ function buildRakutenPickingData(groups) {
   total.forEach((c, i) => { c.num = 'R-' + String(i + 1).padStart(3, '0'); numMap.set(c.sku, c.num); });
   const orders = groups.map(g => ({
     orderNumber: g.orderNumber, shipType: g.shipType, shipMethodRaw: g.shipMethodRaw,
+    recipient: g.recipient,   // B2行生成（S1統合）用に引き継ぐ
     lines: g.lines.map(l => ({ ...l, num: numMap.get(l.sku) || '' }))
   }));
   return { total, orders };
@@ -1824,6 +1909,70 @@ function rakutenResolvedMethod(o) {
   if (o.shipType === 'ネコポス') return 'ネコポス';
   if (o.shipType === '宅配便')   return rakutenShipChoice.get(o.orderNumber) || RAKUTEN_COMPACT;
   return o.shipMethodRaw || '（不明）';
+}
+
+// ============================================================
+// 楽天市場 → B2クラウド取込CSV（S1統合）
+// Amazon側の buildB2Row／convertToB2／buildKijiForRecord／buildSkuNumberMap には
+// 一切依存・変更しない独立実装。列構造は同じ B2_HEADER（95列）。
+// ============================================================
+
+// 楽天市場分の依頼主store。既定は「まいど萬福堂」（楽天市場店の運営主体・
+// 発送元住所が共通のため）。将来専用の依頼主が必要になったら
+// localStorage 'rakuten_b2_sender' に店舗名を入れるだけで切り替えられる構造。
+const RAKUTEN_DEFAULT_SENDER = 'まいど萬福堂';
+function getRakutenSenderStore(stores) {
+  const pref = localStorage.getItem('rakuten_b2_sender') || RAKUTEN_DEFAULT_SENDER;
+  return stores.find(s => s.name === pref)
+      || stores.find(s => s.name.includes(pref) || pref.includes(s.name))
+      || stores[0] || null;
+}
+
+// 確定配送方法 → B2送り状種類コード。SHIP_METHOD_MAP（A=ネコポス/0=宅急便/
+// 2=宅急便コンパクト）と同じコード体系の逆引き。楽天市場タブのプルダウン選択
+// （rakutenShipChoice）が rakutenResolvedMethod 経由でそのまま反映される。
+// 不明な配送方法は '' を返し、呼び出し側でB2行から除外して警告する。
+function rakutenInvoiceCode(order) {
+  const method = rakutenResolvedMethod(order);
+  return Object.keys(SHIP_METHOD_MAP).find(k => SHIP_METHOD_MAP[k] === method) || '';
+}
+
+// 楽天市場用 記事欄：（R-001×1）／（R-001×1／R-002×2）形式。
+// Amazon側 buildKijiForRecord とは独立。KIJI_MAX_BYTES(44byte=cp932想定)超過時は
+// 収まる商品数まで表示し「／他N種」を付与する段階フォールバックを踏襲。
+function buildRakutenKiji(order) {
+  const parts = order.lines.map(l => `${l.num || 'R-000'}×${l.quantity}`);
+  const full = `（${parts.join('／')}）`;
+  if (cp932ByteLength(full) <= KIJI_MAX_BYTES) return full;
+  for (let k = parts.length - 1; k >= 1; k--) {
+    const cand = `（${parts.slice(0, k).join('／')}／他${parts.length - k}種）`;
+    if (cp932ByteLength(cand) <= KIJI_MAX_BYTES) return cand;
+  }
+  const fallback = `（${parts[0]}／他${parts.length - 1}種）`;
+  console.warn('[記事欄] 44byte上限に収まりません（楽天市場）:', fallback, cp932ByteLength(fallback) + 'byte');
+  return fallback;
+}
+
+// 楽天市場注文（buildRakutenPickingData の orders 要素）→ B2クラウド1行（95列）。
+// 各列は Amazon側 buildB2Row と同じ位置に同じ種類の値を入れる（データ源の列名のみ異なる）。
+function buildRakutenB2Row(order, shipDate, store) {
+  const row = new Array(95).fill('');
+  const r = order.recipient || {};
+  const { fullAddress, building } = buildAddress(r.pref || '', r.city || '', r.rest || '', '', '');
+  row[0]  = order.orderNumber;
+  row[1]  = rakutenInvoiceCode(order);
+  row[4]  = shipDate;
+  row[8]  = [r.phone1, r.phone2, r.phone3].filter(Boolean).join('-');
+  row[10] = [r.postal1, r.postal2].filter(Boolean).join('-');
+  row[11] = fullAddress; row[12] = building;
+  row[15] = [r.lastName, r.firstName].filter(Boolean).join(' ');
+  row[19] = store.tel; row[21] = store.postal;
+  row[22] = store.address; row[23] = store.building; row[24] = store.name;
+  row[27] = ((order.lines[0] && order.lines[0].name) || '').slice(0, 25).trimEnd();
+  row[32] = buildRakutenKiji(order);
+  row[38] = String(order.lines.reduce((a, l) => a + (l.quantity || 0), 0));
+  row[39] = store.customerCode; row[41] = store.fareCode;
+  return row;
 }
 
 // 汎用：印刷用HTML文書を隠しiframeへ流し込み window.print()。
