@@ -425,6 +425,7 @@
       <div class="results" id="r-results"></div>
       <div id="r-picking-area"></div>
     </div>
+    <div id="s1-convert-note"></div>
     <button class="btn-primary btn-orange" id="s1-convertBtn" disabled>変換して保存</button>
     <div class="results" id="s1-results"></div>
     <hr class="divider">
@@ -517,11 +518,11 @@
   <div class="footer">
     <div class="contact-links">
       要望・不具合報告：
-      <a href="https://github.com/ec-tools-jp/fbm-tool/issues" target="_blank">GitHub Issues（公開掲示板）</a>
+      <a href="https://github.com/kaztkyjp-2026/ec-shipping-sanriku/issues" target="_blank">GitHub Issues（公開掲示板）</a>
       ｜
       <a href="https://docs.google.com/forms/d/e/1FAIpQLSdeymUyCmegcPe6v2r4eOmVLpl-8I2j2rjXoO_uYbWxo1DYMQ/viewform" target="_blank">お問い合わせフォーム</a>
     </div>
-    <div style="font-size:11px;color:#bbb;margin-bottom:10px;">© 2026 ec-tools-jp / <a href="https://github.com/ec-tools-jp/fbm-tool/blob/main/LICENSE" target="_blank" style="color:#bbb;">MIT License</a></div>
+    <div style="font-size:11px;color:#bbb;margin-bottom:10px;">© 2026 ec-tools-jp / <a href="https://github.com/kaztkyjp-2026/ec-shipping-sanriku/blob/main/LICENSE" target="_blank" style="color:#bbb;">MIT License</a></div>
     <details>
       <summary>免責事項</summary>
       <div class="disclaimer-text">
@@ -1183,10 +1184,22 @@ async function savePdfFromHtml(html, filename) {
   const styles = [...html.matchAll(/<style[^>]*>[\s\S]*?<\/style>/gi)].map(m => m[0]).join('\n');
   const bodyMatch = html.match(/<body[^>]*>([\s\S]*)<\/body>/i);
   const host = document.createElement('div');
-  Object.assign(host.style, { position: 'fixed', left: '-10000px', top: '0',
-                              width: '190mm', background: '#fff' });
+  // 画面内（left:0/top:0）に置く。画面外（left:-10000px）だと html2canvas が
+  // ビューポート基準で描画して白紙を返す。display:none / visibility:hidden も描画不能。
+  // z-index:-1 で本文の背後に敷き、生成中は cover で全面を覆って視覚的に隠す。
+  // cover は host の子孫ではない＝html2canvas の描画対象（host サブツリー）外なのでPDFには写らない。
+  Object.assign(host.style, { position: 'fixed', left: '0', top: '0',
+                              width: '190mm', background: '#fff',
+                              zIndex: '-1', pointerEvents: 'none' });
   host.innerHTML = styles + (bodyMatch ? bodyMatch[1] : html);
+  const cover = document.createElement('div');
+  Object.assign(cover.style, { position: 'fixed', inset: '0', zIndex: '99999',
+                               background: 'rgba(255,255,255,0.9)', display: 'flex',
+                               alignItems: 'center', justifyContent: 'center',
+                               fontSize: '14px', color: '#555' });
+  cover.textContent = 'PDFを生成しています…';
   document.body.appendChild(host);
+  document.body.appendChild(cover);
   try {
     await html2pdf().set({
       filename,
@@ -1198,6 +1211,7 @@ async function savePdfFromHtml(html, filename) {
     }).from(host).save();
   } finally {
     host.remove();
+    cover.remove();
   }
 }
 
@@ -1464,6 +1478,7 @@ const s1InfoList = document.getElementById('s1-storeInfoList');
 let s1Buffers = {};
 let s1RakutenBuffer = null;   // 楽天市場 通常購入データCSV（任意・1ファイル）
 let s1RakutenParsed = null;   // 読み込み時にパース済みの楽天市場データ（変換はこれを使う）
+let s1OutputDone = false;     // 現在の読込状態でB2 CSVを出力済みか（ボタンラベル「出力済み」表示用）
 
 // ============================================================
 // 商品サムネイル：SKU→画像URL マッピング
@@ -1503,6 +1518,8 @@ function renderStep1Sections() {
   s1Buffers = {};
   s1Convert.disabled = true;
   s1Results.innerHTML = '';
+  s1OutputDone = false;
+  updateS1ConvertLabel();   // Amazonバッファのリセットをラベルへ反映（楽天市場の読込は維持される）
 
   if (stores.length === 0) {
     s1Sections.innerHTML = '<div class="info-box">店舗が設定されていません。<strong>設定タブ</strong>から店舗情報を登録してください。</div>';
@@ -1565,8 +1582,55 @@ function s1LoadFile(file, key, dz) {
     dz.querySelector('.dropzone-text').textContent = `✓ ${file.name}`;
     s1Convert.disabled = !(Object.values(s1Buffers).some(Boolean) || s1RakutenBuffer);
     s1Results.innerHTML = '';
+    s1OutputDone = false;
+    updateS1ConvertLabel();
   };
   reader.readAsArrayBuffer(file);
+}
+
+// ============================================================
+// 変換ボタンのラベル：s1-convertBtn は1個（モール切替ペインの外側）で、Amazonタブ・
+// 楽天市場タブの両方に同じボタンが見える。押すと「読み込んだ全モール分が1ファイルに出る」
+// ことが画面から分からないため、読込状態（注文件数）をラベル自体に表示し、
+// 片方のみ読込のときは未読込モール分が含まれない旨の注意書きをボタン上に出す。
+// 読込・解除（＝店舗設定の保存によるリセット）のたびに呼ぶこと。
+// ============================================================
+
+// 読込済みAmazonレポートの注文件数合計（変換出力と同じ基準：ネコポス以外除外後・orderIdあり）。
+// パースできないファイルは0件扱い（変換時に既存のエラー表示が出るためここでは握りつぶす）。
+function s1AmazonOrderCount() {
+  let n = 0;
+  for (const buf of Object.values(s1Buffers)) {
+    if (!buf) continue;
+    try { n += parseAmazonTsvGroups(decodeBuffer(buf)).filter(g => g.orderId).length; }
+    catch (_) {}
+  }
+  return n;
+}
+
+function updateS1ConvertLabel() {
+  const note = document.getElementById('s1-convert-note');
+  note.innerHTML = '';
+  if (s1OutputDone) { s1Convert.textContent = '出力済み — もう一度保存する'; return; }
+
+  const hasAmazon  = Object.values(s1Buffers).some(Boolean);
+  const hasRakuten = !!s1RakutenParsed;
+  if (!hasAmazon && !hasRakuten) { s1Convert.textContent = '変換して保存'; return; }
+
+  const parts = [];
+  if (hasAmazon)  parts.push(`Amazon ${s1AmazonOrderCount()}件`);
+  if (hasRakuten) parts.push(`楽天市場 ${s1RakutenParsed.groups.length}件`);
+  s1Convert.textContent = `${parts.join(' ＋ ')} を1ファイルに変換して保存`;
+
+  if (!hasAmazon || !hasRakuten) {
+    const warn = document.createElement('div');
+    warn.className = 'result-item';
+    warn.style.cssText = 'display:block;background:#fffbeb;border:1px solid #fcd34d;color:#92400e;margin-bottom:10px;';
+    warn.textContent = hasRakuten
+      ? '⚠ Amazonの未出荷レポートが未読込です。Amazon分は含まれません'
+      : '⚠ 楽天市場のCSVが未読込です。楽天分は含まれません';
+    note.appendChild(warn);
+  }
 }
 
 s1Convert.addEventListener('click', async () => {
@@ -1678,6 +1742,8 @@ s1Convert.addEventListener('click', async () => {
     ok.className = 'result-item success'; ok.style.marginTop = '6px';
     ok.textContent = `✓ ${filename}（${totalCount + rakutenB2Rows.length}件）をダウンロードしました`;
     s1Results.appendChild(ok);
+    s1OutputDone = true;
+    updateS1ConvertLabel();
   } catch(e) {
     const err = document.createElement('div');
     err.className = 'result-item error'; err.style.marginTop = '6px';
@@ -2642,6 +2708,8 @@ function rLoadFile(file) {
       document.getElementById('r-results').appendChild(item);
     }
     s1Convert.disabled = !(Object.values(s1Buffers).some(Boolean) || s1RakutenBuffer);
+    s1OutputDone = false;
+    updateS1ConvertLabel();
   };
   reader.readAsArrayBuffer(file);
 }
@@ -2754,8 +2822,9 @@ function buildRakutenShippingReport(templateCsvText, b2CsvText) {
     if (!templByOrder.has(orderNumber)) unmatchedB2.push({ orderNumber });
   }
 
-  // 6列固定・ヘッダー行付き。値にカンマ・引用符は含まれない前提のためクオートなしで出力
-  const csv = [RAKUTEN_REPORT_HEADER, ...outRows].map(r => r.join(',')).join('\r\n') + '\r\n';
+  // 6列固定・ヘッダー行付き。RMSからDLしたテンプレートの実測書式に合わせ、ヘッダー行・
+  // データ行とも全フィールドをダブルクォートで囲む（空欄も ""。" は "" へ二重化＝toCsvLine）
+  const csv = [RAKUTEN_REPORT_HEADER, ...outRows].map(toCsvLine).join('\r\n') + '\r\n';
   return { csv, matchedCount: outRows.length, duplicates, multiParcel,
            unmatchedTemplate, unmatchedB2, invalidShipDate };
 }
@@ -2830,7 +2899,7 @@ rtConvert.addEventListener('click', () => {
 
     if (rep.matchedCount > 0) {
       const { ymd, hms } = nowStamp();
-      const filename = `楽天市場発送完了報告_${ymd}_${hms}.csv`;
+      const filename = `rakuten_shipping_report_${ymd}_${hms}.csv`;
       downloadBlob(filename, new Blob([toSjisUint8(rep.csv)], { type: 'text/csv' }));
       const dl = document.createElement('div');
       dl.className = 'result-item success'; dl.style.marginTop = '6px';
