@@ -863,6 +863,7 @@ function convertToShipmentNotify(csvText) {
 
   // storeKey -> Map(orderId -> dataRow)  ※同一order-idは伝票番号をカンマ結合
   const storeOrderMaps = new Map();
+  const excludedNonAmazon = [];   // Amazon注文番号形式でない行（楽天市場等の他モール分）
   let shipDateStr = '';
 
   for (let i = 1; i < lines.length; i++) {
@@ -873,6 +874,13 @@ function convertToShipmentNotify(csvText) {
     const invoiceType = gc(row, '送り状種類');
     const storeName   = gc(row, 'ご依頼主名');
     if (!orderId || !trackingRaw) continue;
+
+    // Amazon注文番号形式（3-7-7桁）以外＝楽天市場等の他モール分 → 出荷通知の対象外として退避。
+    // B2側の生データを保つため伝票番号は trackingRaw のまま（parseInt正規化しない）。
+    if (!/^\d{3}-\d{7}-\d{7}$/.test(orderId)) {
+      excludedNonAmazon.push({ orderId, storeName, tracking: trackingRaw });
+      continue;
+    }
 
     const tracking = String(parseInt(trackingRaw.replace(/\.0+$/,''), 10));
     const [y, m, d] = dateRaw.split('/');
@@ -908,7 +916,7 @@ function convertToShipmentNotify(csvText) {
     const dataRows = Array.from(orderMap.values());
     results.push({ store, storeKey, dataRows, shipDateStr, prefix });
   }
-  return results;
+  return { results, excludedNonAmazon };
 }
 
 // ============================================================
@@ -1717,11 +1725,13 @@ function s2HandleFiles(files) {
 s2Convert.addEventListener('click', async () => {
   s2Results.innerHTML = '';
   const outputFiles = [];
+  const allExcluded = [];   // Amazon以外（楽天市場等）として除外した行の全ファイル分累積
 
   for (const { name, buffer } of s2Files) {
     try {
       const text = decodeBuffer(buffer);
-      const storeResults = convertToShipmentNotify(text);
+      const { results: storeResults, excludedNonAmazon } = convertToShipmentNotify(text);
+      allExcluded.push(...excludedNonAmazon);
       for (const { storeKey, dataRows, shipDateStr, prefix } of storeResults) {
         const tsvText = [...NOTIFY_HEADER, ...dataRows].map(r => r.join('\t')).join('\r\n') + '\r\n';
         const baseFilename = `${prefix}amazon_shipment_confirm_${shipDateStr}`;
@@ -1738,6 +1748,9 @@ s2Convert.addEventListener('click', async () => {
       s2Results.appendChild(item);
     }
   }
+
+  // 除外一覧（0件なら何も描画しない）。出力0件の早期returnより前に必ず表示する
+  renderNonAmazonExcludedSection(allExcluded);
 
   if (!outputFiles.length) return;
 
@@ -1819,6 +1832,66 @@ function renderShipMethodExcludedSection(excluded) {
   wrap.appendChild(sec);
   // Amazon入力に対する警告のため、Amazonペイン内に表示する
   (document.getElementById('s1-amazon-extra') || s1Results).appendChild(wrap);
+
+  toggle.addEventListener('click', () => {
+    const shown = sec.style.display !== 'none';
+    sec.style.display = shown ? 'none' : 'block';
+    toggle.textContent = shown ? '除外一覧を表示' : '除外一覧を隠す';
+  });
+}
+
+// ============================================================
+// STEP2: お客様管理番号がAmazon注文番号形式（3-7-7桁）でない行の除外警告ブロック。
+// B2発行済みデータに楽天市場等の他モール分が混在していても出荷通知TXTへ入れない。
+// renderShipMethodExcludedSection と同じ構造（トグル開閉式・0件なら何も描画しない）。
+// ============================================================
+function renderNonAmazonExcludedSection(excluded) {
+  const old = document.getElementById('non-amazon-excluded-wrap');
+  if (old) old.remove();
+  if (!excluded || !excluded.length) return;
+
+  const wrap = document.createElement('div');
+  wrap.id = 'non-amazon-excluded-wrap';
+  wrap.style.marginTop = '6px';
+
+  const head = document.createElement('div');
+  head.className = 'result-item error';
+  head.textContent = `⚠ Amazon以外のため除外: ${excluded.length}件`;
+
+  const toggle = document.createElement('button');
+  toggle.type = 'button';
+  toggle.className = 'btn-primary';
+  toggle.style.marginTop = '6px';
+  toggle.textContent = '除外一覧を表示';
+
+  const sec = document.createElement('div');
+  sec.style.display = 'none';
+  sec.style.marginTop = '8px';
+
+  const rowsHtml = excluded.map(x => `<tr>
+      <td class="nae-oid">${esc(x.orderId || '')}</td>
+      <td>${esc(x.storeName || '')}</td>
+      <td class="nae-oid">${esc(x.tracking || '')}</td>
+    </tr>`).join('');
+
+  sec.innerHTML = `
+    <style>
+      #non-amazon-excluded-wrap .nae-table { width:100%; border-collapse:collapse; font-size:13px; }
+      #non-amazon-excluded-wrap .nae-table th, #non-amazon-excluded-wrap .nae-table td {
+        border-bottom:1px solid #e2e2e2; padding:5px 8px; vertical-align:middle; text-align:left; }
+      #non-amazon-excluded-wrap .nae-table th { background:#f4f4f4; }
+      #non-amazon-excluded-wrap .nae-oid { white-space:nowrap; color:#555; }
+    </style>
+    <table class="nae-table">
+      <thead><tr><th>注文番号</th><th>依頼主名</th><th>伝票番号</th></tr></thead>
+      <tbody>${rowsHtml}</tbody>
+    </table>`;
+
+  wrap.appendChild(head);
+  wrap.appendChild(toggle);
+  wrap.appendChild(sec);
+  // STEP2（Amazon出荷通知）の入力に対する警告のため、STEP2の結果エリアに表示する
+  s2Results.appendChild(wrap);
 
   toggle.addEventListener('click', () => {
     const shown = sec.style.display !== 'none';
