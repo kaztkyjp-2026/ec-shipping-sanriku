@@ -2158,6 +2158,32 @@ function classifyRakutenOrder(order, today) {
   return { category: 'scheduled', isLastChance: false };
 }
 
+// 滞留判定：発送指示日時の日付が本日より前か。classifyRakutenOrder（お届け日指定による
+// today/delayed/scheduled 区分）とは独立した別軸で、あちらには一切影響しない。
+//
+// RMSは発送完了報告を出しても翌日未明まで「発送待ち」を保持するため、既に出荷済みで
+// 発送通知が漏れている注文が翌日以降もDLされ続け、出荷対象として拾われてしまう
+// （2026-08-07 実機で発生：433084-20260729-4238831903 が本日分に混入し
+//   B2クラウドで「お届け予定日が間違っています」エラー）。
+// 通常購入データ（168列）に送り状番号を保持する列は無いため、送り状番号では判定できない。
+//
+// 滞留には「既に出荷済みで通知漏れ」と「未出荷で遅れている」の2種類があり、CSVのデータ
+// だけでは区別できない。後者を自動除外すると出荷漏れという重大事故になるため、
+// 判定は警告表示のみに使い、出荷対象からは除外しない（Kaz確定方針）。
+//
+// 発送指示日時の書式は 'YYYY-MM-DD HH:MM:SS'（2026-08-07 実データで確認）。
+// 空・想定外の書式・暦としてありえない月日は false（通常扱い）＝出荷を止めない側に倒す。
+// 日付比較は classifyRakutenOrder と同じ暦日番号（UTC日番号化）でTZ非依存に行う。
+function isStagnantRakutenOrder(shipInstructedAt, today) {
+  const m = /^(\d{4})-(\d{1,2})-(\d{1,2})(?:[ T]|$)/.exec(String(shipInstructedAt || '').trim());
+  if (!m) return false;
+  const mo = +m[2], da = +m[3];
+  if (mo < 1 || mo > 12 || da < 1 || da > 31) return false;
+  const sDay = Date.UTC(+m[1], mo - 1, da) / 86400000;
+  const tDay = Date.UTC(today.getFullYear(), today.getMonth(), today.getDate()) / 86400000;
+  return sDay < tDay;
+}
+
 // groups → 表示データ。classifyRakutenOrder（today 基準）で出荷対象を絞り込み、
 //   orders    … ピッキング対象（'today' ＋ 'delayed'。delayed/isLastChance フラグ付き＝表示側で強調）
 //   scheduled … お届け日が本日+4日以降の予定分（画面表示用。ピッキング・B2 CSV対象には含めない）
@@ -2591,7 +2617,14 @@ function renderRakutenResults(parsed) {
     + (data.scheduled.length ? `（うち予定 ${data.scheduled.length}注文は本日のピッキング対象外）` : '');
   rResults.appendChild(okItem);
 
-  // 警告（0件のブロックは表示されない）。遅延＝最優先のためリスト最上部・赤。
+  // 警告（0件のブロックは表示されない）。滞留・遅延＝最優先のためリスト最上部・赤。
+  // 滞留は見落とすと二重出荷につながるため最上部に置く。出荷対象からは除外しない。
+  const today = new Date();
+  const stagnantOrders = data.orders.filter(o => isStagnantRakutenOrder(o.shipInstructedAt, today));
+  renderRakutenWarningSection(rResults, 'r-warn-stagnant',
+    `⚠ 発送指示日時が本日より前の注文（既に出荷済みで発送通知が漏れている可能性があります。RMSで送り状番号の登録状況を確認してください）: ${stagnantOrders.length}件`,
+    ['注文番号', '発送指示日時', '商品名'],
+    stagnantOrders.map(o => [o.orderNumber, o.shipInstructedAt || '（空）', firstName(o)]), 'error');
   const delayedOrders = data.orders.filter(o => o.delayed);
   const lastChanceOrders = data.orders.filter(o => o.isLastChance);
   renderRakutenWarningSection(rResults, 'r-warn-delayed',
