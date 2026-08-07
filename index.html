@@ -411,13 +411,20 @@
       <div id="s1-amazon-extra"></div>
     </div>
     <div id="s1-pane-rakuten" style="display:none;">
-      <div class="section-label">楽天市場 通常購入データCSV</div>
+      <div class="section-label">① 楽天市場 通常購入データCSV（全カラム・必須）</div>
       <div class="dropzone drop-red" id="r-dropzone" style="margin-bottom:14px;">
         <div class="dropzone-icon">🛒</div>
         <div class="dropzone-text" id="r-dropzone-text">通常購入データCSVをドロップ<br>またはクリックして選択</div>
         <div class="dropzone-hint">RMS「通常購入データ」CSV ／ 読み込むとMCF除外・ピッキングリストを表示します</div>
       </div>
       <input type="file" id="r-fileInput" accept=".csv" style="display:none">
+      <div class="section-label">② 楽天市場 発送完了報告用DLデータ（6列・必須）</div>
+      <div class="dropzone drop-red" id="r-ship-dropzone" style="margin-bottom:14px;">
+        <div class="dropzone-icon">🚚</div>
+        <div class="dropzone-text" id="r-ship-dropzone-text">発送完了報告用DLデータをドロップ<br>またはクリックして選択</div>
+        <div class="dropzone-hint">RMSのデータダウンロード画面で、出力テンプレートを「発送完了報告用」に切り替えて取得してください<br>お荷物伝票番号が入っている注文＝送り状発行済みとして、ピッキング・B2出力から除外します</div>
+      </div>
+      <input type="file" id="r-ship-fileInput" accept=".csv" style="display:none">
       <div class="results" id="r-results"></div>
       <div id="r-picking-area"></div>
     </div>
@@ -1395,8 +1402,13 @@ const s1Results  = document.getElementById('s1-results');
 const s1InfoList = document.getElementById('s1-storeInfoList');
 
 let s1Buffers = {};
-let s1RakutenBuffer = null;   // 楽天市場 通常購入データCSV（任意・1ファイル）
+let s1RakutenBuffer = null;   // 楽天市場 通常購入データCSV（全カラム・168列）
 let s1RakutenParsed = null;   // 読み込み時にパース済みの楽天市場データ（変換はこれを使う）
+// 発送完了報告用DLデータ（RMSから落とす入力CSV・6列）。注文番号 → 伝票番号ありか の Map。
+// 出力側の「発送完了報告アップロードCSV」（buildRakutenShippingReport が生成しRMSへ上げる）
+// とは6列構成が同じだが向きが逆の別物。混同しないこと。
+let s1RakutenShipBuffer = null;
+let s1RakutenShipped = null;  // Map<注文番号, boolean>。null＝未読込
 let s1OutputDone = false;     // 現在の読込状態でB2 CSVを出力済みか（ボタンラベル「出力済み」表示用）
 
 // ============================================================
@@ -1489,7 +1501,7 @@ function renderStep1Sections() {
 
   // ※楽天市場の入力は S1「楽天市場」ペイン（静的HTML・r-dropzone）側。
   //   店舗設定の再描画でAmazonバッファはリセットされるが、楽天市場の読込は維持される。
-  s1Convert.disabled = !(Object.values(s1Buffers).some(Boolean) || s1RakutenBuffer);
+  updateS1ConvertEnabled();
 }
 
 function s1LoadFile(file, key, dz) {
@@ -1498,7 +1510,7 @@ function s1LoadFile(file, key, dz) {
     s1Buffers[key] = e.target.result;
     dz.classList.add('has-file');
     dz.querySelector('.dropzone-text').textContent = `✓ ${file.name}`;
-    s1Convert.disabled = !(Object.values(s1Buffers).some(Boolean) || s1RakutenBuffer);
+    updateS1ConvertEnabled();
     s1Results.innerHTML = '';
     s1OutputDone = false;
     updateS1ConvertLabel();
@@ -1513,6 +1525,24 @@ function s1LoadFile(file, key, dz) {
 // 片方のみ読込のときは未読込モール分が含まれない旨の注意書きをボタン上に出す。
 // 読込・解除（＝店舗設定の保存によるリセット）のたびに呼ぶこと。
 // ============================================================
+
+// 楽天市場の入力状態。通常購入データと発送完了報告用DLデータは両方必須。
+//   'none'     … どちらも未読込（楽天を使わない日。Amazon分のみで変換可）
+//   'partial'  … 片方だけ（落とし忘れ＝防ごうとしている二重出荷事故が再発するため変換不可）
+//   'complete' … 両方揃っている
+function s1RakutenInputState() {
+  const a = !!s1RakutenParsed, b = !!s1RakutenShipped;
+  if (a && b) return 'complete';
+  if (!a && !b) return 'none';
+  return 'partial';
+}
+
+// 変換ボタンの活性判定。Amazon分のみの運用（楽天を使わない日）は従来どおり変換できる。
+function updateS1ConvertEnabled() {
+  const hasAmazon = Object.values(s1Buffers).some(Boolean);
+  const rk = s1RakutenInputState();
+  s1Convert.disabled = (rk === 'partial') || !(hasAmazon || rk === 'complete');
+}
 
 // 読込済みAmazonレポートの注文件数合計（変換出力と同じ基準：ネコポス以外除外後・orderIdあり）。
 // パースできないファイルは0件扱い（変換時に既存のエラー表示が出るためここでは握りつぶす）。
@@ -1529,25 +1559,48 @@ function s1AmazonOrderCount() {
 function updateS1ConvertLabel() {
   const note = document.getElementById('s1-convert-note');
   note.innerHTML = '';
+  const addNote = (text, color) => {
+    const el = document.createElement('div');
+    el.className = 'result-item';
+    el.style.cssText = color === 'error'
+      ? 'display:block;background:#fef2f2;border:1px solid #fca5a5;color:#991b1b;margin-bottom:10px;'
+      : 'display:block;background:#fffbeb;border:1px solid #fcd34d;color:#92400e;margin-bottom:10px;';
+    el.textContent = text;
+    note.appendChild(el);
+  };
+
   if (s1OutputDone) { s1Convert.textContent = '出力済み — もう一度保存する'; return; }
 
-  const hasAmazon  = Object.values(s1Buffers).some(Boolean);
-  const hasRakuten = !!s1RakutenParsed;
+  const hasAmazon = Object.values(s1Buffers).some(Boolean);
+  const rk = s1RakutenInputState();
+
+  // 楽天が片方だけ＝変換不可。不足しているファイルを明示する（ボタンは無効のまま）。
+  if (rk === 'partial') {
+    s1Convert.textContent = '変換して保存';
+    addNote(s1RakutenParsed
+      ? '⛔ 楽天市場の「発送完了報告用DLデータ（6列）」が未読込です。'
+        + '送り状発行済みの注文を除外できないため変換できません（②のドロップ欄に読み込んでください）'
+      : '⛔ 楽天市場の「通常購入データCSV」が未読込です。'
+        + '楽天分の注文内容を取得できないため変換できません（①のドロップ欄に読み込んでください）', 'error');
+    return;
+  }
+
+  const hasRakuten = (rk === 'complete');
   if (!hasAmazon && !hasRakuten) { s1Convert.textContent = '変換して保存'; return; }
 
   const parts = [];
-  if (hasAmazon)  parts.push(`Amazon ${s1AmazonOrderCount()}件`);
-  if (hasRakuten) parts.push(`楽天市場 ${s1RakutenParsed.groups.length}件`);
+  if (hasAmazon) parts.push(`Amazon ${s1AmazonOrderCount()}件`);
+  if (hasRakuten) {
+    // ラベルの件数は送り状発行済みを除いた実出力対象に合わせる
+    const { active } = splitRakutenShipped(s1RakutenParsed.groups, s1RakutenShipped);
+    parts.push(`楽天市場 ${active.length}件`);
+  }
   s1Convert.textContent = `${parts.join(' ＋ ')} を1ファイルに変換して保存`;
 
   if (!hasAmazon || !hasRakuten) {
-    const warn = document.createElement('div');
-    warn.className = 'result-item';
-    warn.style.cssText = 'display:block;background:#fffbeb;border:1px solid #fcd34d;color:#92400e;margin-bottom:10px;';
-    warn.textContent = hasRakuten
+    addNote(hasRakuten
       ? '⚠ Amazonの未出荷レポートが未読込です。Amazon分は含まれません'
-      : '⚠ 楽天市場のCSVが未読込です。楽天分は含まれません';
-    note.appendChild(warn);
+      : '⚠ 楽天市場のCSVが未読込です。楽天分は含まれません', 'warn');
   }
 }
 
@@ -1586,17 +1639,21 @@ s1Convert.addEventListener('click', async () => {
   // 除外が1件以上あれば警告ブロックを出す（0件なら何も描画しない）
   renderShipMethodExcludedSection(allExcluded);
 
-  // ---- 楽天市場分（任意）：読み込み済みの通常購入データがあればB2行を生成 ----
-  // パースは読み込み時（rLoadFile）に済んでおり、MCF等の警告は楽天市場ペイン内に表示済み。
+  // ---- 楽天市場分：通常購入データ＋発送完了報告用DLデータの両方が揃っていればB2行を生成 ----
+  // パースは読み込み時（rLoadFile / rShipLoadFile）に済んでおり、MCF等の警告と
+  // 送り状発行済みの除外一覧は楽天市場ペイン内に表示済み。
   // MCF（CONSUMER-）は parseRakutenCsv の段階で除外済み＝B2 CSVにも入らない。
   // 配送方法が不明で送り状種類コードを決められない注文はB2行から除外して警告する。
   let rakutenB2Rows = [];
   if (s1RakutenParsed) {
     const item = document.createElement('div');
     try {
+      // 送り状発行済み（発送完了報告用DLデータに伝票番号あり）はB2 CSVからも除外する。
+      // 画面（renderRakutenResults）と同じ splitRakutenShipped を通し、両者の対象を揃える。
+      const { active: rActive } = splitRakutenShipped(s1RakutenParsed.groups, s1RakutenShipped);
       // 出荷対象判定（classifyRakutenOrder）で 'scheduled'（お届け日が本日+4日以降）は
       // orders から外れる＝B2 CSVにも入らない。除外分は下の警告ブロックで明示する。
-      const rData  = buildRakutenPickingData(s1RakutenParsed.groups, new Date());
+      const rData  = buildRakutenPickingData(rActive, new Date());
       const sender = getRakutenSenderStore();
       if (!sender) throw new Error('楽天市場の依頼主設定が未入力です（依頼主設定タブで登録してください）'
         + `／未入力: ${rakutenSenderMissingFields().join('・')}`);
@@ -2158,30 +2215,60 @@ function classifyRakutenOrder(order, today) {
   return { category: 'scheduled', isLastChance: false };
 }
 
-// 滞留判定：発送指示日時の日付が本日より前か。classifyRakutenOrder（お届け日指定による
-// today/delayed/scheduled 区分）とは独立した別軸で、あちらには一切影響しない。
+// ============================================================
+// 発送完了報告用DLデータ（RMS「データダウンロード」→ 出力テンプレート「発送完了報告用」）
+//   … RMSから落とす入力CSV。6列。お荷物伝票番号を含む。
+// 発送完了報告アップロードCSV（buildRakutenShippingReport が生成）
+//   … ツールがRMSへ上げる出力CSV。6列構成は同じだが向きが逆の別物。混同しないこと。
 //
-// RMSは発送完了報告を出しても翌日未明まで「発送待ち」を保持するため、既に出荷済みで
-// 発送通知が漏れている注文が翌日以降もDLされ続け、出荷対象として拾われてしまう
-// （2026-08-07 実機で発生：433084-20260729-4238831903 が本日分に混入し
-//   B2クラウドで「お届け予定日が間違っています」エラー）。
-// 通常購入データ（168列）に送り状番号を保持する列は無いため、送り状番号では判定できない。
-//
-// 滞留には「既に出荷済みで通知漏れ」と「未出荷で遅れている」の2種類があり、CSVのデータ
-// だけでは区別できない。後者を自動除外すると出荷漏れという重大事故になるため、
-// 判定は警告表示のみに使い、出荷対象からは除外しない（Kaz確定方針）。
-//
-// 発送指示日時の書式は 'YYYY-MM-DD HH:MM:SS'（2026-08-07 実データで確認）。
-// 空・想定外の書式・暦としてありえない月日は false（通常扱い）＝出荷を止めない側に倒す。
-// 日付比較は classifyRakutenOrder と同じ暦日番号（UTC日番号化）でTZ非依存に行う。
-function isStagnantRakutenOrder(shipInstructedAt, today) {
-  const m = /^(\d{4})-(\d{1,2})-(\d{1,2})(?:[ T]|$)/.exec(String(shipInstructedAt || '').trim());
-  if (!m) return false;
-  const mo = +m[2], da = +m[3];
-  if (mo < 1 || mo > 12 || da < 1 || da > 31) return false;
-  const sDay = Date.UTC(+m[1], mo - 1, da) / 86400000;
-  const tDay = Date.UTC(today.getFullYear(), today.getMonth(), today.getDate()) / 86400000;
-  return sDay < tDay;
+// お荷物伝票番号は発送完了報告の操作を待たず、B2クラウドで送り状を発行・登録した時点で入る
+// （2026-08-07 実機確認：ステータス「発送待ち」の9件中8件に伝票番号が入っていた）。
+// そのため「伝票番号が入っている＝既に送り状発行済み＝出荷済み」と判定できる。
+// 値そのものは使わず、空か否かだけを見る（ハイフン有無などの表記ゆれは判定に影響しない）。
+// ============================================================
+const RAKUTEN_SHIP_DL_HEADER = ['注文番号', '送付先ID', '発送明細ID', 'お荷物伝票番号', '配送会社', '発送日'];
+
+// 6列CSV → Map<注文番号, 伝票番号ありか>。
+// ヘッダーが6列と一致しない場合は例外を投げ、呼び出し側がエラー表示して処理を中断する。
+// 同一注文が複数行に分かれる場合（複数送付先・複数個口）は、1行でも伝票があれば
+// 「発行済み」とみなす（安全側：出荷済みの疑いがあるものはピッキングに出さない）。
+function parseRakutenShipDl(csvText) {
+  const lines = splitCsvRecords(csvText).filter(l => l.trim());
+  if (lines.length < 1) throw new Error('発送完了報告用DLデータではありません（データが空です）');
+  const head = parseCsvLine(lines[0].replace(/^﻿/, '')).map(h => h.trim());
+  // 列名ベースで照合する。6列すべてが順序どおり揃っていることを必須とする。
+  const ok = head.length === RAKUTEN_SHIP_DL_HEADER.length
+    && RAKUTEN_SHIP_DL_HEADER.every((c, i) => head[i] === c);
+  if (!ok) {
+    throw new Error('発送完了報告用DLデータではありません。\n'
+      + `（期待する列: ${RAKUTEN_SHIP_DL_HEADER.join(' / ')}）\n`
+      + `（読み込んだ列: ${head.join(' / ') || '（空）'}）\n`
+      + 'RMSのデータダウンロード画面で、出力テンプレートを「発送完了報告用」に切り替えて取得してください。');
+  }
+  const idx = {}; head.forEach((h, i) => { idx[h] = i; });
+  const gc = (row, name) => { const i = idx[name]; return i != null ? (row[i] || '').trim() : ''; };
+  const map = new Map();
+  for (let i = 1; i < lines.length; i++) {
+    const row = parseCsvLine(lines[i]);
+    const orderNumber = gc(row, '注文番号');
+    if (!orderNumber) continue;
+    const hasTracking = gc(row, 'お荷物伝票番号') !== '';
+    map.set(orderNumber, (map.get(orderNumber) || false) || hasTracking);
+  }
+  return map;
+}
+
+// 通常購入データの groups を、発送完了報告用DLデータの伝票番号有無で振り分ける。
+//   active  … 伝票番号なし＝未出荷。ピッキング・B2 CSVの対象
+//   shipped … 伝票番号あり＝送り状発行済み。両方から除外して警告表示する
+// DLデータに存在しない注文番号は伝票番号なし扱い＝通常処理（除外しない）。
+function splitRakutenShipped(groups, shippedMap) {
+  const active = [], shipped = [];
+  for (const g of (groups || [])) {
+    if (shippedMap && shippedMap.get(g.orderNumber)) shipped.push(g);
+    else active.push(g);
+  }
+  return { active, shipped };
 }
 
 // groups → 表示データ。classifyRakutenOrder（today 基準）で出荷対象を絞り込み、
@@ -2606,25 +2693,26 @@ function renderRakutenResults(parsed) {
   rArea.innerHTML = '';
   rakutenShipChoice.clear();
 
-  const data = buildRakutenPickingData(parsed.groups, new Date());
-  const lineCount = parsed.groups.reduce((a, g) => a + g.lines.length, 0);
+  // 送り状発行済み（発送完了報告用DLデータに伝票番号あり）はピッキング・B2から除外する。
+  const { active, shipped } = splitRakutenShipped(parsed.groups, s1RakutenShipped);
+  const data = buildRakutenPickingData(active, new Date());
+  const lineCount = active.reduce((a, g) => a + g.lines.length, 0);
   // 注文の代表商品名（警告テーブル用）：先頭明細＋点数
   const firstName = o => (o.lines[0] ? o.lines[0].name : '') + (o.lines.length > 1 ? ` 他${o.lines.length - 1}点` : '');
 
   const okItem = document.createElement('div');
   okItem.className = 'result-item success';
-  okItem.textContent = `✓ 楽天市場：${parsed.groups.length}注文 ／ ${lineCount}明細を読み込みました`
+  okItem.textContent = `✓ 楽天市場：${active.length}注文 ／ ${lineCount}明細を読み込みました`
+    + (shipped.length ? `（送り状発行済み ${shipped.length}注文を除外）` : '')
     + (data.scheduled.length ? `（うち予定 ${data.scheduled.length}注文は本日のピッキング対象外）` : '');
   rResults.appendChild(okItem);
 
-  // 警告（0件のブロックは表示されない）。滞留・遅延＝最優先のためリスト最上部・赤。
-  // 滞留は見落とすと二重出荷につながるため最上部に置く。出荷対象からは除外しない。
-  const today = new Date();
-  const stagnantOrders = data.orders.filter(o => isStagnantRakutenOrder(o.shipInstructedAt, today));
-  renderRakutenWarningSection(rResults, 'r-warn-stagnant',
-    `⚠ 発送指示日時が本日より前の注文（既に出荷済みで発送通知が漏れている可能性があります。RMSで送り状番号の登録状況を確認してください）: ${stagnantOrders.length}件`,
+  // 警告（0件のブロックは表示されない）。除外・遅延＝最優先のためリスト最上部。
+  // 送り状発行済みの除外は事故ではなく正常な動作のため 'warn'（黄）で出す。
+  renderRakutenWarningSection(rResults, 'r-warn-shipped',
+    `⚠ 送り状発行済みのため除外（既に出荷済みです）: ${shipped.length}件`,
     ['注文番号', '発送指示日時', '商品名'],
-    stagnantOrders.map(o => [o.orderNumber, o.shipInstructedAt || '（空）', firstName(o)]), 'error');
+    shipped.map(g => [g.orderNumber, g.shipInstructedAt || '（空）', firstName(g)]), 'warn');
   const delayedOrders = data.orders.filter(o => o.delayed);
   const lastChanceOrders = data.orders.filter(o => o.isLastChance);
   renderRakutenWarningSection(rResults, 'r-warn-delayed',
@@ -2653,7 +2741,7 @@ function renderRakutenResults(parsed) {
     ['注文番号', 'お届け日', '商品名'],
     data.scheduled.map(g => [g.orderNumber, g.desiredDeliveryDate || '', firstName(g)]), 'warn');
 
-  if (!parsed.groups.length) return;
+  if (!active.length) return;   // 全件が送り状発行済み等でピッキング対象が無い
   if (!data.orders.length) {
     const noPick = document.createElement('div');
     noPick.className = 'result-item';
@@ -2786,41 +2874,86 @@ function renderRakutenResults(parsed) {
 const rDropzone  = document.getElementById('r-dropzone');
 const rDzText    = document.getElementById('r-dropzone-text');
 const rFileInput = document.getElementById('r-fileInput');
+const rShipDropzone  = document.getElementById('r-ship-dropzone');
+const rShipDzText    = document.getElementById('r-ship-dropzone-text');
+const rShipFileInput = document.getElementById('r-ship-fileInput');
+
+// どちらのファイルを読んでも画面を作り直す。除外判定は両方が揃って初めて確定するため、
+// 発送完了報告用DLデータを後から入れてもピッキング一覧へ反映される必要がある。
+function rRefreshView() {
+  document.getElementById('r-results').innerHTML = '';
+  document.getElementById('r-picking-area').innerHTML = '';
+  if (s1RakutenParsed) renderRakutenResults(s1RakutenParsed);
+}
+
+function rShowError(message) {
+  const item = document.createElement('div');
+  item.className = 'result-item error';
+  item.textContent = `⚠ ${message}`;
+  document.getElementById('r-results').appendChild(item);
+}
+
+function rAfterLoad() {
+  updateS1ConvertEnabled();
+  s1OutputDone = false;
+  updateS1ConvertLabel();
+}
 
 function rLoadFile(file) {
   const reader = new FileReader();
   reader.onload = e => {
-    document.getElementById('r-results').innerHTML = '';
-    document.getElementById('r-picking-area').innerHTML = '';
     try {
       s1RakutenBuffer = e.target.result;
       s1RakutenParsed = parseRakutenCsv(decodeBuffer(s1RakutenBuffer));
-      renderRakutenResults(s1RakutenParsed);
+      rRefreshView();
       rDropzone.classList.add('has-file');
       rDzText.textContent = `✓ ${file.name}`;
     } catch(err) {
       s1RakutenBuffer = null; s1RakutenParsed = null;
       rDropzone.classList.remove('has-file');
-      const item = document.createElement('div');
-      item.className = 'result-item error';
-      item.textContent = `⚠ ${err.message}`;
-      document.getElementById('r-results').appendChild(item);
+      rRefreshView();
+      rShowError(err.message);
     }
-    s1Convert.disabled = !(Object.values(s1Buffers).some(Boolean) || s1RakutenBuffer);
-    s1OutputDone = false;
-    updateS1ConvertLabel();
+    rAfterLoad();
   };
   reader.readAsArrayBuffer(file);
 }
 
-rDropzone.addEventListener('click', () => rFileInput.click());
-rDropzone.addEventListener('dragover', e => { e.preventDefault(); rDropzone.classList.add('drag-over'); });
-rDropzone.addEventListener('dragleave', () => rDropzone.classList.remove('drag-over'));
-rDropzone.addEventListener('drop', e => {
-  e.preventDefault(); rDropzone.classList.remove('drag-over');
-  if (e.dataTransfer.files[0]) rLoadFile(e.dataTransfer.files[0]);
-});
-rFileInput.addEventListener('change', e => { if (e.target.files[0]) rLoadFile(e.target.files[0]); });
+// 発送完了報告用DLデータ（RMSから落とす入力CSV・6列）の読み込み。
+// ヘッダーが6列と一致しなければ parseRakutenShipDl が例外を投げ、ここでエラー表示して中断する。
+function rShipLoadFile(file) {
+  const reader = new FileReader();
+  reader.onload = e => {
+    try {
+      s1RakutenShipBuffer = e.target.result;
+      s1RakutenShipped = parseRakutenShipDl(decodeBuffer(s1RakutenShipBuffer));
+      rRefreshView();
+      rShipDropzone.classList.add('has-file');
+      rShipDzText.textContent = `✓ ${file.name}`;
+    } catch(err) {
+      s1RakutenShipBuffer = null; s1RakutenShipped = null;
+      rShipDropzone.classList.remove('has-file');
+      rShipDzText.innerHTML = '発送完了報告用DLデータをドロップ<br>またはクリックして選択';
+      rRefreshView();
+      rShowError(err.message);
+    }
+    rAfterLoad();
+  };
+  reader.readAsArrayBuffer(file);
+}
+
+function rWireDropzone(dz, input, onFile) {
+  dz.addEventListener('click', () => input.click());
+  dz.addEventListener('dragover', e => { e.preventDefault(); dz.classList.add('drag-over'); });
+  dz.addEventListener('dragleave', () => dz.classList.remove('drag-over'));
+  dz.addEventListener('drop', e => {
+    e.preventDefault(); dz.classList.remove('drag-over');
+    if (e.dataTransfer.files[0]) onFile(e.dataTransfer.files[0]);
+  });
+  input.addEventListener('change', e => { if (e.target.files[0]) onFile(e.target.files[0]); });
+}
+rWireDropzone(rDropzone, rFileInput, rLoadFile);
+rWireDropzone(rShipDropzone, rShipFileInput, rShipLoadFile);
 // ==== RAKUTEN PICKING (楽天市場) — END ====
 
 // ============================================================
