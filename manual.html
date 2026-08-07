@@ -61,6 +61,8 @@
       margin-bottom: 10px;
     }
 
+    ul { font-size: 13px; color: #555; line-height: 1.8; margin: 0 0 10px 20px; }
+
     .step-box {
       background: #fafafa;
       border: 1px solid #e8e8e8;
@@ -87,6 +89,17 @@
       padding: 11px 14px;
       font-size: 13px;
       color: #92400e;
+      margin-bottom: 14px;
+      line-height: 1.7;
+    }
+
+    .danger {
+      background: #fef2f2;
+      border: 1px solid #fca5a5;
+      border-radius: 8px;
+      padding: 11px 14px;
+      font-size: 13px;
+      color: #991b1b;
       margin-bottom: 14px;
       line-height: 1.7;
     }
@@ -142,6 +155,13 @@
       padding: 9px 12px;
       border: 1px solid #e0e0e0;
       line-height: 1.6;
+      vertical-align: top;
+    }
+    code {
+      background: #f0f0f0;
+      border-radius: 3px;
+      padding: 1px 5px;
+      font-size: 12px;
     }
 
     .footer {
@@ -166,23 +186,45 @@
 
   <div class="content">
 
-    <!-- 動作環境 -->
-    <h2>動作環境</h2>
-    <div class="warning">
-      💾 <strong>出力ファイルはブラウザのダウンロードとして直接保存されます</strong>（保存先フォルダの選択はありません）。<br>
-      複数ファイルを同時に出力する際、ブラウザが「複数ファイルのダウンロード許可」を求めた場合は許可してください。
-    </div>
+    <!-- 全体像 -->
+    <h2>このツールでできること</h2>
+    <p>AmazonのFBM（自己発送）と楽天市場の出荷業務を、ヤマトB2クラウドを軸に1画面で処理します。タブは3つで、左から順に進めます。</p>
+    <table>
+      <tr><th>タブ</th><th>やること</th></tr>
+      <tr><td>依頼主設定</td><td>B2クラウドに登録している発送元情報を登録する（初回のみ）</td></tr>
+      <tr><td>STEP 1</td><td>Amazonの未出荷レポートと楽天のCSVから、B2クラウド取込用CSVを1ファイルで作る。あわせてピッキングリストを表示・印刷する</td></tr>
+      <tr><td>STEP 2</td><td>B2クラウドで送り状を発行したあと、Amazon宛の出荷通知TXTと楽天宛の発送完了報告CSVを作る</td></tr>
+    </table>
     <div class="info-box">
-      🔒 このツールはすべての処理をブラウザ内で完結します。入力したデータが外部のサーバーに送信されることはありません。
+      🔒 すべての処理をブラウザ内で完結します。入力したデータが外部のサーバーに送信されることはありません。
+    </div>
+    <div class="warning">
+      💾 出力ファイルは<strong>ブラウザのダウンロードとして直接保存されます</strong>（保存先フォルダの選択はありません）。複数ファイルを同時に出力する際、ブラウザが「複数ファイルのダウンロード許可」を求めた場合は許可してください。
+    </div>
+
+    <!-- 用語 -->
+    <h2>用語（取り違え注意）</h2>
+    <p>名前が似ていて中身が違うファイルがあります。ここだけ先に押さえてください。</p>
+    <table>
+      <tr><th>呼び方</th><th>向き</th><th>中身</th></tr>
+      <tr><td><strong>通常購入データCSV</strong></td><td>RMS → ツール</td><td>楽天の注文明細。168列。商品名・お届け先・送付先IDなどが入っている</td></tr>
+      <tr><td><strong>発送完了報告用DLデータ</strong></td><td>RMS → ツール</td><td>6列。<strong>お荷物伝票番号</strong>が入っている。送り状発行済みかの判定に使う</td></tr>
+      <tr><td><code>rakuten_shipping_report_*.csv</code></td><td>ツール → RMS</td><td>ツールが生成する発送完了報告のアップロード用ファイル。6列</td></tr>
+      <tr><td><strong>取込用CSV</strong></td><td>ツール → B2</td><td>STEP 1が作る <code>b2cloud_*.csv</code></td></tr>
+      <tr><td><strong>発行済みデータCSV</strong></td><td>B2 → ツール</td><td>B2クラウドで送り状を発行したあとにエクスポートするファイル</td></tr>
+    </table>
+    <div class="danger">
+      ⚠️ 「発送完了報告用DLデータ」と <code>rakuten_shipping_report_*.csv</code> は<strong>列構成が完全に同一</strong>です（6列とも同じ列名・同じ順序）。向きが逆の別物なので取り違えに注意してください。ツール側でも、STEP 1 ②の欄にファイル名が <code>rakuten_shipping_report_</code> で始まるファイルを入れた場合は読み込みを拒否します。
     </div>
 
     <!-- 初期設定 -->
-    <h2>初期設定（初回のみ）</h2>
-    <p>初回起動時は「設定」タブが開きます。ヤマトB2クラウドに登録している依頼主（発送元）情報を入力してください。</p>
+    <h2>依頼主設定（初回のみ）</h2>
+    <p>初回起動時は「依頼主設定」タブが開きます。設定内容はこのブラウザに保存され、次回からは入力不要です。</p>
 
+    <h3>Amazon店舗（複数可）</h3>
     <div class="step-box">
       <div class="step-num">1</div>
-      <p>「店舗名（依頼主名）」にB2クラウドの依頼主名を<strong>正確に</strong>入力してください。STEP 2でのファイル自動識別に使用します。</p>
+      <p>「店舗名（依頼主名）」にB2クラウドの依頼主名を<strong>正確に</strong>入力してください。STEP 2で発行済みデータの店舗を自動識別する際のキーになります。</p>
     </div>
     <div class="step-box">
       <div class="step-num">2</div>
@@ -192,50 +234,81 @@
       <div class="step-num">3</div>
       <p>複数店舗ある場合は「＋ 店舗を追加」で追加できます。</p>
     </div>
-    <div class="step-box">
-      <div class="step-num">4</div>
-      <p>「保存してSTEP 1へ」を押すと設定がブラウザに保存されます。次回からは入力不要です。</p>
-    </div>
+
+    <h3>楽天市場（B2依頼主・1店舗固定）</h3>
+    <p>楽天市場分のB2取込用CSVの「ご依頼主」に使われます。<strong>上のAmazon店舗設定とは独立した別の設定</strong>で、楽天は1店舗固定です。初回表示時はAmazonの1店舗目の住所・電話番号などが初期値として入りますが、そのまま使うか書き換えるかは自由です。</p>
+    <p>次の5項目は<strong>必須</strong>です。1つでも空だと楽天分の変換時にエラーになり、不足している項目名が画面に表示されます。</p>
+    <table>
+      <tr><th>必須項目</th><th>備考</th></tr>
+      <tr><td>店舗名（依頼主名）</td><td>送り状の依頼主名として印字される</td></tr>
+      <tr><td>郵便番号</td><td>ハイフンなし</td></tr>
+      <tr><td>住所</td><td></td></tr>
+      <tr><td>請求先顧客コード</td><td>ヤマト運輸との契約番号（下のFAQ参照）</td></tr>
+      <tr><td>運賃管理番号</td><td>同上。2桁</td></tr>
+    </table>
+    <p>電話番号と建物名は必須ではありませんが、電話番号は送り状の依頼主電話番号として使われるため入力を推奨します。</p>
 
     <!-- STEP1 -->
     <h2>STEP 1：B2クラウド取込CSV の生成</h2>
-    <p>Amazonセラーセントラルからダウンロードした未出荷注文レポートを、ヤマトB2クラウドに取り込める形式に変換します。</p>
+    <p>AmazonとRakutenを<strong>同じ画面</strong>で扱います。上部のモール切替ボタンで表示を切り替えますが、出力は共通の「変換して保存」ボタン1つで、読み込んだ全モール分が<strong>1ファイルに統合</strong>されます（Amazon分→楽天分の順）。</p>
 
-    <h3>使用するファイル</h3>
-    <p>Amazonセラーセントラル →「注文管理」→「注文レポート」→「未出荷注文」からダウンロードしたファイル（.txt / .tsv）</p>
+    <h3>入力ファイル</h3>
+    <table>
+      <tr><th>モール</th><th>ファイル</th><th>入手先</th></tr>
+      <tr><td>Amazon</td><td>未出荷注文レポート（.txt / .tsv）<br>店舗ごとに1ファイル</td><td>セラーセントラル →「注文管理」→「注文レポート」→「未出荷注文」</td></tr>
+      <tr><td>楽天 ①</td><td>通常購入データCSV（168列）<strong>必須</strong></td><td>RMS →「受注・決済管理」→「データダウンロード」→「通常購入データ」</td></tr>
+      <tr><td>楽天 ②</td><td>発送完了報告用DLデータ（6列）<strong>必須</strong></td><td>同じ画面で<strong>出力テンプレートを「発送完了報告用」に切り替えて</strong>取得</td></tr>
+    </table>
+    <div class="danger">
+      ⚠️ 楽天の①②は<strong>両方とも必須</strong>です。片方だけでは変換ボタンが無効のままになり、不足しているファイルが画面に表示されます。②を省略できるようにすると、既に出荷済みの注文を二重出荷する事故が起きるためです。<br>
+      Amazon分だけを処理する日（楽天を使わない日）は、楽天①②とも未読込のままで変換できます。
+    </div>
 
     <h3>手順</h3>
     <div class="step-box">
       <div class="step-num">1</div>
-      <p>出荷予定日・送り状種類（ネコポス / 宅急便 / 宅急便コンパクト）を選択します。</p>
+      <p><strong>出荷予定日</strong>と<strong>送り状種類</strong>（ネコポス / 宅急便 / 宅急便コンパクト）を選びます。ここで選んだ出荷予定日は出力ファイル名にも使われます。</p>
     </div>
     <div class="step-box">
       <div class="step-num">2</div>
-      <p>店舗ごとのドロップゾーンに、それぞれの未出荷レポートファイルをドラッグ＆ドロップします。</p>
+      <p><strong>Amazon</strong>：店舗ごとのドロップゾーンに、それぞれの未出荷レポートをドロップします。</p>
     </div>
     <div class="step-box">
       <div class="step-num">3</div>
-      <p>「変換して保存」を押すと、CSVがダウンロードとして直接保存されます（フォルダ選択なし）。あわせて変換結果の下に<strong>「ピッキングリスト印刷」「PDFを保存」</strong>ボタンが表示され、ピッキングリスト＋梱包・発送明細を印刷またはPDF（1ファイル）で保存できます。</p>
+      <p><strong>楽天市場</strong>：①に通常購入データCSV、②に発送完了報告用DLデータをドロップします。①を読み込んだ時点でピッキングリストと警告一覧が表示され、②を読み込むと送り状発行済みの注文が除外されて一覧が作り直されます。</p>
+    </div>
+    <div class="step-box">
+      <div class="step-num">4</div>
+      <p>「変換して保存」を押します。ボタンには<strong>出力される件数がモール別に表示</strong>されます（例：<code>Amazon 10件 ＋ 楽天市場 3件 を1ファイルに変換して保存</code>）。片方のモールしか読み込んでいない場合は、その旨の注意書きがボタンの上に出ます。</p>
+    </div>
+    <div class="step-box">
+      <div class="step-num">5</div>
+      <p>変換結果の下に<strong>ピッキングリスト印刷ボタン</strong>が表示されます（Amazon側・楽天側でそれぞれ別のボタン）。ブラウザの印刷ダイアログが開くので、印刷するかダイアログ内の「PDFとして保存」を選んでください。</p>
     </div>
 
-    <h3>出力ファイル</h3>
-    <table>
-      <tr><th>項目</th><th>内容</th></tr>
-      <tr><td>ファイル名</td><td>b2cloud_YYYYMMDD_HHMMSS.csv（全店舗統合・1ファイル）</td></tr>
-      <tr><td>ピッキングリスト</td><td>ピッキングリスト_YYYYMMDD_HHMMSS.pdf（PDF保存時）</td></tr>
-      <tr><td>形式</td><td>Shift-JIS、CSV、95列</td></tr>
-    </table>
+    <h3>楽天ピッキングリストの並び順</h3>
+    <p>同じ商品の注文が連続し、複数商品の注文が末尾に来るよう自動で並べ替えます（Amazon側と同じ方針）。画面表示では、お届け日を過ぎている「遅延」注文だけが最上部に固定されます。</p>
+    <p>配送方法が「宅配便」の注文は、行ごとのプルダウンで<strong>宅急便コンパクト（既定）／宅急便</strong>を選べます。メール便系はネコポス固定です。選択内容は印刷内容とB2取込用CSVの両方に反映されます。</p>
 
     <!-- STEP2 -->
-    <h2>STEP 2：Amazon出荷通知TXT の生成</h2>
-    <p>ヤマトB2クラウドでラベルを発行したあと、発行済みデータをエクスポートしてこのツールに読み込ませます。</p>
+    <h2>STEP 2：出荷通知の生成（Amazon・楽天 共通）</h2>
+    <p>B2クラウドで送り状を発行したあと、<strong>発行済みデータCSVを1つ読み込むだけ</strong>で、Amazon宛の出荷通知TXTと楽天宛の発送完了報告CSVの両方を生成します。モールの切替はありません。</p>
+    <div class="info-box">
+      🤖 発行済みデータにAmazon分と楽天分が混在していても、<strong>お客様管理番号の形式で自動的に振り分けます</strong>。<br>
+      Amazon＝<code>123-1234567-1234567</code>（3-7-7桁）／楽天＝<code>433084-20260807-0000000000</code><br>
+      どちらの形式でもない行は出力に混ぜず、除外一覧に表示します。
+    </div>
 
     <h3>使用するファイル</h3>
     <div class="warning">
-      ⚠️ B2クラウドへの「取込用CSV」<strong>ではなく</strong>、ラベル発行後にエクスポートする<strong>「発行済みデータ」CSV</strong>（ファイル名例：<code>20260530143000_発行済テ_ータ.csv</code>）を使用してください。
+      ⚠️ B2クラウドへの「取込用CSV」<strong>ではなく</strong>、ラベル発行後にエクスポートする<strong>「発行済みデータ」CSV</strong>（ファイル名例：<code>20260807143000_発行済テ_ータ.csv</code>）を使用してください。
     </div>
     <div class="warning">
-      ⚠️ B2クラウドのエクスポート画面で<strong>「1行目に見出しを出力する」に必ずチェックを入れてください。</strong>チェックなしで出力したファイルはこのツールで読み込めません。
+      ⚠️ B2クラウドのエクスポート画面で<strong>「1行目に見出しを出力する」に必ずチェックを入れてください。</strong>チェックなしで出力したファイルは読み込めません。
+    </div>
+    <div class="danger">
+      ⚠️ 楽天分を出力するには、<strong>STEP 1 で①通常購入データCSVを読み込んでおく必要があります</strong>。発送完了報告に必要な<strong>送付先ID</strong>をそこから取得するためです。読み込んでいない場合は楽天分だけがスキップされ、その旨が画面に表示されます（Amazon分の出力は続行します）。<br>
+      RMSの「発送完了報告用テンプレートCSV」は<strong>不要</strong>です。以前は必要でしたが、送付先IDを通常購入データから取得する方式に変更したため廃止しました。
     </div>
 
     <h3>手順</h3>
@@ -245,63 +318,155 @@
     </div>
     <div class="step-box">
       <div class="step-num">2</div>
-      <p>STEP 2タブのドロップゾーンにCSVをドラッグ＆ドロップします。複数ファイルの同時選択も可能です。</p>
+      <p>STEP 2 のドロップゾーンにCSVをドロップします。複数ファイルの同時選択も可能です。</p>
     </div>
     <div class="step-box">
       <div class="step-num">3</div>
-      <p>「変換して保存」を押すと、店舗ごとのTXTがダウンロードとして直接保存されます（フォルダ選択なし）。店舗は依頼主名から自動識別されます。ブラウザが複数ファイルのダウンロード許可を求めた場合は許可してください。</p>
+      <p>「変換して保存」を押すと、該当するファイルがすべてダウンロードされます。Amazonの店舗は依頼主名から自動識別されます。</p>
     </div>
     <div class="step-box">
       <div class="step-num">4</div>
-      <p>生成されたファイルをAmazonセラーセントラル →「注文管理」→「出荷通知のアップロード」からアップロードします。</p>
-    </div>
-
-    <h3>出力ファイル</h3>
-    <table>
-      <tr><th>項目</th><th>内容</th></tr>
-      <tr><td>ファイル名</td><td>{店舗名}_amazon_shipment_confirm_YYYYMMDD_HHMMSS.txt（店舗ごとに1ファイル）</td></tr>
-      <tr><td>形式</td><td>Shift-JIS、タブ区切り</td></tr>
-    </table>
-
-    <!-- 楽天市場 -->
-    <h2>楽天市場：ピッキングリスト</h2>
-    <p>楽天市場RMSからダウンロードした<strong>通常購入データCSV</strong>を読み込み、楽天市場ピッキングリスト（商品別合計＋注文別明細）を表示・印刷・PDF保存します。</p>
-    <div class="step-box">
-      <div class="step-num">1</div>
-      <p>RMS →「注文管理」から対象注文の<strong>通常購入データCSV</strong>をダウンロードします。</p>
-    </div>
-    <div class="step-box">
-      <div class="step-num">2</div>
-      <p>STEP 1 上部のスイッチを<strong>「楽天市場」</strong>に切り替え、ドロップゾーンにCSVをドロップします。読み込むと同時にMCF除外警告とピッキングリストが表示されます。B2クラウド取込用CSVは共通の「変換して保存」で出力されます（Amazon分のファイルも入れてあれば1ファイルに統合されます）。</p>
-    </div>
-    <div class="step-box">
-      <div class="step-num">3</div>
-      <p>配送方法が「宅配便」の注文は、行ごとのプルダウンで<strong>宅急便コンパクト（既定）／宅急便</strong>を選べます。メール便系はネコポス固定です。選択内容は印刷・PDFにも反映されます。</p>
-    </div>
-    <div class="info-box">
-      🤖 ひとことメモに <code>CONSUMER-</code> を含む注文は<strong>Amazon MCF出荷分として自動除外</strong>され、警告一覧に表示されます。メモがあるがCONSUMER-を含まない注文は「要確認」として警告表示されます（ピッキング対象には含まれます）。
-    </div>
-
-    <h2>楽天市場：出荷通知（発送完了報告データ）</h2>
-    <p>RMSの<strong>発送完了報告用テンプレートCSV</strong>（注文番号・送付先ID・発送明細ID入り）と、B2クラウドの<strong>発行済みデータCSV</strong>を突き合わせ、お荷物伝票番号・配送会社（ヤマト運輸固定）・発送日を埋めた発送完了報告CSV（Shift-JIS・6列）を生成します。</p>
-    <div class="step-box">
-      <div class="step-num">1</div>
-      <p>STEP 2 上部のスイッチを<strong>「楽天市場」</strong>に切り替え、①の欄にテンプレートCSV、②の欄にB2発行済みデータCSVをドロップし、「発送完了報告データを生成」を押します。</p>
-    </div>
-    <div class="step-box">
-      <div class="step-num">2</div>
-      <p>生成された <code>楽天市場発送完了報告_YYYYMMDD_HHMMSS.csv</code> をRMSにアップロードします。</p>
+      <p>Amazon分：セラーセントラル →「注文管理」→「出荷通知のアップロード」からアップロードします。<br>
+      楽天分：RMSの発送完了報告からアップロードします。</p>
     </div>
     <div class="warning">
-      ⚠️ 同一注文番号が複数行に分かれるケース（複数送付先・複数個口）や、発送日が正規化できない行は自動処理されず警告一覧に表示されます。該当分は手動で対応してください。
+      ⚠️ 楽天分で、同一注文番号に複数の送付先IDがある（分割配送）、同一注文番号に複数の伝票番号がある（複数個口）、出荷予定日が解釈できない、STEP 1の通常購入データに無い注文——これらは自動処理せず警告一覧に表示します。該当分は手動で対応してください。
+    </div>
+
+    <!-- 出力ファイル -->
+    <h2>出力ファイル一覧</h2>
+    <table>
+      <tr><th>出力元</th><th>ファイル名</th><th>形式</th></tr>
+      <tr>
+        <td>STEP 1</td>
+        <td><code>b2cloud_YYYYMMDD_HHMMSS.csv</code><br>全店舗＋楽天を統合した1ファイル</td>
+        <td>Shift-JIS / CSV / 95列<br>全フィールドをダブルクォートで囲む</td>
+      </tr>
+      <tr>
+        <td>STEP 2<br>（Amazon）</td>
+        <td><code>{店舗名}_amazon_shipment_confirm_YYYYMMDD_HHMMSS.txt</code><br>店舗ごとに1ファイル</td>
+        <td>Shift-JIS / タブ区切り</td>
+      </tr>
+      <tr>
+        <td>STEP 2<br>（楽天）</td>
+        <td><code>rakuten_shipping_report_YYYYMMDD_HHMMSS.csv</code><br>1ファイル</td>
+        <td>Shift-JIS / CSV / 6列<br>全フィールドをダブルクォートで囲む</td>
+      </tr>
+      <tr>
+        <td>ピッキングリスト</td>
+        <td>ファイルは生成しません。ブラウザの印刷ダイアログが開きます。ダイアログの既定ファイル名は <code>Amazonピッキングリスト_YYYYMMDD</code> ／ <code>楽天市場ピッキングリスト_YYYYMMDD</code> です</td>
+        <td>印刷 ／ 印刷ダイアログの「PDFとして保存」</td>
+      </tr>
+    </table>
+    <div class="info-box">
+      📅 ファイル名の <code>YYYYMMDD</code> は出力によって基準が違います。<br>
+      <code>b2cloud_*</code> … STEP 1で選んだ<strong>出荷予定日</strong>／
+      <code>*_amazon_shipment_confirm_*</code> … 発行済みデータに入っている<strong>出荷予定日</strong>／
+      <code>rakuten_shipping_report_*</code> … <strong>操作した当日</strong>。<br>
+      <code>HHMMSS</code> はいずれも保存した時刻です。同じ操作で同名ファイルが重なった場合のみ末尾に <code>_2</code>、<code>_3</code> が付きます。
+    </div>
+
+    <h3>日本語ファイル名の扱い</h3>
+    <p>Amazonの出荷通知TXTは<strong>店舗名がそのままファイル名に入る</strong>ため、店舗名が日本語なら日本語のファイル名になります。ファイル名に使えない記号（<code>/ \ : * ? " &lt; &gt; |</code>）だけが自動で <code>_</code> に置き換わります。日本語や空白はそのまま残ります。</p>
+    <p>楽天の発送完了報告CSVは、店舗名を含まない<strong>半角英数字のみのファイル名</strong>（<code>rakuten_shipping_report_*</code>）で固定しています。RMSへのアップロード対応のため半角化した経緯があります。</p>
+    <div class="warning">
+      ⚠️ <strong>要確認</strong>：RMS側が日本語ファイル名を受け付けないのかどうかは、ツール内からは確認できません。上記は「半角化した」という変更履歴に基づく記載です。Amazonセラーセントラル側が日本語ファイル名を受け付けるかどうかも同様に未確認です（現状は日本語のまま運用して問題は報告されていません）。
+    </div>
+
+    <!-- 警告の読み方 -->
+    <h2>警告一覧の読み方（楽天市場）</h2>
+    <p>楽天の①を読み込むと、画面に警告がいくつか並びます。<strong>赤は見落とすと事故につながるもの</strong>、黄色は確認しておきたいものです。「詳細を表示」で該当注文の一覧が開きます。</p>
+
+    <h3>出荷対象から自動で外れるもの</h3>
+    <table>
+      <tr><th>警告</th><th>意味と対応</th></tr>
+      <tr>
+        <td>送り状発行済みのため除外<br><span style="color:#92400e;">（黄）</span></td>
+        <td>②の発送完了報告用DLデータに<strong>お荷物伝票番号が入っている</strong>注文。B2クラウドで送り状を発行済み＝すでに出荷済みと判断し、ピッキングリストとB2取込用CSVの両方から外します。<strong>正常な動作</strong>で、対応は不要です。</td>
+      </tr>
+      <tr>
+        <td>MCF出荷分（CONSUMER-）のため除外<br><span style="color:#991b1b;">（赤）</span></td>
+        <td>ひとことメモに <code>CONSUMER-</code> を含む注文。Amazonマルチチャネル出荷のため自社発送の対象外です。</td>
+      </tr>
+      <tr>
+        <td>お届け日指定が先のため除外（予定分）<br><span style="color:#92400e;">（黄）</span></td>
+        <td>お届け日が本日+4日以降の注文。今日出荷する必要がないため、本日のピッキング対象から外しています。</td>
+      </tr>
+      <tr>
+        <td>配送方法が不明のため除外<br><span style="color:#991b1b;">（赤）</span></td>
+        <td>送り状種類を決められない注文。B2取込用CSVに入らないので<strong>手動で対応が必要</strong>です。</td>
+      </tr>
+    </table>
+
+    <h3>②との突合に関する警告（重要）</h3>
+    <div class="danger">
+      ⚠️ 次の2つは、<strong>すでに出荷した注文を二重に出荷してしまう</strong>経路を検知するための警告です。赤で表示されたら必ず確認してください。
+    </div>
+    <table>
+      <tr><th>警告</th><th>意味と対応</th></tr>
+      <tr>
+        <td>発送完了報告用DLデータに存在しない注文<br><span style="color:#991b1b;">（赤）</span></td>
+        <td>①にあるのに②に注文番号が見つからない注文です。<strong>②のダウンロード期間が短すぎて古い注文が漏れている</strong>可能性があります。この場合、実際には伝票番号があるのに「なし」と判定され、出荷対象に残ってしまいます。<br>
+        ただし<strong>今日入ったばかりでまだ送り状を出していない新規注文も同じ条件に該当する</strong>ため、ツールでは区別できません。そのため出荷対象からは外さず警告のみを出します。RMSで該当注文の伝票番号の有無を確認してください。</td>
+      </tr>
+      <tr>
+        <td>発送完了報告用DLデータの期間が不足しています<br><span style="color:#991b1b;">（赤）</span></td>
+        <td>②の最も古い発送日が、①の最も古い発送指示日時より新しい場合に出ます。②の期間が①より狭いことがツール側で確定できた状態です。メッセージに両方の日付が出るので、<strong>RMSで期間を広げて②を取り直してください</strong>。</td>
+      </tr>
+    </table>
+    <div class="info-box">
+      🛡 ②の欄にツールが生成した <code>rakuten_shipping_report_*.csv</code> を誤って入れた場合は、ファイル名で検知して読み込みを拒否します。列構成が同一で自動判別できないための対策です。<br>
+      また②のファイルの列が6列（注文番号 / 送付先ID / 発送明細ID / お荷物伝票番号 / 配送会社 / 発送日）と一致しない場合も、「発送完了報告用DLデータではありません」と表示して読み込みを中止します。
+    </div>
+
+    <h3>出荷対象には含めたうえで注意喚起するもの</h3>
+    <table>
+      <tr><th>警告</th><th>意味と対応</th></tr>
+      <tr><td>遅延：お届け日を過ぎています<br><span style="color:#991b1b;">（赤）</span></td><td>最優先で出荷してください。画面のピッキング一覧でも最上部に固定表示されます。</td></tr>
+      <tr><td>本日中に出荷が必要<br><span style="color:#c2410c;">（橙）</span></td><td>お届け日が本日+3日＝今日が最終出荷日の注文です。</td></tr>
+      <tr><td>要確認<br><span style="color:#92400e;">（黄）</span></td><td>ひとことメモがある注文（CONSUMER-以外）と、ネコポスなのに日時指定がある注文が入ります。</td></tr>
+      <tr><td>未知の配送方法<br><span style="color:#92400e;">（黄）</span></td><td>「メール便」「宅配便」のどちらとも判定できない配送方法です。除外はしていません。</td></tr>
+      <tr><td>住所文字数超過／建物名欄の超過<br><span style="color:#991b1b;">（赤・黄）</span></td><td>B2の欄長上限（住所＝全角32文字、建物名＝全角16文字）を超えた注文です。出力は止めません。</td></tr>
+      <tr><td>住所を建物名欄へ自動振り分けしました<br><span style="color:#92400e;">（黄）</span></td><td>住所が長すぎたため超過分を建物名欄へ移しました。<strong>番地の途中で切れる場合があるので、印字内容を必ず確認してください。</strong></td></tr>
+    </table>
+
+    <!-- お届け日指定 -->
+    <h2>お届け日指定の扱い（楽天市場）</h2>
+    <p>通常購入データの「お届け日指定」を基準に、その注文を今日出荷するかどうかを自動判定します。判定は<strong>日付のみ</strong>で行い、時刻は見ません。</p>
+    <table>
+      <tr><th>お届け日指定</th><th>扱い</th></tr>
+      <tr><td>指定なし（空欄）</td><td>本日の出荷対象</td></tr>
+      <tr><td>本日より前</td><td><strong>遅延</strong>。出荷対象に含めたうえで赤の警告を出し、画面では最上部に固定</td></tr>
+      <tr><td>本日 〜 本日+2日</td><td>本日の出荷対象</td></tr>
+      <tr><td>本日+3日</td><td>本日の出荷対象。<strong>今日が最終出荷日</strong>として橙の警告を出す</td></tr>
+      <tr><td>本日+4日 以降</td><td><strong>予定分</strong>。本日のピッキング対象・B2取込用CSVから外す</td></tr>
+      <tr><td>解釈できない書式</td><td>本日の出荷対象として扱う（出荷を止めない側に倒す）</td></tr>
+    </table>
+
+    <h3>B2への転記</h3>
+    <p>お届け日指定はB2の「お届け予定日」欄へ <code>YYYY/MM/DD</code>（ゼロ埋め）で転記されます。解釈できない値のときは<strong>空欄で出力し、該当注文を警告一覧に表示</strong>します。</p>
+    <p>「お届け時間帯」はRMSのコード（例 <code>1416</code>）をそのままB2へ渡します。「指定なし」を表す <code>0</code> は空欄に変換します（B2側は空欄を「指定なし」として扱います）。</p>
+    <div class="warning">
+      ⚠️ <strong>ネコポス（メール便系）は日時指定に対応していません。</strong>ネコポスなのにお届け日指定がある注文は「要確認」の警告に入ります。出荷方法を変えるか、お客様に連絡するかを判断してください。
     </div>
 
     <!-- よくある質問 -->
     <h2>よくある質問</h2>
 
+    <h3>変換ボタンが押せない</h3>
+    <div class="faq-answer">
+      楽天の①②のうち<strong>片方だけしか読み込んでいない</strong>場合、ボタンは無効のままになります。ボタンの上に不足しているファイルが表示されるので、そちらを読み込んでください。<br>
+      楽天を使わない日は、①②とも読み込まなければAmazon分だけで変換できます。
+    </div>
+
     <h3>アップロード後に「90061」という警告が出る</h3>
     <div class="faq-answer">
       問題ありません。出荷元住所に関する警告ですが、出荷通知は正常に処理されています。
+    </div>
+
+    <h3>PDFで保存したい</h3>
+    <div class="faq-answer">
+      ピッキングリストの印刷ボタンを押すとブラウザの印刷ダイアログが開きます。送信先（プリンター）で<strong>「PDFに保存」</strong>を選んでください。ツール側のPDF保存機能は廃止しました。
     </div>
 
     <h3>iPhoneやSafariで使えますか？</h3>
@@ -322,17 +487,23 @@
 
     <h3>設定をリセットしたい</h3>
     <div class="faq-answer">
-      設定タブを開き、不要な店舗を削除して「保存」してください。全削除後に保存するとリセットされます。
+      依頼主設定タブを開き、不要な店舗を削除して「保存」してください。全削除後に保存するとリセットされます。楽天の依頼主設定はAmazon店舗とは別に保存されているため、個別に書き換えてください。
+    </div>
+
+    <h3>商品画像をピッキングリストに出したい</h3>
+    <div class="faq-answer">
+      変換後に表示される「画像URL登録」から、SKUごとに画像URLを入力できます。入力内容はJSONの下書きとして表示されるので、コピーして <code>sku-images.json</code> へ反映してください（このファイルはブラウザからは書き込めないため、手動での反映が必要です）。
     </div>
 
   </div>
 
   <div class="footer">
     要望・不具合：
-    <a href="https://github.com/ec-tools-jp/fbm-tool/issues" target="_blank">GitHub Issues</a>
+    <a href="https://github.com/kaztkyjp-2026/ec-shipping-sanriku/issues" target="_blank">GitHub Issues</a>
     ｜
     <a href="https://docs.google.com/forms/d/e/1FAIpQLSdeymUyCmegcPe6v2r4eOmVLpl-8I2j2rjXoO_uYbWxo1DYMQ/viewform" target="_blank">お問い合わせフォーム</a>
     <br><span style="font-size:11px;color:#ccc;">© 2026 ec-tools-jp / MIT License</span>
+    <div style="font-size:11px;color:#bbb;">Build: 2026-08-07 0000000</div>
   </div>
 
 </div>
