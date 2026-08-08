@@ -217,6 +217,17 @@
     .btn-red:hover:not(:disabled) { background: #a53125; }
     .btn-primary:disabled { background: #ccc; cursor: not-allowed; }
 
+    /* 補助表示バー：開閉トグル（除外一覧・画像URL登録）を主要ボタンと区別して横並びに集約する */
+    .aux-bar { display:flex; flex-wrap:wrap; gap:8px; align-items:center;
+               margin:10px 0 4px; padding-top:10px; border-top:1px solid #e5e5e5; }
+    .aux-bar-label { font-size:11px; font-weight:700; color:#aaa; letter-spacing:.06em;
+                     margin-right:2px; white-space:nowrap; }
+    .btn-aux { background:#fff; border:1px solid #ccc; color:#555;
+               border-radius:7px; padding:6px 11px; font-size:12.5px; font-weight:600;
+               cursor:pointer; white-space:nowrap; width:auto; margin:0; }
+    .btn-aux:hover { background:#f3f3f3; border-color:#aaa; }
+    .btn-aux[aria-expanded="true"] { background:#eef2ff; border-color:#818cf8; color:#3730a3; }
+
     .results { display: flex; flex-direction: column; gap: 8px; }
     .result-item { display: none; border-radius: 8px; padding: 12px 16px; font-size: 13px; }
     .result-item.success { display: block; background: #f0fdf4; border: 1px solid #86efac; color: #166534; font-weight: 600; }
@@ -429,7 +440,7 @@
       <div id="r-picking-area"></div>
     </div>
     <div id="s1-convert-note"></div>
-    <button class="btn-primary btn-orange" id="s1-convertBtn" disabled>変換して保存</button>
+    <button class="btn-primary btn-orange" id="s1-convertBtn" disabled>B2取込CSVを作る</button>
     <div class="results" id="s1-results"></div>
     <hr class="divider">
     <div class="section-label">出力ファイル</div>
@@ -466,7 +477,7 @@
       <div class="dropzone-hint">複数ファイル同時選択可 ／ yyyymmddHHMMSS_発行済テ_ータ.csv</div>
     </div>
     <input type="file" id="s2-fileInput" accept=".csv,.txt" multiple style="display:none">
-    <button class="btn-primary btn-blue" id="s2-convertBtn" disabled>変換して保存</button>
+    <button class="btn-primary btn-blue" id="s2-convertBtn" disabled>出荷通知ファイルを作る</button>
     <div class="results" id="s2-results"></div>
     <hr class="divider">
     <div class="section-label">出力ファイル</div>
@@ -1839,14 +1850,14 @@ function updateS1ConvertLabel() {
     note.appendChild(el);
   };
 
-  if (s1OutputDone) { s1Convert.textContent = '出力済み — もう一度保存する'; return; }
+  if (s1OutputDone) { s1Convert.textContent = '出力済み — もう一度B2取込CSVを作る'; return; }
 
   const hasAmazon = Object.values(s1Buffers).some(Boolean);
   const rk = s1RakutenInputState();
 
   // 楽天が片方だけ＝変換不可。不足しているファイルを明示する（ボタンは無効のまま）。
   if (rk === 'partial') {
-    s1Convert.textContent = '変換して保存';
+    s1Convert.textContent = 'B2取込CSVを作る';
     addNote(s1RakutenParsed
       ? '⛔ 楽天市場の「発送完了報告用DLデータ（6列）」が未読込です。'
         + '送り状発行済みの注文を除外できないため変換できません（②のドロップ欄に読み込んでください）'
@@ -1856,7 +1867,7 @@ function updateS1ConvertLabel() {
   }
 
   const hasRakuten = (rk === 'complete');
-  if (!hasAmazon && !hasRakuten) { s1Convert.textContent = '変換して保存'; return; }
+  if (!hasAmazon && !hasRakuten) { s1Convert.textContent = 'B2取込CSVを作る'; return; }
 
   const parts = [];
   if (hasAmazon) parts.push(`Amazon ${s1AmazonOrderCount()}件`);
@@ -1865,7 +1876,7 @@ function updateS1ConvertLabel() {
     const { active } = splitRakutenShipped(s1RakutenParsed.groups, s1RakutenShipped);
     parts.push(`楽天市場 ${active.length}件`);
   }
-  s1Convert.textContent = `${parts.join(' ＋ ')} を1ファイルに変換して保存`;
+  s1Convert.textContent = `${parts.join(' ＋ ')} の B2取込CSVを作る（1ファイル）`;
 
   if (!hasAmazon || !hasRakuten) {
     addNote(hasRakuten
@@ -2171,6 +2182,25 @@ s2Convert.addEventListener('click', async () => {
 });
 
 // ============================================================
+// 補助表示バー：コンテナ直下に1本だけ置き、開閉トグルをここへ集約する。
+// 既にバーがあれば使い回すので、同じコンテナへ描画する複数の関数から呼んでよい。
+// コンテナは各変換の冒頭で innerHTML='' により一括クリアされるため、後始末は不要。
+// ============================================================
+function auxBar(container) {
+  let bar = container.querySelector(':scope > .aux-bar');
+  if (!bar) {
+    bar = document.createElement('div');
+    bar.className = 'aux-bar';
+    const label = document.createElement('span');
+    label.className = 'aux-bar-label';
+    label.textContent = '補助表示';
+    bar.appendChild(label);
+    container.appendChild(bar);
+  }
+  return bar;
+}
+
+// ============================================================
 // ネコポス以外（ssa-ship-method ≠ 'ネコポス'）＝マケプレ配送の警告ブロック。
 // これらはB2 CSV（送り状）からのみ除外され、ピッキング・梱包の対象には含まれる。
 // 送り状はセラーセントラルで配送ラベルを購入して発行するため、その作業リストを兼ねる。
@@ -2194,9 +2224,9 @@ function renderShipMethodExcludedSection(excluded) {
 
   const toggle = document.createElement('button');
   toggle.type = 'button';
-  toggle.className = 'btn-primary';
-  toggle.style.marginTop = '6px';
-  toggle.textContent = '対象一覧を表示';
+  toggle.className = 'btn-aux';
+  toggle.setAttribute('aria-expanded', 'false');
+  toggle.textContent = '除外された注文を表示';
 
   const sec = document.createElement('div');
   sec.style.display = 'none';
@@ -2223,15 +2253,17 @@ function renderShipMethodExcludedSection(excluded) {
     </table>`;
 
   wrap.appendChild(head);
-  wrap.appendChild(toggle);
   wrap.appendChild(sec);
   // Amazon入力に対する警告のため、Amazonペイン内に表示する
-  (document.getElementById('s1-amazon-extra') || s1Results).appendChild(wrap);
+  const container = document.getElementById('s1-amazon-extra') || s1Results;
+  container.appendChild(wrap);
+  auxBar(container).appendChild(toggle);   // トグルだけ補助表示バーへ移す
 
   toggle.addEventListener('click', () => {
     const shown = sec.style.display !== 'none';
     sec.style.display = shown ? 'none' : 'block';
-    toggle.textContent = shown ? '対象一覧を表示' : '対象一覧を隠す';
+    toggle.setAttribute('aria-expanded', shown ? 'false' : 'true');
+    toggle.textContent = shown ? '除外された注文を表示' : '除外された注文を隠す';
   });
 }
 
@@ -2255,8 +2287,8 @@ function renderNonAmazonExcludedSection(excluded) {
 
   const toggle = document.createElement('button');
   toggle.type = 'button';
-  toggle.className = 'btn-primary';
-  toggle.style.marginTop = '6px';
+  toggle.className = 'btn-aux';
+  toggle.setAttribute('aria-expanded', 'false');
   toggle.textContent = '除外一覧を表示';
 
   const sec = document.createElement('div');
@@ -2283,14 +2315,15 @@ function renderNonAmazonExcludedSection(excluded) {
     </table>`;
 
   wrap.appendChild(head);
-  wrap.appendChild(toggle);
   wrap.appendChild(sec);
   // STEP2（Amazon出荷通知）の入力に対する警告のため、STEP2の結果エリアに表示する
   s2Results.appendChild(wrap);
+  auxBar(s2Results).appendChild(toggle);   // トグルだけ補助表示バーへ移す
 
   toggle.addEventListener('click', () => {
     const shown = sec.style.display !== 'none';
     sec.style.display = shown ? 'none' : 'block';
+    toggle.setAttribute('aria-expanded', shown ? 'false' : 'true');
     toggle.textContent = shown ? '除外一覧を表示' : '除外一覧を隠す';
   });
 }
@@ -2316,7 +2349,8 @@ function renderImageRegisterSection(pickingData, container, wrapId) {
   // 開閉トグル（変換フローの邪魔にならないよう初期は閉じておく）
   const toggle = document.createElement('button');
   toggle.type = 'button';
-  toggle.className = 'btn-primary';
+  toggle.className = 'btn-aux';
+  toggle.setAttribute('aria-expanded', 'false');
   toggle.textContent = '🖼 画像URL登録一覧を表示';
 
   const sec = document.createElement('div');
@@ -2365,13 +2399,14 @@ function renderImageRegisterSection(pickingData, container, wrapId) {
     <button class="btn-primary img-copy-btn" type="button" style="margin-top:8px;">JSONをコピー</button>
     <div class="img-copy-result" style="font-size:12px;margin-top:6px;"></div>`;
 
-  wrap.appendChild(toggle);
   wrap.appendChild(sec);
   container.appendChild(wrap);
+  auxBar(container).appendChild(toggle);   // トグルだけ補助表示バーへ移す
 
   toggle.addEventListener('click', () => {
     const shown = sec.style.display !== 'none';
     sec.style.display = shown ? 'none' : 'block';
+    toggle.setAttribute('aria-expanded', shown ? 'false' : 'true');
     toggle.textContent = shown ? '🖼 画像URL登録一覧を表示' : '🖼 画像URL登録一覧を隠す';
   });
 
@@ -2903,8 +2938,9 @@ function renderRakutenWarningSection(container, id, headText, columns, rows, kin
 
   const toggle = document.createElement('button');
   toggle.type = 'button';
-  toggle.className = 'btn-primary';
-  toggle.style.marginTop = '6px';
+  toggle.className = 'btn-aux';
+  toggle.style.marginTop = '6px';   // 対応する警告見出しの直下に置くため、バーには入れない
+  toggle.setAttribute('aria-expanded', 'false');
   toggle.textContent = '詳細を表示';
 
   const sec = document.createElement('div');
@@ -2933,6 +2969,7 @@ function renderRakutenWarningSection(container, id, headText, columns, rows, kin
   toggle.addEventListener('click', () => {
     const shown = sec.style.display !== 'none';
     sec.style.display = shown ? 'none' : 'block';
+    toggle.setAttribute('aria-expanded', shown ? 'false' : 'true');
     toggle.textContent = shown ? '詳細を表示' : '詳細を隠す';
   });
 }
