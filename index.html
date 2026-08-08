@@ -2289,7 +2289,7 @@ function renderNonAmazonExcludedSection(excluded) {
   toggle.type = 'button';
   toggle.className = 'btn-aux';
   toggle.setAttribute('aria-expanded', 'false');
-  toggle.textContent = '除外一覧を表示';
+  toggle.textContent = '除外された行を表示';
 
   const sec = document.createElement('div');
   sec.style.display = 'none';
@@ -2324,7 +2324,7 @@ function renderNonAmazonExcludedSection(excluded) {
     const shown = sec.style.display !== 'none';
     sec.style.display = shown ? 'none' : 'block';
     toggle.setAttribute('aria-expanded', shown ? 'false' : 'true');
-    toggle.textContent = shown ? '除外一覧を表示' : '除外一覧を隠す';
+    toggle.textContent = shown ? '除外された行を表示' : '除外された行を隠す';
   });
 }
 
