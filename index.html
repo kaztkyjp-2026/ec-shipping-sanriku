@@ -1410,7 +1410,6 @@ let s1RakutenParsed = null;   // 読み込み時にパース済みの楽天市�
 // とは6列構成が同じだが向きが逆の別物。混同しないこと。
 let s1RakutenShipBuffer = null;
 let s1RakutenShipped = null;      // Map<注文番号, boolean>。null＝未読込
-let s1RakutenShipOldest = null;   // DLデータ側の最古の発送日（暦日番号）。期間不足の検知用
 let s1OutputDone = false;     // 現在の読込状態でB2 CSVを出力済みか（ボタンラベル「出力済み」表示用）
 
 // ============================================================
@@ -2250,52 +2249,21 @@ function parseRakutenShipDl(csvText) {
   const idx = {}; head.forEach((h, i) => { idx[h] = i; });
   const gc = (row, name) => { const i = idx[name]; return i != null ? (row[i] || '').trim() : ''; };
   const map = new Map();
-  let oldestShipDay = null;   // DLデータが実際にカバーしている最古の発送日（期間不足の検知に使う）
   for (let i = 1; i < lines.length; i++) {
     const row = parseCsvLine(lines[i]);
     const orderNumber = gc(row, '注文番号');
     if (!orderNumber) continue;
     const hasTracking = gc(row, 'お荷物伝票番号') !== '';
     map.set(orderNumber, (map.get(orderNumber) || false) || hasTracking);
-    const d = rakutenDayNumber(gc(row, '発送日'));   // 未報告分は空欄＝null で無視される
-    if (d != null && (oldestShipDay == null || d < oldestShipDay)) oldestShipDay = d;
   }
-  return { shippedMap: map, oldestShipDay };
+  return { shippedMap: map };
 }
 
-// 'YYYY-MM-DD'／'YYYY-MM-DD HH:MM:SS' → 暦日番号（UTC日番号・TZ非依存）。
-// 空・想定外の書式・暦としてありえない月日は null。時刻部分は無視する。
-function rakutenDayNumber(raw) {
-  const m = /^(\d{4})-(\d{1,2})-(\d{1,2})(?:[ T]|$)/.exec(String(raw || '').trim());
-  if (!m) return null;
-  const mo = +m[2], da = +m[3];
-  if (mo < 1 || mo > 12 || da < 1 || da > 31) return null;
-  return Date.UTC(+m[1], mo - 1, da) / 86400000;
-}
-
-// 暦日番号 → 'YYYY-MM-DD'（警告文の表示用）
-function rakutenDayNumberToDate(n) {
-  const d = new Date(n * 86400000);
-  return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}-${String(d.getUTCDate()).padStart(2, '0')}`;
-}
-
-// 発送完了報告用DLデータの期間不足を検知する。
-//   A … DLデータ側の最も古い「発送日」
-//   B … 通常購入データ側の最も古い「発送指示日時」
-// A > B ならDLデータの期間が通常購入データより狭く、古い注文が突合から漏れている。
-// どちらかが解釈できない／空のときは判定をスキップして null を返す（誤検知で出荷を止めない）。
-function rakutenShipDlPeriodShortage(groups, oldestShipDay) {
-  if (oldestShipDay == null) return null;
-  let orderOldest = null;
-  for (const g of (groups || [])) {
-    const d = rakutenDayNumber(g.shipInstructedAt);
-    if (d != null && (orderOldest == null || d < orderOldest)) orderOldest = d;
-  }
-  if (orderOldest == null) return null;
-  if (oldestShipDay <= orderOldest) return null;
-  return { dlOldest: rakutenDayNumberToDate(oldestShipDay),
-           orderOldest: rakutenDayNumberToDate(orderOldest) };
-}
+// 期間不足を「発送日の最小値」で判定する独立警告は廃止した（2026-08-08）。
+// 発送日は送り状を発行した注文にしか入らず、未発送の注文では空欄になるため、
+// 期間が正しく取得できていても最小値が新しい日付に寄って誤検知する。
+// ②に注文番号さえあれば伝票番号の有無は正しく読めるので、真に危険なのは
+// 「①にあるが②に無い注文」だけ。これは rakutenUnmatchedOrders が検知する。
 
 // 通常購入データ側にあるが発送完了報告用DLデータに注文番号が無いもの。
 // DLの期間指定が短いと伝票番号が実在しても「なし」と判定され、除外されずに出荷対象へ残る
@@ -2765,17 +2733,6 @@ function renderRakutenResults(parsed) {
 
   // 突合漏れの検知。DLの期間指定が通常購入データより短いと、伝票番号が実在しても
   // 「なし」と判定され除外されずに残る＝防ごうとした二重出荷がそのまま再発する。
-  // 期間不足のサマリを先に出し、続けて突合できなかった注文の一覧を出す。
-  const shortage = rakutenShipDlPeriodShortage(parsed.groups, s1RakutenShipOldest);
-  if (shortage) {
-    const el = document.createElement('div');
-    el.className = 'result-item error';
-    el.style.marginTop = '6px';
-    el.textContent = '⚠ 発送完了報告用DLデータの期間が不足しています。'
-      + `通常購入データは${shortage.orderOldest}以降、発送完了報告用DLデータは${shortage.dlOldest}以降です。`
-      + `RMSで期間を${shortage.orderOldest}以前まで広げて取得し直してください`;
-    rResults.appendChild(el);
-  }
   const unmatched = rakutenUnmatchedOrders(parsed.groups, s1RakutenShipped);
   renderRakutenWarningSection(rResults, 'r-warn-unmatched-dl',
     `⚠ 発送完了報告用DLデータに存在しない注文（DLの期間指定が短い可能性があります。RMSで該当注文の伝票番号をご確認ください）: ${unmatched.length}件`,
@@ -3005,12 +2962,11 @@ function rShipLoadFile(file) {
       s1RakutenShipBuffer = e.target.result;
       const dl = parseRakutenShipDl(decodeBuffer(s1RakutenShipBuffer));
       s1RakutenShipped = dl.shippedMap;
-      s1RakutenShipOldest = dl.oldestShipDay;
       rRefreshView();
       rShipDropzone.classList.add('has-file');
       rShipDzText.textContent = `✓ ${file.name}`;
     } catch(err) {
-      s1RakutenShipBuffer = null; s1RakutenShipped = null; s1RakutenShipOldest = null;
+      s1RakutenShipBuffer = null; s1RakutenShipped = null;
       rShipDropzone.classList.remove('has-file');
       rShipDzText.innerHTML = '発送完了報告用DLデータをドロップ<br>またはクリックして選択';
       rRefreshView();
