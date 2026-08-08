@@ -1303,8 +1303,13 @@ function renderCombinedPickingHTML(amazon, rakuten) {
                border-top:2.5pt solid #000;
                break-after:avoid; page-break-after:avoid;
                -webkit-print-color-adjust:exact; print-color-adjust:exact; }
+  /* break-before:avoid ＝ 終端罫線だけが次ページへ取り残されないようにする
+     （.mall-band の break-after:avoid と対称の対策）。
+     :last-child の 8mm はユニット末尾の死に領域で、溢れる条件を広げるだけなので落とす。 */
   .mall-end  { border-top:2.5pt solid #333; text-align:right;
-               font-size:10pt; color:#333; padding-top:1mm; margin:0 0 8mm; }
+               font-size:10pt; color:#333; padding-top:1mm; margin:0 0 8mm;
+               break-before:avoid; page-break-before:avoid; }
+  .mall-end:last-child { margin-bottom:0; }
 
   /* ---- ページ番号：stampPageNumbers() で焼き込む ---- */
   /* .pg-unit は強制改頁で始まる独立ブロック。2つ目以降の頭で必ず改頁する＝
