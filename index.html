@@ -948,24 +948,11 @@ function buildSkuNumberMap(sortedRecords) {
   return map;
 }
 
-// マケプレ配送（ネコポス以外）注文の採番マップ（order-id → "ZZ-NNN"）。
-// G番号（A-NNN）は「送り状記事欄に載る番号」＝ SKU単位の採番で、
-// 商品別合計シートとB2記事欄が共有する単一ソース。マケプレ配送注文にはその送り状が
-// 存在しないため A-NNN を突合に使えない。そこで梱包・発送明細の表示のみ ZZ-NNN に
-// 差し替え、「B2の送り状は出ない＝セラーセントラルでラベルを買う」ことを示す。
-// ※ buildSkuNumberMap（SKU→A-NNN）は不変。マケプレ配送分も商品別合計に算入されるため、
-//   同一SKUがネコポス注文とマケプレ注文の両方にあってもピッキングの集計行は割れない。
-// 採番は注文単位・統一ソート順（sortOrderRecords 済み）。複数商品注文は全行が同じ番号。
-function buildMarketplaceNumberMap(sortedRecords) {
-  const map = new Map();
-  let n = 0;
-  for (const r of (sortedRecords || [])) {
-    if (!r.nonNekopos) continue;
-    const oid = r.picking.orderId;
-    if (!map.has(oid)) map.set(oid, 'ZZ-' + String(++n).padStart(3, '0'));
-  }
-  return map;
-}
+// ※ G番号（A-NNN）は出荷方法で分けない。マケプレ配送（ネコポス以外）の注文にも
+//   通常どおり A-NNN を振る。第一の役割は商品別合計シートと梱包・発送明細の突合で、
+//   ここで番号を変えると1ページ目で A-003 の棚から取った商品が明細では別番号になり、
+//   現場が突合できなくなる（2026-08-08 に ZZ-NNN 方式で実際に発生したため廃止した）。
+//   マケプレ配送の判別は梱包・発送明細の注文番号横のバッジが担う（renderPickingHTML）。
 
 // cp932エンコード時のバイト数を返す。全角=2バイト、半角(ASCII)=1バイトとして概算。
 // 厳密なcp932変換ではなく、実用上の概算（サロゲートペア等の特殊文字は考慮しない）。
@@ -1023,19 +1010,15 @@ function buildKijiForRecord(record, skuNumMap) {
 //   total  : 単一商品クラスタ集計 [{num, name, sku, totalQty, orderCount}]（注文数降順）＋ 複数商品件数
 //   single : 注文別 [{orderId, lines:[{num, name, quantity, sku}]}]（レコード順＝統一ソート順）
 //   ※ single 明細の num は total と同一の skuNumMap 採番（送り状記事欄（NNN×q）との突合用）
-//   ※ ただしマケプレ配送注文は送り状が出ず突合相手が無いため、num を注文単位の ZZ-NNN に
-//     差し替える（zzMap。省略時は従来どおり全件 A-NNN）。total 側の集計は差し替えない。
-function buildPickingItems(records, skuNumMap, zzMap) {
-  const single = records.map(r => {
-    const zz = (r.nonNekopos && zzMap) ? (zzMap.get(r.picking.orderId) || '') : '';
-    return {
-      orderId: r.picking.orderId,
-      nonNekopos: !!r.nonNekopos,
-      lines: r.picking.lines.map(l => ({
-        ...l, num: zz || (skuNumMap && skuNumMap.get(l.sku)) || ''
-      }))
-    };
-  });
+//   ※ 番号は出荷方法で分けない。マケプレ配送注文も同じ A-NNN を出し、total と一致させる。
+function buildPickingItems(records, skuNumMap) {
+  const single = records.map(r => ({
+    orderId: r.picking.orderId,
+    nonNekopos: !!r.nonNekopos,
+    lines: r.picking.lines.map(l => ({
+      ...l, num: (skuNumMap && skuNumMap.get(l.sku)) || ''
+    }))
+  }));
 
   const clusters = new Map(); // sku → {name, sku, totalQty, orderCount}
   let multiCount = 0;
@@ -1101,7 +1084,8 @@ function renderPickingHTML(data) {
       return `<tr><td class="thumb-cell">${thumbInner(l.sku)}</td><td class="num">${numCell}</td><td class="qty">${esc(l.quantity)}</td><td class="name">${esc(l.name)}${skuTag}</td></tr>`;
     }).join('');
     // マケプレ配送（ネコポス以外）はB2の送り状が出ない。倉庫の担当者が気づけるよう
-    // 注文番号と同じ行に印を出す（枠＋太字＋⚠。色に依存せず白黒印刷でも判別できる）。
+    // 注文番号と同じ行に印を出す（赤枠＋赤文字＋太字＋⚠。色が落ちても判別できる）。
+    // ※ G番号は分けない（商品別合計との突合が壊れるため。冒頭の再発防止コメント参照）。
     const mpBadge = o.nonNekopos
       ? ` <span class="mp-badge">⚠ 送り状は別発行（マケプレ配送）</span>` : '';
     return `<section class="order">
@@ -1147,10 +1131,14 @@ function renderPickingHTML(data) {
   .order { margin-bottom: 6mm; page-break-inside: avoid; break-inside: avoid; }
   .order h2 { font-size: 11pt; margin: 0; padding: 1.5mm 3mm; background: #eee;
               border: 1px solid #333; border-bottom: none; }
-  /* マケプレ配送の印。背景が落ちる印刷設定でも枠線＋太字＋⚠で判別できる（色に依存しない） */
+  /* マケプレ配送の印。色は画面の警告ブロック（.result-item.error）と同系統の赤。
+     print-color-adjust:exact は「背景のグラフィック」オフの印刷設定でも地色を残すため。
+     地色が落ちても赤枠＋太字＋⚠ で判別できる＝色だけに依存しない。 */
   .order h2 .mp-badge { display: inline-block; margin-left: 3mm; padding: 0 1.5mm;
-              border: 1.2pt solid #000; border-radius: 0.8mm; background: #fff;
-              font-size: 9.5pt; font-weight: bold; white-space: nowrap; }
+              border: 1.2pt solid #991b1b; border-radius: 0.8mm;
+              background: #fef2f2; color: #991b1b;
+              font-size: 9.5pt; font-weight: bold; white-space: nowrap;
+              -webkit-print-color-adjust: exact; print-color-adjust: exact; }
   @media print { .order { page-break-inside: avoid; } .sheet.single-sheet { page-break-before: always; } }
 </style></head><body>
   <section class="sheet total-sheet">
@@ -1686,12 +1674,10 @@ s1Convert.addEventListener('click', async () => {
 
   // 統一ソート：B2 CSV 行順 と ピッキング順 の両方に同一順序を適用。
   // ソートはマケプレ配送も含めた全件で行う（ピッキング順は出荷方法で分けない）。
-  // 除外警告のZZ番号と梱包・発送明細のZZ番号を一致させるため、採番はここで一度だけ行う。
   const sortedAmazon = allRecords.length ? sortOrderRecords(allRecords) : [];
-  const zzMap = buildMarketplaceNumberMap(sortedAmazon);
 
   // 除外が1件以上あれば警告ブロックを出す（0件なら何も描画しない）
-  renderShipMethodExcludedSection(allExcluded, zzMap);
+  renderShipMethodExcludedSection(allExcluded);
 
   // ---- 楽天市場分：通常購入データ＋発送完了報告用DLデータの両方が揃っていればB2行を生成 ----
   // パースは読み込み時（rLoadFile / rShipLoadFile）に済んでおり、MCF等の警告と
@@ -1773,7 +1759,7 @@ s1Convert.addEventListener('click', async () => {
     amazonRows = sorted.filter(r => r.b2Row).map(r => r.b2Row);
 
     // PICKING: no-PII のピッキングデータ（total）を生成し印刷ボタンを常設
-    const pickingData = buildPickingItems(enrichPickingItems(sorted), skuNumMap, zzMap);
+    const pickingData = buildPickingItems(enrichPickingItems(sorted), skuNumMap);
     renderPickingButton(pickingData);
     // 画像URL登録用の画面一覧（各行にURL入力欄）を生成（トグルで開閉）
     renderImageRegisterSection(pickingData);
@@ -1936,9 +1922,8 @@ s2Convert.addEventListener('click', async () => {
 // 送り状はセラーセントラルで配送ラベルを購入して発行するため、その作業リストを兼ねる。
 // 0件のときは何も描画しない（平常時に無用な表示を出さない）。
 // 表示は renderImageRegisterSection に倣ったトグル開閉式。
-// zzMap（order-id → ZZ-NNN）を渡すと、梱包・発送明細の印字と同じ番号を並べて表示する。
 // ============================================================
-function renderShipMethodExcludedSection(excluded, zzMap) {
+function renderShipMethodExcludedSection(excluded) {
   const old = document.getElementById('ship-method-excluded-wrap');
   if (old) old.remove();
   if (!excluded || !excluded.length) return;
@@ -1963,9 +1948,7 @@ function renderShipMethodExcludedSection(excluded, zzMap) {
   sec.style.display = 'none';
   sec.style.marginTop = '8px';
 
-  // ZZ番号は梱包・発送明細のG番号列に印字されるものと同一（同じ zzMap から引く）
   const rowsHtml = excluded.map(x => `<tr>
-      <td class="sme-zz">${esc((zzMap && zzMap.get(x.orderId)) || '')}</td>
       <td>${esc(x.storeName || '')}</td>
       <td class="sme-oid">${esc(x.orderId || '')}</td>
       <td>${esc(x.shipMethod || '')}</td>
@@ -1979,11 +1962,9 @@ function renderShipMethodExcludedSection(excluded, zzMap) {
         border-bottom:1px solid #e2e2e2; padding:5px 8px; vertical-align:middle; text-align:left; }
       #ship-method-excluded-wrap .sme-table th { background:#f4f4f4; }
       #ship-method-excluded-wrap .sme-oid { white-space:nowrap; color:#555; }
-      #ship-method-excluded-wrap .sme-zz { white-space:nowrap; font-weight:600;
-        font-variant-numeric:tabular-nums; }
     </style>
     <table class="sme-table">
-      <thead><tr><th>G番号</th><th>店舗</th><th>注文番号</th><th>配送方法</th><th>商品名</th></tr></thead>
+      <thead><tr><th>店舗</th><th>注文番号</th><th>配送方法</th><th>商品名</th></tr></thead>
       <tbody>${rowsHtml}</tbody>
     </table>`;
 
