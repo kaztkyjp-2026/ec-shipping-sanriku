@@ -952,7 +952,7 @@ function buildSkuNumberMap(sortedRecords) {
 //   通常どおり A-NNN を振る。第一の役割は商品別合計シートと梱包・発送明細の突合で、
 //   ここで番号を変えると1ページ目で A-003 の棚から取った商品が明細では別番号になり、
 //   現場が突合できなくなる（2026-08-08 に ZZ-NNN 方式で実際に発生したため廃止した）。
-//   マケプレ配送の判別は梱包・発送明細の注文番号横のバッジが担う（renderPickingHTML）。
+//   マケプレ配送の判別は梱包・発送明細の注文番号横のバッジが担う（renderCombinedPickingHTML）。
 
 // cp932エンコード時のバイト数を返す。全角=2バイト、半角(ASCII)=1バイトとして概算。
 // 厳密なcp932変換ではなく、実用上の概算（サロゲートペア等の特殊文字は考慮しない）。
@@ -1060,155 +1060,383 @@ function thumbInner(sku) {
   return url ? `<img class="thumb" src="${e(url)}" alt="">` : `<span class="thumb no-img">画像なし</span>`;
 }
 
-// 汎用：total＋single 2種のピッキングシート印刷用HTML（A4縦・余白10mm）を生成
-function renderPickingHTML(data) {
+// ============================================================
+// ピッキング帳票（Amazon＋楽天市場 統合・1文書1ボタン）
+// 出力は2セクション：
+//   1) 商品別合計   … A4縦・1段（@page portraitPage）。棚を回る用。
+//   2) 梱包・発送明細 … A4横・2段組み（@page landscapePage）。詰め・照合用。
+// 用紙の向きと段組みを変えているのは、2つの帳票がよく似ていて現場が取り違えるため。
+// 表そのものはモール別に分けたまま（SKU体系が異なるため統合しない）。
+// G番号は Amazon=A-NNN／楽天市場=R-NNN で名前空間を分ける（採番ロジックは各モール側のまま）。
+// ============================================================
+
+// 1ページあたりの本文高さ(mm)。@page の margin 15mm を引いた実効サイズで、
+// ページ番号の焼き込み（stampPageNumbers）が所要ページ数を数えるのに使う。
+//   縦: A4 297mm − 15mm×2 = 267mm ／ 横: A4 210mm − 15mm×2 = 180mm
+const PAGE_BODY_MM = { portrait: 267, landscape: 180 };
+
+// 楽天市場の店舗コード。梱包・発送明細と商品別合計の黒帯に出す表示名で、
+// 送り状に印字される依頼主名（loadRakutenSender().name）とは別物。
+// KPL／MMD は店舗コードでありモールに従属しないため、Amazon側の店舗名表示と体裁を揃える。
+// 将来 楽天の店舗が増えたらここに足す（複数なら「／」で連結して表示する）。
+const RAKUTEN_STORE_CODES = ['MMD'];
+
+// 配送方法別の申告数（ヤマトへの集荷依頼でそのまま読み上げる）。3区分に集約する。
+//   ネコポス       … Amazonのネコポス注文 ＋ 楽天のネコポス
+//   宅急便コンパクト … 楽天の宅配便でコンパクトを選択したもの
+//   宅急便         … 楽天の宅配便で宅急便を選択したもの ＋ Amazonのマケプレ配送
+// マケプレ配送（nonNekopos）に独立区分は作らない。集荷の個数申告としては宅急便1個だから。
+// 楽天で配送方法が判定できない注文（shipType='不明'）は宅急便に寄せたうえで件数を注記する
+// （3区分の合計＝全注文数 を必ず保つため。黙って0件にすると申告数が実態と合わなくなる）。
+function buildShipMethodSummary(amazon, rakuten) {
+  let nekopos = 0, compact = 0, takkyubin = 0, unknown = 0;
+  for (const o of ((amazon && amazon.single) || [])) {
+    if (o.nonNekopos) takkyubin++; else nekopos++;
+  }
+  for (const o of ((rakuten && rakuten.orders) || [])) {
+    const m = rakutenResolvedMethod(o);
+    if (m === 'ネコポス')            nekopos++;
+    else if (m === RAKUTEN_COMPACT)  compact++;
+    else if (m === RAKUTEN_TAKKYUBIN) takkyubin++;
+    else { takkyubin++; unknown++; }   // 判定不能は宅急便へ寄せる（合計を全注文数に一致させる）
+  }
+  return { nekopos, compact, takkyubin, unknown, total: nekopos + compact + takkyubin };
+}
+
+// 統合ピッキング帳票の印刷用HTML。
+//   amazon  … { total, single, multiCount, storeNames } ／ 未読込なら null
+//   rakuten … { total, orders, storeName }              ／ 未読込なら null
+// 片方が null のときは、そのモールのセクションを丸ごと出力しない。
+function renderCombinedPickingHTML(amazon, rakuten) {
   const esc = s => String(s == null ? '' : s)
     .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
   const dateStr = (document.getElementById('s1-shipDate') || {}).value || '';
-  const dsuf = dateStr ? ' — ' + esc(dateStr) : '';
-  const dateNum = dateStr.replace(/-/g, '');   // YYYY-MM-DD → YYYYMMDD（印刷ファイル名用）
-  const total = data.total || [], single = data.single || [], multiCount = data.multiCount || 0;
+  const dateNum = dateStr.replace(/-/g, '');   // YYYY-MM-DD → YYYYMMDD
+  const suf = dateNum ? '_' + dateNum : '';
 
   // マケプレ配送（ネコポス以外）の印。商品別合計・梱包発送明細の2帳票で同一のHTML／CSSを使い、
   // 現場が同じものだと即座に分かるようにする（文言・体裁を分岐させないこと）。
-  const MP_BADGE = ` <span class="mp-badge">⚠ 送り状は別発行（マケプレ配送）</span>`;
+  const MP_BADGE = `<span class="mp-badge">⚠ 送り状は別発行（マケプレ配送）</span>`;
 
-  const totalRows = total.map(t => {
-    const numCell = t.num ? `（${esc(t.num)}）` : '';
-    const skuTag = (t.sku && t.sku !== t.name) ? ` <span class="sku">(${esc(t.sku)})</span>` : '';
-    // バッジは商品名セル内・SKU表記の直後に置く。行末（注文数の後ろ）だと商品名が長いときに
-    // 折り返しでバッジが商品から離れ、どの商品の話か分からなくなるため。
-    return `<tr><td class="thumb-cell">${thumbInner(t.sku)}</td><td class="num">${numCell}</td><td class="qty">${esc(t.totalQty)}</td><td class="name">${esc(t.name)}${skuTag}${t.nonNekopos ? MP_BADGE : ''}</td><td class="cnt">${esc(t.orderCount)}</td></tr>`;
-  }).join('');
-  const multiRow = multiCount > 0
-    ? `<tr class="multi"><td class="thumb-cell"></td><td class="num"></td><td class="qty">—</td><td class="name">（複数商品注文：記事欄参照）</td><td class="cnt">${multiCount}</td></tr>`
-    : '';
+  const aOrders = amazon ? (amazon.single || []).length : 0;
+  const rOrders = rakuten ? (rakuten.orders || []).length : 0;
 
-  // single帳票（詰め・照合用）。各明細行の行頭に SKU 対応のサムネイル画像を表示する。
-  // 画像URLは skuImageMap（sku-images.json＋登録UI）から引く。無ければ「画像なし」プレースホルダ。
-  const singleBlocks = single.map(o => {
-    const rows = o.lines.map(l => {
-      const numCell = l.num ? `（${esc(l.num)}）` : '';
-      const skuTag = (l.sku && l.sku !== l.name) ? ` <span class="sku">(${esc(l.sku)})</span>` : '';
-      return `<tr><td class="thumb-cell">${thumbInner(l.sku)}</td><td class="num">${numCell}</td><td class="qty">${esc(l.quantity)}</td><td class="name">${esc(l.name)}${skuTag}</td></tr>`;
+  const mallLabel = (mall, names) => {
+    const n = String(names || '').trim();
+    return n ? `${mall}（${esc(n)}）` : mall;
+  };
+  const band = text => `<div class="mall-band">${text}</div>`;
+  const mallEnd = (mall, n) => `<div class="mall-end">── ${mall}分 ここまで（${n}注文） ──</div>`;
+
+  // ---- 商品別合計（A4縦・1段） ----
+  // 複数商品注文は商品クラスタに含めず1行に集約する（Amazon側の従来仕様）。
+  const amazonTotalSection = !amazon ? '' : (() => {
+    const rows = (amazon.total || []).map(t => {
+      const skuTag = (t.sku && t.sku !== t.name) ? ` <span class="sku">(${esc(t.sku)})</span>` : '';
+      // バッジは商品名セル内・SKU表記の直後に置く。行末（注文数の後ろ）だと商品名が長いときに
+      // 折り返しでバッジが商品から離れ、どの商品の話か分からなくなるため。
+      return `<tr><td class="thumb-cell">${thumbInner(t.sku)}</td><td class="num">${esc(t.num)}</td><td class="qty">${esc(t.totalQty)}</td><td class="name">${esc(t.name)}${skuTag}${t.nonNekopos ? MP_BADGE : ''}</td><td class="cnt">${esc(t.orderCount)}</td></tr>`;
     }).join('');
-    // マケプレ配送（ネコポス以外）はB2の送り状が出ない。倉庫の担当者が気づけるよう
-    // 注文番号と同じ行に印を出す（赤枠＋赤文字＋太字＋⚠。色が落ちても判別できる）。
+    const multiRow = (amazon.multiCount || 0) > 0
+      ? `<tr><td class="thumb-cell"></td><td class="num">—</td><td class="qty">—</td><td class="name">（複数商品注文：梱包・発送明細を参照）</td><td class="cnt">${amazon.multiCount}</td></tr>`
+      : '';
+    return `
+  ${band(`${mallLabel('Amazon', amazon.storeNames)}　商品別合計`)}
+  <table class="total">
+    <thead><tr><th class="thumb-cell">画像</th><th class="num">G番号</th><th class="qty">合計数量</th><th class="name">商品名（SKU）</th><th class="cnt">注文数</th></tr></thead>
+    <tbody>${rows}${multiRow}</tbody>
+  </table>
+  ${mallEnd('Amazon', aOrders)}`;
+  })();
+
+  // 楽天市場は複数商品注文の明細も商品クラスタに算入する（buildRakutenPickingData の従来仕様）。
+  // SKU情報（バリエーション）は取り違え防止に要るため商品名の後ろに残す。
+  const rakutenNameCell = (name, skuInfo, sku) => {
+    const info = skuInfo ? ` <span class="skuinfo">${esc(skuInfo)}</span>` : '';
+    return `${esc(name)}${info} <span class="sku">(${esc(sku)})</span>`;
+  };
+  const rakutenTotalSection = !rakuten ? '' : `
+  ${band(`${mallLabel('楽天市場', rakuten.storeName)}　商品別合計`)}
+  <table class="total">
+    <thead><tr><th class="thumb-cell">画像</th><th class="num">G番号</th><th class="qty">合計数量</th><th class="name">商品名（SKU管理番号）</th><th class="cnt">注文数</th></tr></thead>
+    <tbody>${(rakuten.total || []).map(t =>
+      `<tr><td class="thumb-cell">${thumbInner(t.sku)}</td><td class="num">${esc(t.num)}</td><td class="qty">${esc(t.totalQty)}</td><td class="name">${rakutenNameCell(t.name, t.skuInfo, t.sku)}</td><td class="cnt">${esc(t.orderCount)}</td></tr>`
+    ).join('')}</tbody>
+  </table>
+  ${mallEnd('楽天市場', rOrders)}`;
+
+  // ---- 梱包・発送明細（A4横・2段組み） ----
+  const detailHead = `<thead><tr><th class="thumb-cell">画像</th><th class="num">G番号</th><th class="qty">数量</th><th class="name">商品名</th></tr></thead>`;
+
+  const amazonDetailSection = !amazon ? '' : `
+  ${band(`${mallLabel('Amazon', amazon.storeNames)}　梱包・発送明細　${aOrders}注文`)}
+  <div class="detail-cols">${(amazon.single || []).map(o => {
+    const rows = o.lines.map(l =>
+      `<tr><td class="thumb-cell">${thumbInner(l.sku)}</td><td class="num">${esc(l.num)}</td><td class="qty">${esc(l.quantity)}</td><td class="name">${esc(l.name)}</td></tr>`
+    ).join('');
+    // マケプレ配送はB2の送り状が出ない。倉庫の担当者が気づけるよう注文番号と同じ行に印を出す。
     // ※ G番号は分けない（商品別合計との突合が壊れるため。冒頭の再発防止コメント参照）。
-    const mpBadge = o.nonNekopos ? MP_BADGE : '';
     return `<section class="order">
-      <h2>${esc(o.orderId)}${mpBadge}</h2>
-      <table>
-        <thead><tr><th class="thumb-cell">画像</th><th class="num">G番号</th><th class="qty">数量</th><th class="name">商品名</th></tr></thead>
-        <tbody>${rows}</tbody>
-      </table>
+      <h2>${esc(o.orderId)}${o.nonNekopos ? MP_BADGE : ''}</h2>
+      <table>${detailHead}<tbody>${rows}</tbody></table>
     </section>`;
-  }).join('');
+  }).join('')}</div>
+  ${mallEnd('Amazon', aOrders)}`;
+
+  const rakutenDetailSection = !rakuten ? '' : `
+  ${band(`${mallLabel('楽天市場', rakuten.storeName)}　梱包・発送明細　${rOrders}注文`)}
+  <div class="detail-cols">${(rakuten.orders || []).map(o => {
+    const rows = o.lines.map(l =>
+      `<tr><td class="thumb-cell">${thumbInner(l.sku)}</td><td class="num">${esc(l.num)}</td><td class="qty">${esc(l.quantity)}</td><td class="name">${esc(l.name)}${l.skuInfo ? ` <span class="skuinfo">${esc(l.skuInfo)}</span>` : ''}</td></tr>`
+    ).join('');
+    // 配送方法はプルダウン選択を反映した確定値（rakutenResolvedMethod）を印字する
+    return `<section class="order">
+      <h2>${esc(o.orderNumber)}<span class="m-tag">${esc(rakutenResolvedMethod(o))}</span></h2>
+      <table>${detailHead}<tbody>${rows}</tbody></table>
+    </section>`;
+  }).join('')}</div>
+  ${mallEnd('楽天市場', rOrders)}`;
+
+  // ---- 冒頭の2表（ヤマト申告数／モール別内訳）----
+  const ship = buildShipMethodSummary(amazon, rakuten);
+  const bothMalls = !!(amazon && rakuten);
+  const mallRows = [];
+  if (amazon)  mallRows.push(`<tr><td>Amazon</td><td class="n">${aOrders}</td></tr>`);
+  if (rakuten) mallRows.push(`<tr><td>楽天市場</td><td class="n">${rOrders}</td></tr>`);
+  const detailSummary = `合計 ${ship.total}注文`
+    + (bothMalls ? `（Amazon ${aOrders} ／ 楽天市場 ${rOrders}）` : '');
+  const shipNote = '※マケプレ配送（送り状を別発行する注文）は「宅急便」に合算しています。'
+    + (ship.unknown ? `／配送方法を判定できない ${ship.unknown}注文も「宅急便」に含めています。` : '');
+
+  // 商品別合計は「モールの黒帯の前」で必ず改頁する。モールごとに .pg-unit を分け、
+  // CSS の .pg-unit + .pg-unit { break-before:page } に改頁を任せる（2つ目以降だけが改頁）。
+  // 梱包・発送明細は2段組みの流し込みで、モールごとに割ると段が虫食いになるため1ユニットにまとめる。
+  const totalUnits = [amazonTotalSection, rakutenTotalSection].filter(Boolean);
 
   return `<!DOCTYPE html>
 <html lang="ja"><head><meta charset="UTF-8">
-<title>Amazonピッキングリスト${dateNum ? '_' + dateNum : ''}</title>
+<title>ピッキングリスト${suf}</title>
 <style>
-  @page { size: A4 portrait; margin: 15mm; }
+  /* 名前付きページ：商品別合計＝A4縦 ／ 梱包・発送明細＝A4横 */
+  @page portraitPage  { size: A4 portrait;  margin: 15mm; }
+  @page landscapePage { size: A4 landscape; margin: 15mm; }
+
   * { box-sizing: border-box; }
   html, body { margin: 0; padding: 0; }
-  body { font-family: "Hiragino Kaku Gothic ProN","Hiragino Sans","Meiryo",sans-serif; color: #000; }
+  body { font-family: "Hiragino Kaku Gothic ProN","Hiragino Sans","Meiryo",sans-serif; color:#000; }
+
   h1 { font-size: 16pt; margin: 0 0 2mm; }
-  .summary { font-size: 10.5pt; color: #333; margin: 0 0 6mm; }
-  .sheet.single-sheet { page-break-before: always; break-before: page; }
+  h2 { font-size: 12pt; margin: 0 0 2mm; }
+  .summary { font-size: 10.5pt; color:#333; margin: 0 0 6mm; }
+
+  .sheet-head { border-bottom: 2.5pt solid #333; padding-bottom: 1.5mm; margin-bottom: 4mm; }
+  .sheet-head.detail { background:#e8e8e8; padding:2mm 3mm; border-bottom:2.5pt solid #333;
+                       -webkit-print-color-adjust:exact; print-color-adjust:exact; }
+
   table { border-collapse: collapse; width: 100%; border: 1px solid #333; }
   th, td { border: 1px solid #333; padding: 1.5mm 3mm; font-size: 10.5pt; vertical-align: top; }
-  th { background: #f2f2f2; text-align: left; }
-  td.qty, th.qty, td.cnt, th.cnt { text-align: right; white-space: nowrap; }
-  td.qty, th.qty { width: 22mm; font-weight: bold; }
-  td.cnt, th.cnt { width: 18mm; }
-  td.num, th.num { width: 14mm; text-align: center; white-space: nowrap; font-variant-numeric: tabular-nums; }
-  td.thumb-cell, th.thumb-cell { width: 22mm; text-align: center; vertical-align: middle; padding: 1mm; }
-  .thumb { display: inline-block; width: 18mm; height: 18mm; object-fit: contain; }
-  .thumb.no-img { display: inline-flex; align-items: center; justify-content: center;
-                  font-size: 7.5pt; color: #999; border: 1px dashed #ccc; line-height: 1.15; }
-  .sku { color: #666; font-size: 9pt; font-weight: normal; }
-  /* 担当者記入欄（印刷して手書き。totalのみ） */
-  .staff-field { font-size: 11pt; margin: 0 0 5mm; }
-  .staff-line { display: inline-block; width: 70mm; border-bottom: 1px solid #333; vertical-align: bottom; }
-  /* totalの数字サイズ：G番号は通常(10.5pt)、合計数量のみ視認性のため16ptに拡大。single帳票は不変 */
-  .total td.num { font-size: 10.5pt; }
-  .total td.qty { font-size: 16pt; line-height: 1.1; }
-  .total th.qty, .total td.qty { width: 24mm; }
-  .total tr.multi td { background: #f7f7f7; color: #444; }
-  .order { margin-bottom: 6mm; page-break-inside: avoid; break-inside: avoid; }
-  .order h2 { font-size: 11pt; margin: 0; padding: 1.5mm 3mm; background: #eee;
-              border: 1px solid #333; border-bottom: none; }
-  /* マケプレ配送の印。商品別合計シート（td.name 内）と梱包・発送明細（h2 内）で共有する
-     単一のルール＝2帳票で見た目が必ず一致する（片方だけ変えられないようにするため）。
-     色は画面の警告ブロック（.result-item.error）と同系統の赤。
-     print-color-adjust:exact は「背景のグラフィック」オフの印刷設定でも地色を残すため。
-     地色が落ちても赤枠＋太字＋⚠ で判別できる＝色だけに依存しない。 */
-  .mp-badge { display: inline-block; margin-left: 3mm; padding: 0 1.5mm;
-              border: 1.2pt solid #991b1b; border-radius: 0.8mm;
-              background: #fef2f2; color: #991b1b;
-              font-size: 9.5pt; font-weight: bold; white-space: nowrap;
-              -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-  @media print { .order { page-break-inside: avoid; } .sheet.single-sheet { page-break-before: always; } }
+  th { background:#f2f2f2; text-align:left;
+       -webkit-print-color-adjust:exact; print-color-adjust:exact; }
+
+  /* 表が改ページを跨いだとき、2ページ目以降にもヘッダ行を繰り返す */
+  thead { display: table-header-group; }
+
+  td.qty, th.qty, td.cnt, th.cnt { text-align:right; white-space:nowrap; }
+  td.qty, th.qty { width:22mm; font-weight:bold; }
+  td.cnt, th.cnt { width:18mm; }
+  td.num, th.num { width:14mm; text-align:center; white-space:nowrap; font-variant-numeric:tabular-nums; }
+  td.thumb-cell, th.thumb-cell { width:22mm; text-align:center; vertical-align:middle; padding:1mm; }
+  /* 実画像の寸法指定（モックは「画像なし」しか無いため .thumb 規則を持たないが、
+     sku-images.json 登録済みSKUでは <img class="thumb"> が出るため必須） */
+  .thumb { display:inline-block; width:18mm; height:18mm; object-fit:contain; }
+  .thumb.no-img { display:inline-flex; align-items:center; justify-content:center;
+                  width:18mm; height:18mm; font-size:7.5pt; color:#999;
+                  border:1px dashed #ccc; line-height:1.15; }
+  .sku { color:#666; font-size:9pt; font-weight:normal; }
+  .skuinfo { color:#000; font-size:9.5pt; font-weight:bold; }
+
+  /* 商品別合計：合計数量のみ16pt。2段組みにしない・文字を小さくしない */
+  .total td.qty { font-size:16pt; }
+  .total td.num { font-size:10.5pt; }
+
+  .staff-field { font-size:11pt; margin:0 0 5mm; }
+  .staff-line  { display:inline-block; width:70mm; border-bottom:1px solid #333; vertical-align:bottom; }
+
+  /* 冒頭の2表を横並びにする。左＝ヤマト集荷依頼の申告数（3区分）／右＝モール別内訳 */
+  .summary-row { display:flex; gap:8mm; align-items:flex-start; margin:0 0 3mm; }
+  .sum-table { border:2pt solid #333; border-collapse:collapse; }
+  .sum-table caption { caption-side:top; text-align:left; font-size:11pt; font-weight:bold;
+                       padding:0 0 1.5mm; white-space:nowrap; }
+  .sum-table th, .sum-table td { font-size:13pt; padding:2mm 3mm; border:1px solid #333; }
+  .sum-table td.n { text-align:right; width:26mm; font-size:18pt; font-weight:bold;
+                    font-variant-numeric:tabular-nums; }
+  .sum-table tr.grand th, .sum-table tr.grand td { background:#f2f2f2; font-weight:bold;
+                    -webkit-print-color-adjust:exact; print-color-adjust:exact; }
+  .sum-yamato { width:110mm; }
+  .sum-mall   { width:72mm; }
+  .ship-note { font-size:9.5pt; color:#555; margin:0 0 6mm; }
+
+  .mp-badge { display:inline-block; margin-left:3mm; padding:0 1.5mm;
+              border:1.2pt solid #991b1b; border-radius:0.8mm;
+              background:#fef2f2; color:#991b1b;
+              font-size:9.5pt; font-weight:bold; white-space:nowrap;
+              -webkit-print-color-adjust:exact; print-color-adjust:exact; }
+  /* 楽天の配送方法タグ。文字サイズは現行の 10.5pt を維持する（帳票の字を小さくしない） */
+  .m-tag { display:inline-block; margin-left:3mm; padding:0 1.5mm; border:1pt solid #333;
+           font-size:10.5pt; font-weight:normal; white-space:nowrap; }
+
+  /* ---- モール境界：黒地白文字の全幅帯＋区間終端の太罫線 ---- */
+  /* break-after:avoid ＝ 帯だけがページ末尾に取り残されないようにする */
+  .mall-band { background:#333; color:#fff; font-size:13pt; font-weight:bold;
+               padding:2mm 3mm; margin:0 0 3mm;
+               border-top:2.5pt solid #000;
+               break-after:avoid; page-break-after:avoid;
+               -webkit-print-color-adjust:exact; print-color-adjust:exact; }
+  .mall-end  { border-top:2.5pt solid #333; text-align:right;
+               font-size:10pt; color:#333; padding-top:1mm; margin:0 0 8mm; }
+
+  /* ---- ページ番号：stampPageNumbers() で焼き込む ---- */
+  /* .pg-unit は強制改頁で始まる独立ブロック。2つ目以降の頭で必ず改頁する＝
+     商品別合計は「モールの黒帯の前」で必ずページが変わる。 */
+  .pg-unit { position: relative; }
+  .pg-unit + .pg-unit { break-before: page; page-break-before: always; }
+  .pg-badge { position:absolute; right:0; width:44mm; text-align:right;
+              font-size:15pt; font-weight:bold; font-variant-numeric:tabular-nums;
+              letter-spacing:.02em; color:#000; }
+
+  /* 幅を実寸で固定する（ページ番号の mm 計算と画面プレビューを印刷結果に合わせるため） */
+  .sheet-portrait  { page: portraitPage; width:180mm; }
+  .sheet-landscape { page: landscapePage; width:267mm;
+                     break-before:page; page-break-before:always; }
+
+  /* 明細のみ2段組み。フォントサイズは10.5ptのまま不変 */
+  .detail-cols { column-count:2; column-gap:8mm; }
+  .order { margin-bottom:6mm; page-break-inside:avoid; break-inside:avoid; }
+  .detail-cols td.thumb-cell, .detail-cols th.thumb-cell { width:22mm; }
+  .detail-cols td.num,  .detail-cols th.num  { width:14mm; }
+  .detail-cols td.qty,  .detail-cols th.qty  { width:22mm; font-size:10.5pt; }
 </style></head><body>
-  <section class="sheet total-sheet">
-    <h1>📦 Amazonピッキングリスト${dsuf}</h1>
-    <p class="summary">単一商品 ${total.length} 種${multiCount ? ` ／ 複数商品注文 ${multiCount} 件（末尾シート）` : ''}</p>
+
+<section class="sheet-portrait">
+
+  <div class="pg-unit" data-ph="${PAGE_BODY_MM.portrait}">
+    <div class="sheet-head">
+      <h1>📦 ピッキングリスト${suf}</h1>
+    </div>
+
+    <div class="summary-row">
+      <table class="sum-table sum-yamato">
+        <caption>ヤマト集荷依頼 申告数</caption>
+        <thead><tr><th>配送方法</th><th class="n">個数</th></tr></thead>
+        <tbody>
+          <tr><td>ネコポス</td><td class="n">${ship.nekopos}</td></tr>
+          <tr><td>宅急便コンパクト</td><td class="n">${ship.compact}</td></tr>
+          <tr><td>宅急便</td><td class="n">${ship.takkyubin}</td></tr>
+          <tr class="grand"><th>合計</th><td class="n">${ship.total}</td></tr>
+        </tbody>
+      </table>
+
+      <table class="sum-table sum-mall">
+        <caption>モール別内訳</caption>
+        <thead><tr><th>モール</th><th class="n">注文数</th></tr></thead>
+        <tbody>
+          ${mallRows.join('\n          ')}
+          <tr class="grand"><th>合計</th><td class="n">${ship.total}</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p class="ship-note">${shipNote}</p>
+
     <div class="staff-field">担当者：<span class="staff-line"></span></div>
-    <table class="total">
-      <thead><tr><th class="thumb-cell">画像</th><th class="num">G番号</th><th class="qty">合計数量</th><th class="name">商品名（SKU）</th><th class="cnt">注文数</th></tr></thead>
-      <tbody>${totalRows}${multiRow}</tbody>
-    </table>
-  </section>
-  <section class="sheet single-sheet">
-    <h1>📋 梱包・発送明細${dsuf}</h1>
-    <p class="summary">合計 ${single.length} 注文</p>
-    ${singleBlocks}
-  </section>
+${totalUnits[0] || ''}
+  </div>
+${totalUnits.slice(1).map(s => `  <div class="pg-unit" data-ph="${PAGE_BODY_MM.portrait}">${s}
+  </div>`).join('\n')}
+</section>
+
+<section class="sheet-landscape">
+  <div class="pg-unit" data-ph="${PAGE_BODY_MM.landscape}">
+    <div class="sheet-head detail">
+      <h1>📋 梱包・発送明細${suf}</h1>
+      <p class="summary" style="margin:0">${detailSummary}</p>
+    </div>
+${amazonDetailSection}${rakutenDetailSection}
+  </div>
+</section>
+
+<script>
+// ページ番号の焼き込み。
+// 各 .pg-unit は強制改頁で始まる独立ブロック。data-ph はそのユニットの
+// 1ページあたり本文高さ(mm)。ユニット高さ÷本文高さ で所要ページ数を求め、
+// 各ページの右下に「n / N」を絶対配置する。
+// mm→px 換算は 96dpi 前提（印刷でも mm は同じ物理長に写像される）。
+// ※ 呼び出しは印刷実行の直前（printHtmlDocument 内）。レイアウト確定前に走らせると
+//   ユニット高さが確定せずページ数を誤るため、ここでは定義だけして自動実行しない。
+window.stampPageNumbers = function stampPageNumbers() {
+  const MM = document.createElement('div');
+  MM.style.cssText = 'position:absolute;visibility:hidden;height:100mm';
+  document.body.appendChild(MM);
+  const pxPerMm = MM.getBoundingClientRect().height / 100;
+  MM.remove();
+
+  // 許容値 0.001（＝縦0.27mm／横0.18mm）。ちょうど1ページ分の高さが丸め誤差で
+  // 1.0000… になって2ページと数えられるのを防ぐためだけの値。
+  // モック v4 の 0.02 は1ページの2%（縦5.3mm）にあたり、ページ境界をわずかに
+  // 超えたユニットを1ページ少なく数えて以降の番号を全部ずらすため採らない。
+  const PAGE_EPS = 0.001;
+  const units = Array.from(document.querySelectorAll('.pg-unit'));
+  const counts = units.map(u => {
+    const ph = parseFloat(u.dataset.ph);
+    const hMm = u.getBoundingClientRect().height / pxPerMm;
+    return Math.max(1, Math.ceil(hMm / ph - PAGE_EPS));
+  });
+  const total = counts.reduce((a, b) => a + b, 0);
+
+  let page = 0;
+  units.forEach((u, i) => {
+    const ph = parseFloat(u.dataset.ph);
+    for (let j = 0; j < counts[i]; j++) {
+      page++;
+      const b = document.createElement('div');
+      b.className = 'pg-badge';
+      b.textContent = page + ' / ' + total;
+      // そのページの下端から 6mm 上。ユニット先頭からの相対位置。
+      b.style.top = ((j + 1) * ph - 6) + 'mm';
+      u.appendChild(b);
+    }
+  });
+};
+<\/script>
 </body></html>`;
 }
 
-// 汎用：印刷用HTMLを隠しiframeへ流し込み window.print()。アプリUIは印刷対象にしない。
-function printPickingSheet(data) {
-  const html = renderPickingHTML(data);
-  const old = document.getElementById('picking-print-frame');
+// 導線：STEP1 の結果エリアに統合ピッキング帳票の印刷ボタンを1つだけ置く。
+// 置き場所を #s1-results にしているのは、ここがモール切替ペイン（#s1-pane-amazon /
+// #s1-pane-rakuten）の外側にあり、どちらのタブを選んでいても常に見える唯一の領域だから。
+// Amazon分・楽天市場分のピッキングデータが両方そろうのは変換処理の中だけであるため、
+// 生成もそのタイミングで行う。
+function renderCombinedPickingButton(amazon, rakuten) {
+  const old = document.getElementById('picking-print-wrap');
   if (old) old.remove();
-  const iframe = document.createElement('iframe');
-  iframe.id = 'picking-print-frame';
-  iframe.setAttribute('aria-hidden', 'true');
-  Object.assign(iframe.style, { position:'fixed', right:'0', bottom:'0', width:'0', height:'0', border:'0' });
-  document.body.appendChild(iframe);
-  const doc = iframe.contentWindow.document;
-  doc.open(); doc.write(html); doc.close();
-  // 印刷/PDF保存ダイアログの既定ファイル名を「Amazonピッキングリスト_YYYYMMDD」にする。
-  // 多くのブラウザは印刷対象フレームまたは親ページの document.title を既定名に用いるため、
-  // iframe内<title>（renderPickingHTMLで設定済）に加え、印刷中だけ親titleも同じ値に揃える。
-  const dateNum = ((document.getElementById('s1-shipDate') || {}).value || '').replace(/-/g, '');
-  const printTitle = 'Amazonピッキングリスト' + (dateNum ? '_' + dateNum : '');
-  const prevTitle = document.title;
-  document.title = printTitle;
-  // 自己完結HTML（外部リソースなし）のため短い遅延で確実に描画完了させてから印刷
-  setTimeout(() => {
-    iframe.contentWindow.focus();
-    iframe.contentWindow.print();
-    document.title = prevTitle;   // 印刷後は元のタイトルに戻す
-  }, 200);
-}
+  if (!amazon && !rakuten) return;
 
-// 導線：STEP1 変換結果エリアに「ピッキングを印刷」ボタンを常設する
-function renderPickingButton(data) {
   const wrap = document.createElement('div');
+  wrap.id = 'picking-print-wrap';
   wrap.style.marginTop = '10px';
   const btn = document.createElement('button');
   btn.type = 'button';
   btn.className = 'btn-primary btn-green';
   btn.style.marginBottom = '0';
-  const orders = (data.single || []).length;
-  btn.textContent = `📋 Amazonピッキングリスト＋梱包・発送明細を印刷（${orders}注文）`;
-  btn.addEventListener('click', () => printPickingSheet(data));
+  const orders = (amazon ? (amazon.single || []).length : 0)
+               + (rakuten ? (rakuten.orders || []).length : 0);
+  btn.textContent = `📋 ピッキングリスト＋梱包・発送明細を印刷（${orders}注文）`;
+  btn.addEventListener('click', () => {
+    const dateNum = ((document.getElementById('s1-shipDate') || {}).value || '').replace(/-/g, '');
+    printHtmlDocument(renderCombinedPickingHTML(amazon, rakuten),
+                      'ピッキングリスト' + (dateNum ? '_' + dateNum : ''));
+  });
   wrap.appendChild(btn);
-  // Amazonペイン内に表示（モールスイッチで選択中のモールのものだけが見える）
-  (document.getElementById('s1-amazon-extra') || s1Results).appendChild(wrap);
+  s1Results.appendChild(wrap);
 }
 // ==== PICKING FEATURE (portable to public fbm-tool) — END ====
 
@@ -1658,6 +1886,7 @@ s1Convert.addEventListener('click', async () => {
 
   const allRecords = []; let totalCount = 0;   // totalCount＝B2 CSVに出力するAmazon注文数
   const allExcluded = [];   // ネコポス以外＝B2 CSVから除外した行（画面表示用）
+  const loadedStoreNames = [];   // 統合ピッキング帳票のモール帯に出す店舗名
 
   stores.forEach((store, storeIndex) => {
     if (!s1Buffers[store.name]) return;
@@ -1672,6 +1901,7 @@ s1Convert.addEventListener('click', async () => {
       const b2Count = recs.filter(r => r.b2Row).length;
       const mpCount = recs.length - b2Count;
       allRecords.push(...recs); totalCount += b2Count;
+      loadedStoreNames.push(store.name);
       item.className = 'result-item success';
       item.textContent = `✓ ${store.name}：${recs.length}件`
         + (mpCount ? `（B2 CSV ${b2Count}件／送り状は別発行 ${mpCount}件）` : '');
@@ -1695,6 +1925,9 @@ s1Convert.addEventListener('click', async () => {
   // MCF（CONSUMER-）は parseRakutenCsv の段階で除外済み＝B2 CSVにも入らない。
   // 配送方法が不明で送り状種類コードを決められない注文はB2行から除外して警告する。
   let rakutenB2Rows = [];
+  // 統合ピッキング帳票用。B2生成が依頼主未設定などで落ちても、ピッキング自体は
+  // 印刷できる必要があるため、rData を作った直後にここへ退避する。
+  let rakutenPicking = null;
   if (s1RakutenParsed) {
     const item = document.createElement('div');
     try {
@@ -1704,6 +1937,10 @@ s1Convert.addEventListener('click', async () => {
       // 出荷対象判定（classifyRakutenOrder）で 'scheduled'（お届け日が本日+4日以降）は
       // orders から外れる＝B2 CSVにも入らない。除外分は下の警告ブロックで明示する。
       const rData  = buildRakutenPickingData(rActive, new Date());
+      if (rData.orders.length) {
+        rakutenPicking = { total: rData.total, orders: rData.orders,
+                           storeName: RAKUTEN_STORE_CODES.join('／') };
+      }
       const sender = getRakutenSenderStore();
       if (!sender) throw new Error('楽天市場の依頼主設定が未入力です（依頼主設定タブで登録してください）'
         + `／未入力: ${rakutenSenderMissingFields().join('・')}`);
@@ -1753,10 +1990,13 @@ s1Convert.addEventListener('click', async () => {
     }
   }
 
-  if (!allRecords.length && !rakutenB2Rows.length) return;
+  // ピッキング帳票はB2 CSVが1本も出ない日でも必要なため、楽天分のピッキングが
+  // 作れている限りここでは止めない（依頼主未設定でB2生成が落ちた場合など）。
+  if (!allRecords.length && !rakutenB2Rows.length && !rakutenPicking) return;
 
   // ---- Amazon分（従来処理そのまま・出力行は不変） ----
   let amazonRows = [];
+  let amazonPicking = null;
   if (allRecords.length) {
     const sorted = sortedAmazon;   // 統一ソート済み（マケプレ配送も含む全件）
 
@@ -1768,12 +2008,16 @@ s1Convert.addEventListener('click', async () => {
     for (const r of sorted) { if (r.b2Row) r.b2Row[32] = buildKijiForRecord(r, skuNumMap); }
     amazonRows = sorted.filter(r => r.b2Row).map(r => r.b2Row);
 
-    // PICKING: no-PII のピッキングデータ（total）を生成し印刷ボタンを常設
+    // PICKING: no-PII のピッキングデータ（total）を生成
     const pickingData = buildPickingItems(enrichPickingItems(sorted), skuNumMap);
-    renderPickingButton(pickingData);
+    amazonPicking = { ...pickingData, storeNames: loadedStoreNames.join('／') };
     // 画像URL登録用の画面一覧（各行にURL入力欄）を生成（トグルで開閉）
     renderImageRegisterSection(pickingData);
   }
+
+  // ピッキング帳票の印刷ボタン（Amazon＋楽天市場で1つ）。片方しか読み込んでいない日は
+  // そのモールのセクションだけが出る。B2 CSVの保存可否とは独立に常に出す。
+  renderCombinedPickingButton(amazonPicking, rakutenPicking);
 
   // B2行が1本も無い場合はヘッダだけのCSVを保存しない（全件がマケプレ配送のときに起きる）。
   // ピッキングリスト・梱包発送明細の印刷ボタンは上で生成済みなので、そのまま使える。
@@ -2166,8 +2410,9 @@ function renderImageRegisterSection(pickingData, container, wrapId) {
 // ============================================================
 // ==== RAKUTEN PICKING (楽天市場) — BEGIN ====
 // 楽天市場RMS「通常購入データ」CSV → 楽天市場ピッキングリスト。
-// Amazon側の既存関数（parseAmazonTsvGroups／buildOrderRecords／renderPickingHTML／
-// buildSkuNumberMap 等）には一切依存・変更しない独立実装。採番マップも独立（R-001…）。
+// Amazon側の既存関数（parseAmazonTsvGroups／buildOrderRecords／buildSkuNumberMap 等）には
+// 一切依存・変更しない独立実装。採番マップも独立（R-001…）。
+// 印刷帳票のみ renderCombinedPickingHTML でAmazon分と1文書に統合する（表はモール別のまま）。
 // ============================================================
 const RAKUTEN_COMPACT   = '宅急便コンパクト';
 const RAKUTEN_TAKKYUBIN = '宅急便';
@@ -2606,108 +2851,34 @@ function buildRakutenB2Row(order, shipDate, store, addressIssues) {
 }
 
 // 汎用：印刷用HTML文書を隠しiframeへ流し込み window.print()。
-// printPickingSheet（Amazon専用・不変）から Amazon固有部分を除いた共通版。
-// Amazon側は従来関数のまま、楽天市場側はこちらを使う。
+// Amazon・楽天市場のピッキング帳票、および今後の印刷物すべてが共用する。
 function printHtmlDocument(html, printTitle) {
   const old = document.getElementById('generic-print-frame');
   if (old) old.remove();
   const iframe = document.createElement('iframe');
   iframe.id = 'generic-print-frame';
   iframe.setAttribute('aria-hidden', 'true');
-  Object.assign(iframe.style, { position:'fixed', right:'0', bottom:'0', width:'0', height:'0', border:'0' });
+  // 0×0 ではなく実寸のビューポートを与えて画面外へ逃がす。ページ番号の焼き込みは
+  // 要素の実高さを測って所要ページ数を数えるため、まともにレイアウトさせる必要がある。
+  // 幅は A4横の本文幅（267mm）が収まる値。印刷の用紙は @page が決めるので影響しない。
+  Object.assign(iframe.style, { position:'fixed', left:'-10000px', top:'0',
+                                width:'320mm', height:'400mm', border:'0' });
   document.body.appendChild(iframe);
   const doc = iframe.contentWindow.document;
   doc.open(); doc.write(html); doc.close();
   const prevTitle = document.title;
   if (printTitle) document.title = printTitle;
+  // 自己完結HTML（外部リソースなし）のため短い遅延で描画完了させてから印刷する。
   setTimeout(() => {
-    iframe.contentWindow.focus();
-    iframe.contentWindow.print();
+    // ページ番号はレイアウト確定後・印刷実行の直前に焼き込む（文書側が定義していれば）
+    const w = iframe.contentWindow;
+    if (w && typeof w.stampPageNumbers === 'function') {
+      try { w.stampPageNumbers(); } catch (_) {}   // 番号が出なくても印刷は止めない
+    }
+    w.focus();
+    w.print();
     document.title = prevTitle;
   }, 200);
-}
-
-// 楽天市場ピッキングリスト印刷用HTML（A4縦）。total＋注文別を1文書に連結（改ページ区切り）。
-// 配送方法は rakutenResolvedMethod で確定した値（プルダウン選択反映後）を印字する。
-function renderRakutenPickingHTML(data) {
-  const e = s => String(s == null ? '' : s)
-    .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
-  const d = new Date(), p = n => String(n).padStart(2, '0');
-  const dateDisp = `${d.getFullYear()}-${p(d.getMonth()+1)}-${p(d.getDate())}`;
-  const total = data.total || [], orders = data.orders || [];
-
-  // 商品名セル：商品名＋改行して SKU情報（あれば）と SKU管理番号を並べる
-  const nameCell = (name, skuInfo, sku) => {
-    const info = skuInfo ? `<span class="skuinfo">${e(skuInfo)}</span>　` : '';
-    return `${e(name)}<br>${info}<span class="sku">(${e(sku)})</span>`;
-  };
-
-  const totalRows = total.map(t =>
-    `<tr><td class="thumb-cell">${thumbInner(t.sku)}</td><td class="num">${e(t.num)}</td><td class="qty">${e(t.totalQty)}</td><td class="name">${nameCell(t.name, t.skuInfo, t.sku)}</td><td class="cnt">${e(t.orderCount)}</td></tr>`
-  ).join('');
-
-  const orderBlocks = orders.map(o => {
-    const rows = o.lines.map(l =>
-      `<tr><td class="thumb-cell">${thumbInner(l.sku)}</td><td class="num">${e(l.num)}</td><td class="qty">${e(l.quantity)}</td><td class="name">${nameCell(l.name, l.skuInfo, l.sku)}</td></tr>`
-    ).join('');
-    return `<section class="order">
-      <h2>${e(o.orderNumber)}<span class="method">${e(rakutenResolvedMethod(o))}</span></h2>
-      <table>
-        <thead><tr><th class="thumb-cell">画像</th><th class="num">R番号</th><th class="qty">数量</th><th class="name">商品名（SKU情報／SKU管理番号）</th></tr></thead>
-        <tbody>${rows}</tbody>
-      </table>
-    </section>`;
-  }).join('');
-
-  return `<!DOCTYPE html>
-<html lang="ja"><head><meta charset="UTF-8">
-<title>楽天市場ピッキングリスト_${dateDisp.replace(/-/g,'')}</title>
-<style>
-  @page { size: A4 portrait; margin: 15mm; }
-  * { box-sizing: border-box; }
-  html, body { margin: 0; padding: 0; }
-  body { font-family: "Hiragino Kaku Gothic ProN","Hiragino Sans","Meiryo",sans-serif; color: #000; }
-  h1 { font-size: 16pt; margin: 0 0 2mm; }
-  .summary { font-size: 10.5pt; color: #333; margin: 0 0 6mm; }
-  .sheet.order-sheet { page-break-before: always; break-before: page; }
-  table { border-collapse: collapse; width: 100%; border: 1px solid #333; }
-  th, td { border: 1px solid #333; padding: 1.5mm 3mm; font-size: 10.5pt; vertical-align: top; }
-  th { background: #f2f2f2; text-align: left; }
-  td.qty, th.qty, td.cnt, th.cnt { text-align: right; white-space: nowrap; }
-  td.qty, th.qty { width: 22mm; font-weight: bold; }
-  td.cnt, th.cnt { width: 18mm; }
-  td.num, th.num { width: 18mm; text-align: center; white-space: nowrap; font-variant-numeric: tabular-nums; }
-  td.thumb-cell, th.thumb-cell { width: 22mm; text-align: center; vertical-align: middle; padding: 1mm; }
-  .thumb { display: inline-block; width: 18mm; height: 18mm; object-fit: contain; }
-  .thumb.no-img { display: inline-flex; align-items: center; justify-content: center;
-                  font-size: 7.5pt; color: #999; border: 1px dashed #ccc; line-height: 1.15; }
-  .sku { color: #666; font-size: 9pt; font-weight: normal; }
-  .skuinfo { color: #000; font-size: 9.5pt; font-weight: bold; }
-  .staff-field { font-size: 11pt; margin: 0 0 5mm; }
-  .staff-line { display: inline-block; width: 70mm; border-bottom: 1px solid #333; vertical-align: bottom; }
-  .total td.qty { font-size: 16pt; line-height: 1.1; }
-  .total th.qty, .total td.qty { width: 24mm; }
-  .order { margin-bottom: 6mm; page-break-inside: avoid; break-inside: avoid; }
-  .order h2 { font-size: 11pt; margin: 0; padding: 1.5mm 3mm; background: #eee;
-              border: 1px solid #333; border-bottom: none; }
-  .order h2 .method { float: right; font-size: 10.5pt; font-weight: bold; }
-  @media print { .order { page-break-inside: avoid; } .sheet.order-sheet { page-break-before: always; } }
-</style></head><body>
-  <section class="sheet total-sheet">
-    <h1>🛒 楽天市場ピッキングリスト — ${e(dateDisp)}</h1>
-    <p class="summary">商品 ${total.length} 種 ／ ${orders.length} 注文</p>
-    <div class="staff-field">担当者：<span class="staff-line"></span></div>
-    <table class="total">
-      <thead><tr><th class="thumb-cell">画像</th><th class="num">R番号</th><th class="qty">合計数量</th><th class="name">商品名（SKU情報／SKU管理番号）</th><th class="cnt">注文数</th></tr></thead>
-      <tbody>${totalRows}</tbody>
-    </table>
-  </section>
-  <section class="sheet order-sheet">
-    <h1>📋 楽天市場 梱包・発送明細 — ${e(dateDisp)}</h1>
-    <p class="summary">合計 ${orders.length} 注文（注文番号右肩＝配送方法）</p>
-    ${orderBlocks}
-  </section>
-</body></html>`;
 }
 
 // 汎用警告ブロック（見出し＋トグル開閉テーブル）。楽天市場画面用。
@@ -2938,20 +3109,9 @@ function renderRakutenResults(parsed) {
     });
   });
 
-  // 印刷（タスクAと同一・共通関数を利用）
-  const btnWrap = document.createElement('div');
-  btnWrap.style.marginTop = '10px';
-  const printBtn = document.createElement('button');
-  printBtn.type = 'button';
-  printBtn.className = 'btn-primary btn-red';
-  printBtn.style.marginBottom = '0';
-  printBtn.textContent = `🖨 楽天市場ピッキングリストを印刷（${data.orders.length}注文）`;
-  printBtn.addEventListener('click', () => {
-    const { ymd } = nowStamp();
-    printHtmlDocument(renderRakutenPickingHTML(data), `楽天市場ピッキングリスト_${ymd}`);
-  });
-  btnWrap.appendChild(printBtn);
-  rArea.appendChild(btnWrap);
+  // 印刷ボタンはこのペインには置かない。ピッキング帳票はAmazon分と1文書に統合され、
+  // 「変換して保存」を押した後に STEP1 の結果エリア（#s1-results）へ1つだけ出る
+  // （renderCombinedPickingButton）。宅配便プルダウンの選択は印刷時に反映される。
 
   // 画像URL登録UI（Amazon側と同じ運用：入力→JSON下書きコピー→sku-images.jsonへ手動反映）。
   // キーは楽天市場の SKU管理番号。未登録SKUは「画像なし」表示＝正常挙動。
@@ -2973,6 +3133,11 @@ const rShipFileInput = document.getElementById('r-ship-fileInput');
 function rRefreshView() {
   document.getElementById('r-results').innerHTML = '';
   document.getElementById('r-picking-area').innerHTML = '';
+  // 読み込み内容が変わった時点で、前回の変換で作られたピッキング印刷ボタンは中身が古い。
+  // 消えた注文を含む帳票を刷ってしまわないよう取り除く（Amazon側は s1LoadFile が
+  // s1Results ごとクリアするため同じ状態になる）。
+  const oldBtn = document.getElementById('picking-print-wrap');
+  if (oldBtn) oldBtn.remove();
   if (s1RakutenParsed) renderRakutenResults(s1RakutenParsed);
 }
 
