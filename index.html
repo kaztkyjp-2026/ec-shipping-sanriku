@@ -1027,11 +1027,14 @@ function buildPickingItems(records, skuNumMap) {
     if (!clusters.has(r.sku)) {
       const name = (r.picking.lines[0] && r.picking.lines[0].name) || r.sku;
       const num  = (skuNumMap && skuNumMap.get(r.sku)) || '';
-      clusters.set(r.sku, { num, name, sku: r.sku, totalQty: 0, orderCount: 0 });
+      clusters.set(r.sku, { num, name, sku: r.sku, totalQty: 0, orderCount: 0, nonNekopos: false });
     }
     const c = clusters.get(r.sku);
     c.totalQty += r.qty;
     c.orderCount += 1;
+    // マケプレ配送の注文が1件でも含まれればクラスタに印を立てる。
+    // 配送方法は商品の寸法・重量で決まるため同一SKUでの混在はまず起きない＝件数内訳は持たない。
+    if (r.nonNekopos) c.nonNekopos = true;
   }
   const total = Array.from(clusters.values()).sort((a, b) =>
     (b.orderCount - a.orderCount) || String(a.sku).localeCompare(String(b.sku))
@@ -1066,10 +1069,16 @@ function renderPickingHTML(data) {
   const dateNum = dateStr.replace(/-/g, '');   // YYYY-MM-DD → YYYYMMDD（印刷ファイル名用）
   const total = data.total || [], single = data.single || [], multiCount = data.multiCount || 0;
 
+  // マケプレ配送（ネコポス以外）の印。商品別合計・梱包発送明細の2帳票で同一のHTML／CSSを使い、
+  // 現場が同じものだと即座に分かるようにする（文言・体裁を分岐させないこと）。
+  const MP_BADGE = ` <span class="mp-badge">⚠ 送り状は別発行（マケプレ配送）</span>`;
+
   const totalRows = total.map(t => {
     const numCell = t.num ? `（${esc(t.num)}）` : '';
     const skuTag = (t.sku && t.sku !== t.name) ? ` <span class="sku">(${esc(t.sku)})</span>` : '';
-    return `<tr><td class="thumb-cell">${thumbInner(t.sku)}</td><td class="num">${numCell}</td><td class="qty">${esc(t.totalQty)}</td><td class="name">${esc(t.name)}${skuTag}</td><td class="cnt">${esc(t.orderCount)}</td></tr>`;
+    // バッジは商品名セル内・SKU表記の直後に置く。行末（注文数の後ろ）だと商品名が長いときに
+    // 折り返しでバッジが商品から離れ、どの商品の話か分からなくなるため。
+    return `<tr><td class="thumb-cell">${thumbInner(t.sku)}</td><td class="num">${numCell}</td><td class="qty">${esc(t.totalQty)}</td><td class="name">${esc(t.name)}${skuTag}${t.nonNekopos ? MP_BADGE : ''}</td><td class="cnt">${esc(t.orderCount)}</td></tr>`;
   }).join('');
   const multiRow = multiCount > 0
     ? `<tr class="multi"><td class="thumb-cell"></td><td class="num"></td><td class="qty">—</td><td class="name">（複数商品注文：記事欄参照）</td><td class="cnt">${multiCount}</td></tr>`
@@ -1086,8 +1095,7 @@ function renderPickingHTML(data) {
     // マケプレ配送（ネコポス以外）はB2の送り状が出ない。倉庫の担当者が気づけるよう
     // 注文番号と同じ行に印を出す（赤枠＋赤文字＋太字＋⚠。色が落ちても判別できる）。
     // ※ G番号は分けない（商品別合計との突合が壊れるため。冒頭の再発防止コメント参照）。
-    const mpBadge = o.nonNekopos
-      ? ` <span class="mp-badge">⚠ 送り状は別発行（マケプレ配送）</span>` : '';
+    const mpBadge = o.nonNekopos ? MP_BADGE : '';
     return `<section class="order">
       <h2>${esc(o.orderId)}${mpBadge}</h2>
       <table>
@@ -1131,10 +1139,12 @@ function renderPickingHTML(data) {
   .order { margin-bottom: 6mm; page-break-inside: avoid; break-inside: avoid; }
   .order h2 { font-size: 11pt; margin: 0; padding: 1.5mm 3mm; background: #eee;
               border: 1px solid #333; border-bottom: none; }
-  /* マケプレ配送の印。色は画面の警告ブロック（.result-item.error）と同系統の赤。
+  /* マケプレ配送の印。商品別合計シート（td.name 内）と梱包・発送明細（h2 内）で共有する
+     単一のルール＝2帳票で見た目が必ず一致する（片方だけ変えられないようにするため）。
+     色は画面の警告ブロック（.result-item.error）と同系統の赤。
      print-color-adjust:exact は「背景のグラフィック」オフの印刷設定でも地色を残すため。
      地色が落ちても赤枠＋太字＋⚠ で判別できる＝色だけに依存しない。 */
-  .order h2 .mp-badge { display: inline-block; margin-left: 3mm; padding: 0 1.5mm;
+  .mp-badge { display: inline-block; margin-left: 3mm; padding: 0 1.5mm;
               border: 1.2pt solid #991b1b; border-radius: 0.8mm;
               background: #fef2f2; color: #991b1b;
               font-size: 9.5pt; font-weight: bold; white-space: nowrap;
