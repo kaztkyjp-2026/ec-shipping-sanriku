@@ -1208,7 +1208,7 @@ function renderCombinedPickingHTML(amazon, rakuten) {
   }).join('')}</div>
   ${mallEnd('楽天市場', rOrders)}`;
 
-  // ---- 冒頭の2表（ヤマト申告数／モール別内訳）----
+  // ---- 集計2表（ヤマト申告数／モール別内訳）----
   const ship = buildShipMethodSummary(amazon, rakuten);
   const bothMalls = !!(amazon && rakuten);
   const mallRows = [];
@@ -1219,10 +1219,41 @@ function renderCombinedPickingHTML(amazon, rakuten) {
   const shipNote = '※マケプレ配送（送り状を別発行する注文）は「宅急便」に合算しています。'
     + (ship.unknown ? `／配送方法を判定できない ${ship.unknown}注文も「宅急便」に含めています。` : '');
 
+  // 2表は帳票冒頭ではなく商品別合計の末尾（最後の mall-end の直後）に出す。
+  // 倉庫はピッキングを終えてから集荷を申告するため、作業の順番と並びを一致させる。
+  // 先頭に残すのは h1 と担当者記入欄だけ。
+  const summaryBlock = `
+    <div class="summary-row">
+      <table class="sum-table sum-yamato">
+        <caption>ヤマト集荷依頼 申告数</caption>
+        <thead><tr><th>配送方法</th><th class="n">個数</th></tr></thead>
+        <tbody>
+          <tr><td>ネコポス</td><td class="n">${ship.nekopos}</td></tr>
+          <tr><td>宅急便コンパクト</td><td class="n">${ship.compact}</td></tr>
+          <tr><td>宅急便</td><td class="n">${ship.takkyubin}</td></tr>
+          <tr class="grand"><th>合計</th><td class="n">${ship.total}</td></tr>
+        </tbody>
+      </table>
+
+      <table class="sum-table sum-mall">
+        <caption>モール別内訳</caption>
+        <thead><tr><th>モール</th><th class="n">注文数</th></tr></thead>
+        <tbody>
+          ${mallRows.join('\n          ')}
+          <tr class="grand"><th>合計</th><td class="n">${ship.total}</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p class="ship-note">${shipNote}</p>`;
+
   // 商品別合計は「モールの黒帯の前」で必ず改頁する。モールごとに .pg-unit を分け、
   // CSS の .pg-unit + .pg-unit { break-before:page } に改頁を任せる（2つ目以降だけが改頁）。
   // 梱包・発送明細は2段組みの流し込みで、モールごとに割ると段が虫食いになるため1ユニットにまとめる。
   const totalUnits = [amazonTotalSection, rakutenTotalSection].filter(Boolean);
+
+  // 2表の挿入先は「最後の totalUnit」＝楽天市場があればその mall-end の直後、
+  // 無ければ Amazon の mall-end の直後。商品別合計が空のときだけ先頭ユニットに残す。
+  const tailIdx = totalUnits.length - 1;   // -1 なら商品別合計なし
 
   return `<!DOCTYPE html>
 <html lang="ja"><head><meta charset="UTF-8">
@@ -1340,33 +1371,10 @@ function renderCombinedPickingHTML(amazon, rakuten) {
       <h1>📦 ピッキングリスト${suf}</h1>
     </div>
 
-    <div class="summary-row">
-      <table class="sum-table sum-yamato">
-        <caption>ヤマト集荷依頼 申告数</caption>
-        <thead><tr><th>配送方法</th><th class="n">個数</th></tr></thead>
-        <tbody>
-          <tr><td>ネコポス</td><td class="n">${ship.nekopos}</td></tr>
-          <tr><td>宅急便コンパクト</td><td class="n">${ship.compact}</td></tr>
-          <tr><td>宅急便</td><td class="n">${ship.takkyubin}</td></tr>
-          <tr class="grand"><th>合計</th><td class="n">${ship.total}</td></tr>
-        </tbody>
-      </table>
-
-      <table class="sum-table sum-mall">
-        <caption>モール別内訳</caption>
-        <thead><tr><th>モール</th><th class="n">注文数</th></tr></thead>
-        <tbody>
-          ${mallRows.join('\n          ')}
-          <tr class="grand"><th>合計</th><td class="n">${ship.total}</td></tr>
-        </tbody>
-      </table>
-    </div>
-    <p class="ship-note">${shipNote}</p>
-
     <div class="staff-field">担当者：<span class="staff-line"></span></div>
-${totalUnits[0] || ''}
+${totalUnits[0] || ''}${tailIdx <= 0 ? summaryBlock : ''}
   </div>
-${totalUnits.slice(1).map(s => `  <div class="pg-unit" data-ph="${PAGE_BODY_MM.portrait}">${s}
+${totalUnits.slice(1).map((s, i) => `  <div class="pg-unit" data-ph="${PAGE_BODY_MM.portrait}">${s}${i + 1 === tailIdx ? summaryBlock : ''}
   </div>`).join('\n')}
 </section>
 
