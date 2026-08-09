@@ -1318,7 +1318,7 @@ function renderCombinedPickingHTML(amazon, rakuten) {
   .pg-unit + .pg-unit { break-before: page; page-break-before: always; }
   .pg-badge { position:absolute; right:0; width:44mm; text-align:right;
               font-size:15pt; font-weight:bold; font-variant-numeric:tabular-nums;
-              letter-spacing:.02em; color:#000; }
+              line-height:1.2; letter-spacing:.02em; color:#000; }
 
   /* 幅を実寸で固定する（ページ番号の mm 計算と画面プレビューを印刷結果に合わせるため） */
   .sheet-portrait  { page: portraitPage; width:180mm; }
@@ -1408,6 +1408,17 @@ window.stampPageNumbers = function stampPageNumbers() {
   });
   const total = counts.reduce((a, b) => a + b, 0);
 
+  // バッジ高さの実測。top指定＝上端基準のため、下端位置を決めるには高さが要る。
+  // CSSの font-size / line-height をJS側に定数で持つと二重管理になるので実測する
+  // （pxPerMm と同じ隠しプローブ方式）。文字列は最大幅ケースを与える。
+  const probe = document.createElement('div');
+  probe.className = 'pg-badge';
+  probe.style.visibility = 'hidden';
+  probe.textContent = total + ' / ' + total;
+  document.body.appendChild(probe);
+  const badgeHMm = probe.getBoundingClientRect().height / pxPerMm;
+  probe.remove();
+
   let page = 0;
   units.forEach((u, i) => {
     const ph = parseFloat(u.dataset.ph);
@@ -1416,8 +1427,10 @@ window.stampPageNumbers = function stampPageNumbers() {
       const b = document.createElement('div');
       b.className = 'pg-badge';
       b.textContent = page + ' / ' + total;
-      // そのページの下端から 6mm 上。ユニット先頭からの相対位置。
-      b.style.top = ((j + 1) * ph - 6) + 'mm';
+      // バッジ「下端」をそのページの下端から 6mm 上に置く。
+      // 上端基準で 6mm にすると下端が本文高を 1.94mm 超え、行ボックスごと
+      // 次ページへ押し出されて全番号が1ページずれ、最後に白紙が1枚出る。
+      b.style.top = ((j + 1) * ph - 6 - badgeHMm) + 'mm';
       u.appendChild(b);
     }
   });
