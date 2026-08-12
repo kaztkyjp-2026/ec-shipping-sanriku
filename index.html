@@ -1166,12 +1166,34 @@ function renderCombinedPickingHTML(amazon, rakuten) {
     const info = skuInfo ? ` <span class="skuinfo">${esc(skuInfo)}</span>` : '';
     return `${esc(name)}${info} <span class="sku">(${esc(sku)})</span>`;
   };
+  // 楽天：SKU → その SKU を含む注文の確定配送方法の集合。
+  // 確定値は rakutenResolvedMethod（プルダウン選択 rakutenShipChoice を解決したもの）を使う。
+  // 印刷HTMLはボタン押下時に組まれるため、ここで最新の選択値が読める。
+  const rakutenSkuMethods = new Map();   // sku → Set<配送方法>
+  for (const o of (rakuten ? (rakuten.orders || []) : [])) {
+    const m = rakutenResolvedMethod(o);
+    for (const l of o.lines) {
+      if (!rakutenSkuMethods.has(l.sku)) rakutenSkuMethods.set(l.sku, new Set());
+      rakutenSkuMethods.get(l.sku).add(m);
+    }
+  }
+  // ネコポス以外（宅急便コンパクト／宅急便）のみバッジ化する。
+  // 楽天注文の大多数がネコポスであり、全行に付けると赤が意味を失うため。
+  // 判定できない配送方法（'（不明）'等）はバッジを付けない（B2除外の警告で担保済み）。
+  // 混在時は両方を並べる（順序固定：コンパクト→宅急便）。件数内訳は持たない。
+  const RAKUTEN_BADGE_ORDER = [RAKUTEN_COMPACT, RAKUTEN_TAKKYUBIN];
+  const rakutenShipBadges = (sku) => {
+    const s = rakutenSkuMethods.get(sku);
+    if (!s) return '';
+    return RAKUTEN_BADGE_ORDER.filter(m => s.has(m))
+      .map(m => `<span class="mp-badge">⚠ ${esc(m)}</span>`).join('');
+  };
   const rakutenTotalSection = !rakuten ? '' : `
   ${band(`${mallLabel('楽天市場', rakuten.storeName)}　商品別合計`)}
   <table class="total">
     <thead><tr><th class="thumb-cell">画像</th><th class="num">G番号</th><th class="qty">合計数量</th><th class="name">商品名（SKU管理番号）</th><th class="cnt">注文数</th></tr></thead>
     <tbody>${(rakuten.total || []).map(t =>
-      `<tr><td class="thumb-cell">${thumbInner(t.sku)}</td><td class="num">${esc(t.num)}</td><td class="qty">${esc(t.totalQty)}</td><td class="name">${rakutenNameCell(t.name, t.skuInfo, t.sku)}</td><td class="cnt">${esc(t.orderCount)}</td></tr>`
+      `<tr><td class="thumb-cell">${thumbInner(t.sku)}</td><td class="num">${esc(t.num)}</td><td class="qty">${esc(t.totalQty)}</td><td class="name">${rakutenNameCell(t.name, t.skuInfo, t.sku)}${rakutenShipBadges(t.sku)}</td><td class="cnt">${esc(t.orderCount)}</td></tr>`
     ).join('')}</tbody>
   </table>
   ${mallEnd('楽天市場', rOrders)}`;
