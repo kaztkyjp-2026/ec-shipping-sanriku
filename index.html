@@ -1047,8 +1047,12 @@ function buildPickingItems(records, skuNumMap) {
     // 配送方法は商品の寸法・重量で決まるため同一SKUでの混在はまず起きない＝件数内訳は持たない。
     if (r.nonNekopos) c.nonNekopos = true;
   }
+  // 商品別合計は G番号（A-NNN）の昇順で並べる。
+  // 採番は buildSkuNumberMap が sortOrderRecords の順（第1キー=storeIndex）で行うため、
+  // 注文数降順で並べると2店舗運用では採番順と表示順がズレて番号が飛ぶ（2026-08-14 実データで確認）。
+  // A-NNN はゼロ埋め3桁のため文字列比較で昇順になる。
   const total = Array.from(clusters.values()).sort((a, b) =>
-    (b.orderCount - a.orderCount) || String(a.sku).localeCompare(String(b.sku))
+    String(a.num).localeCompare(String(b.num))
   );
   return { total, single, multiCount };
 }
