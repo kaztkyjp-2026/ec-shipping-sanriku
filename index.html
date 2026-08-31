@@ -1173,12 +1173,17 @@ function renderCombinedPickingHTML(amazon, rakuten) {
   // 楽天：SKU → その SKU を含む注文の確定配送方法の集合。
   // 確定値は rakutenResolvedMethod（プルダウン選択 rakutenShipChoice を解決したもの）を使う。
   // 印刷HTMLはボタン押下時に組まれるため、ここで最新の選択値が読める。
-  const rakutenSkuMethods = new Map();   // sku → Set<配送方法>
+  // キーは商品別合計のクラスタと同じ複合キー（buildRakutenPickingData の lineKey と同一定義）。
+  // SKU管理番号だけで引くと、SKUが重複している行に「別商品側の配送方法」まで
+  // 混ざったバッジが出てしまうため、クラスタ単位で持つ。
+  const rakutenClusterKey = l => (l.sku || '') + '\u001f' + (l.itemMgmtNo || '');
+  const rakutenSkuMethods = new Map();   // clusterKey → Set<配送方法>
   for (const o of (rakuten ? (rakuten.orders || []) : [])) {
     const m = rakutenResolvedMethod(o);
     for (const l of o.lines) {
-      if (!rakutenSkuMethods.has(l.sku)) rakutenSkuMethods.set(l.sku, new Set());
-      rakutenSkuMethods.get(l.sku).add(m);
+      const k = rakutenClusterKey(l);
+      if (!rakutenSkuMethods.has(k)) rakutenSkuMethods.set(k, new Set());
+      rakutenSkuMethods.get(k).add(m);
     }
   }
   // ネコポス以外（宅急便コンパクト／宅急便）のみバッジ化する。
@@ -1186,18 +1191,21 @@ function renderCombinedPickingHTML(amazon, rakuten) {
   // 判定できない配送方法（'（不明）'等）はバッジを付けない（B2除外の警告で担保済み）。
   // 混在時は両方を並べる（順序固定：コンパクト→宅急便）。件数内訳は持たない。
   const RAKUTEN_BADGE_ORDER = [RAKUTEN_COMPACT, RAKUTEN_TAKKYUBIN];
-  const rakutenShipBadges = (sku) => {
-    const s = rakutenSkuMethods.get(sku);
+  const rakutenShipBadges = (clusterKey) => {
+    const s = rakutenSkuMethods.get(clusterKey);
     if (!s) return '';
     return RAKUTEN_BADGE_ORDER.filter(m => s.has(m))
       .map(m => `<span class="mp-badge">⚠ ${esc(m)}</span>`).join('');
   };
+  // 同一SKU管理番号が別商品に使い回されている行の警告（buildRakutenPickingData の dupWarning）。
+  // 同じSKUの行が複数並ぶため、どちらを取るかを倉庫側が現物で判断する必要がある。
+  const RAKUTEN_DUP_BADGE = `<span class="mp-badge">⚠ SKU重複あり</span>`;
   const rakutenTotalSection = !rakuten ? '' : `
   ${band(`${mallLabel('楽天市場', rakuten.storeName)}　商品別合計`)}
   <table class="total">
     <thead><tr><th class="thumb-cell">画像</th><th class="num">G番号</th><th class="qty">合計数量</th><th class="name">商品名（SKU管理番号）</th><th class="cnt">注文数</th></tr></thead>
     <tbody>${(rakuten.total || []).map(t =>
-      `<tr><td class="thumb-cell">${thumbInner(t.sku)}</td><td class="num">${esc(t.num)}</td><td class="qty">${esc(t.totalQty)}</td><td class="name">${rakutenNameCell(t.name, t.skuInfo, t.sku)}${rakutenShipBadges(t.sku)}</td><td class="cnt">${esc(t.orderCount)}</td></tr>`
+      `<tr><td class="thumb-cell">${thumbInner(t.sku)}</td><td class="num">${esc(t.num)}</td><td class="qty">${esc(t.totalQty)}</td><td class="name">${rakutenNameCell(t.name, t.skuInfo, t.sku)}${t.dupWarning ? RAKUTEN_DUP_BADGE : ''}${rakutenShipBadges(t.clusterKey)}</td><td class="cnt">${esc(t.orderCount)}</td></tr>`
     ).join('')}</tbody>
   </table>
   ${mallEnd('楽天市場', rOrders)}`;
@@ -2508,12 +2516,13 @@ const RAKUTEN_STATUS_SHIPPABLE = '300';   // 発送待ち
 
 // RMS通常購入データCSV（decodeBuffer済みテキスト）を列名ベースでパースする。
 // 戻り値: { groups, statusExcluded, mcfExcluded, needsCheck, unknownMethods }
-//   groups         : [{ orderNumber, shipMethodRaw, shipType, lines:[{name, quantity, sku}] }]
+//   groups         : [{ orderNumber, shipMethodRaw, shipType, lines:[{name, quantity, sku, itemMgmtNo}] }]
 //   statusExcluded : [{ orderNumber, status, productName }] … 'ステータス' が '300'（発送待ち）以外＝出荷対象外
 //   mcfExcluded    : [{ orderNumber, memo, productName }]  … 'CONSUMER-' を含む＝MCF出荷分（対象外）
 //   needsCheck     : [{ orderNumber, memo, productName }]  … メモあり（CONSUMER-以外）＝要確認（対象には含める）
 //   unknownMethods : [{ orderNumber, method, productName }] … 未知の配送方法（警告のみ・除外しない）
-// クラスタキーは 'SKU管理番号'（空なら '商品管理番号' にフォールバック）。
+// sku は 'SKU管理番号'（空なら '商品管理番号' にフォールバック）。画像参照キーを兼ねる。
+// クラスタキーは sku 単独ではなく sku＋itemMgmtNo の複合（buildRakutenPickingData 参照）。
 function parseRakutenCsv(csvText) {
   // クオート内改行対応：単純な split('\n') ではなくレコード単位で分割する
   const lines = splitCsvRecords(csvText).filter(l => l.trim());
@@ -2603,6 +2612,9 @@ function parseRakutenCsv(csvText) {
     if (destId) groups.get(orderNumber).destIds.add(destId);
     groups.get(orderNumber).lines.push({
       name: productName, quantity: qty, sku: skuKey,
+      // 商品管理番号。SKU管理番号が別商品に再利用されている場合の切り分けに使う
+      // （buildRakutenPickingData の複合クラスタキー）。画像参照は sku 側のまま。
+      itemMgmtNo: gc(row, '商品管理番号'),
       skuInfo: gc(row, 'SKU情報')   // バリエーション内容（例 'サイズ:150g x1個'）。空なら非表示
     });
   }
@@ -2718,21 +2730,48 @@ function buildRakutenPickingData(groups, today) {
     if (cls.category === 'scheduled') { scheduled.push(g); continue; }
     pickGroups.push({ g, delayed: cls.category === 'delayed', isLastChance: cls.isLastChance });
   }
+  // クラスタキーは SKU管理番号 単独ではなく「SKU管理番号＋商品管理番号」の複合キー。
+  // RMSでは1つのSKU管理番号が別商品に再利用されることがあり（実データで確認済み）、
+  // SKU単独で束ねると別商品が1行に潰れ、商品名が片方しか出ないまま数量だけ合算されて
+  // 誤ピックになる。商品管理番号まで含めれば商品単位で必ず分かれる。
+  // 区切りに U+001F を使うのは、SKU管理番号・商品管理番号のどちらにも現れない制御文字で
+  // 連結の曖昧さが起きないため。
+  // sku フィールドは画像参照（sku-images.json）のキーなので元の値のまま残すこと。
+  const lineKey = l => (l.sku || '') + '\u001f' + (l.itemMgmtNo || '');
   const clusters = new Map();
   for (const { g } of pickGroups) {
     const seen = new Set();
     for (const l of g.lines) {
-      if (!clusters.has(l.sku)) clusters.set(l.sku, { sku: l.sku, name: l.name, skuInfo: l.skuInfo || '', totalQty: 0, orderCount: 0 });
-      const c = clusters.get(l.sku);
+      const key = lineKey(l);
+      if (!clusters.has(key)) clusters.set(key, { clusterKey: key, sku: l.sku, itemMgmtNo: l.itemMgmtNo || '',
+                                                  name: l.name, skuInfo: l.skuInfo || '', totalQty: 0, orderCount: 0 });
+      const c = clusters.get(key);
       c.totalQty += l.quantity;
       if (!c.skuInfo && l.skuInfo) c.skuInfo = l.skuInfo;   // 同一SKUのバリエーション情報を補完
-      if (!seen.has(l.sku)) { c.orderCount += 1; seen.add(l.sku); }
+      if (!seen.has(key)) { c.orderCount += 1; seen.add(key); }
     }
   }
+  // 並び順は従来どおり「件数降順 → SKU管理番号」。複合キー化で同一SKUの行が複数になりうるため、
+  // 商品管理番号を最終タイブレークに足す。SKU管理番号が1:1の正常データでは第3項に到達せず、
+  // 従来と完全に同じ順序＝同じR番号になる（複合キーそのものでソートしないのはこのため）。
   const total = Array.from(clusters.values()).sort((a, b) =>
-    (b.orderCount - a.orderCount) || String(a.sku).localeCompare(String(b.sku)));
+    (b.orderCount - a.orderCount)
+    || String(a.sku).localeCompare(String(b.sku))
+    || String(a.itemMgmtNo).localeCompare(String(b.itemMgmtNo)));
   const numMap = new Map();
-  total.forEach((c, i) => { c.num = 'R-' + String(i + 1).padStart(3, '0'); numMap.set(c.sku, c.num); });
+  total.forEach((c, i) => { c.num = 'R-' + String(i + 1).padStart(3, '0'); numMap.set(c.clusterKey, c.num); });
+
+  // 同一SKU管理番号に複数の商品管理番号がぶら下がっている＝RMS側のSKU重複。
+  // 該当クラスタ全部に警告フラグを立て、商品別合計で赤バッジを出す（renderCombinedPickingHTML）。
+  // clusterKey が sku＋商品管理番号である以上、同じ sku で2クラスタ以上＝商品管理番号が異なる。
+  const bySku = new Map();
+  for (const c of total) {
+    if (!bySku.has(c.sku)) bySku.set(c.sku, []);
+    bySku.get(c.sku).push(c);
+  }
+  for (const cs of bySku.values()) {
+    if (cs.length > 1) for (const c of cs) c.dupWarning = true;
+  }
 
   // ピッキング順：Amazon側 sortOrderRecords と同じ方針に揃える。
   //   1) 単一商品注文 → 複数商品注文（複数は末尾へ）
@@ -2744,7 +2783,9 @@ function buildRakutenPickingData(groups, today) {
   const rIsMulti = g => g.lines.length > 1;
   const rQty     = g => g.lines.reduce((a, l) => a + (l.quantity || 0), 0);
   const rSku     = g => (g.lines[0] ? g.lines[0].sku : '');
-  const rCluster = g => { const c = clusters.get(rSku(g)); return c ? c.orderCount : 0; };
+  // clusters が複合キー化されたため、参照も複合キーで引く（rSku 単独では引けず全件0件になる）。
+  // 並べ替えのタイブレークに使う rSku 自体は SKU管理番号のまま＝正常データでの順序は不変。
+  const rCluster = g => { const c = g.lines[0] ? clusters.get(lineKey(g.lines[0])) : null; return c ? c.orderCount : 0; };
   pickGroups.sort((a, b) => {
     const ga = a.g, gb = b.g;
     const ma = rIsMulti(ga), mb = rIsMulti(gb);
@@ -2766,7 +2807,7 @@ function buildRakutenPickingData(groups, today) {
     desiredDeliveryDate: g.desiredDeliveryDate, desiredDeliveryTime: g.desiredDeliveryTime,
     orderType: g.orderType,
     delayed, isLastChance,
-    lines: g.lines.map(l => ({ ...l, num: numMap.get(l.sku) || '' }))
+    lines: g.lines.map(l => ({ ...l, num: numMap.get(lineKey(l)) || '' }))
   }));
   return { total, orders, scheduled };
 }
