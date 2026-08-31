@@ -2503,10 +2503,13 @@ function renderImageRegisterSection(pickingData, container, wrapId) {
 // ============================================================
 const RAKUTEN_COMPACT   = '宅急便コンパクト';
 const RAKUTEN_TAKKYUBIN = '宅急便';
+// RMS通常購入データCSVの「ステータス」列で出荷対象とみなす唯一の値。
+const RAKUTEN_STATUS_SHIPPABLE = '300';   // 発送待ち
 
 // RMS通常購入データCSV（decodeBuffer済みテキスト）を列名ベースでパースする。
-// 戻り値: { groups, mcfExcluded, needsCheck, unknownMethods }
+// 戻り値: { groups, statusExcluded, mcfExcluded, needsCheck, unknownMethods }
 //   groups         : [{ orderNumber, shipMethodRaw, shipType, lines:[{name, quantity, sku}] }]
+//   statusExcluded : [{ orderNumber, status, productName }] … 'ステータス' が '300'（発送待ち）以外＝出荷対象外
 //   mcfExcluded    : [{ orderNumber, memo, productName }]  … 'CONSUMER-' を含む＝MCF出荷分（対象外）
 //   needsCheck     : [{ orderNumber, memo, productName }]  … メモあり（CONSUMER-以外）＝要確認（対象には含める）
 //   unknownMethods : [{ orderNumber, method, productName }] … 未知の配送方法（警告のみ・除外しない）
@@ -2523,9 +2526,14 @@ function parseRakutenCsv(csvText) {
   if (colIdx['注文番号'] == null) {
     throw new Error('このファイルは楽天市場RMSの「通常購入データ」CSVではありません。\n（「注文番号」列が見つかりません）');
   }
+  // 'ステータス' 列が無いと gc() が '' を返して全件が出荷対象外になり、「0件」という
+  // 無言の誤りになる。黙って0件にするより、エラーで止めて取り直してもらう方が安全。
+  if (colIdx['ステータス'] == null) {
+    throw new Error('このCSVに「ステータス」列がありません。\nRMSのデータダウンロードで出力テンプレート「全カラムダウンロード用」を選んで取得してください。');
+  }
 
   const groups = new Map();
-  const mcfExcluded = [], needsCheck = [], unknownMethods = [];
+  const statusExcluded = [], mcfExcluded = [], needsCheck = [], unknownMethods = [];
 
   for (let i = 1; i < lines.length; i++) {
     const row = parseCsvLine(lines[i]);
@@ -2533,6 +2541,19 @@ function parseRakutenCsv(csvText) {
     if (!orderNumber) continue;
     const productName = gc(row, '商品名');
     const memo = gc(row, 'ひとことメモ');
+
+    // RMS注文ステータス。'300'（発送待ち）以外は出荷対象にしない。
+    // ホワイトリストにしているのは、未知コードを通すと今回と同じ
+    // 「黙って間違う」が再発するため（2026-08-31：'900'＝キャンセル確定の
+    // 3注文がピッキングリストに載り、出荷寸前だった）。
+    // 実測値：600/500/900/300。裏取り済みは 900＝キャンセル・300＝発送待ちのみ。
+    // MCF判定より前に置く：キャンセル済みのMCF注文がMCF除外の件数に混ざると
+    // 目視照合が狂うため、ステータス除外を先に確定させる。
+    const status = gc(row, 'ステータス');
+    if (status !== RAKUTEN_STATUS_SHIPPABLE) {
+      statusExcluded.push({ orderNumber, status, productName });
+      continue;
+    }
 
     // 1) ひとことメモ判定：'CONSUMER-' を含む＝MCF（Amazonマルチチャネル）出荷 → 対象外
     if (memo.includes('CONSUMER-')) {
@@ -2585,7 +2606,7 @@ function parseRakutenCsv(csvText) {
       skuInfo: gc(row, 'SKU情報')   // バリエーション内容（例 'サイズ:150g x1個'）。空なら非表示
     });
   }
-  return { groups: Array.from(groups.values()), mcfExcluded, needsCheck, unknownMethods };
+  return { groups: Array.from(groups.values()), statusExcluded, mcfExcluded, needsCheck, unknownMethods };
 }
 
 // 出荷対象判定：お届け日指定（desiredDeliveryDate）と本日（today）から注文を区分する。
@@ -3073,6 +3094,10 @@ function renderRakutenResults(parsed) {
     `⏰ 本日中に出荷が必要（お届け日 = 本日+3日 ＝ 最終出荷日): ${lastChanceOrders.length}件`,
     ['注文番号', 'お届け日', '商品名'],
     lastChanceOrders.map(o => [o.orderNumber, o.desiredDeliveryDate || '', firstName(o)]), 'orange');
+  renderRakutenWarningSection(rResults, 'r-warn-status',
+    `⚠ 出荷対象外のステータスのため除外: ${parsed.statusExcluded.length}件`,
+    ['注文番号', 'ステータス', '商品名'],
+    parsed.statusExcluded.map(x => [x.orderNumber, x.status, x.productName]), 'error');
   renderRakutenWarningSection(rResults, 'r-warn-mcf',
     `⚠ MCF出荷分（CONSUMER-）のため除外: ${parsed.mcfExcluded.length}件`,
     ['注文番号', 'ひとことメモ', '商品名'],
