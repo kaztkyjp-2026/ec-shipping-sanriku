@@ -1296,7 +1296,7 @@ function renderCombinedPickingHTML(amazon, rakuten) {
 
       <table class="sum-table sum-mall">
         <caption>モール別内訳</caption>
-        <thead><tr><th>モール</th><th class="n">注文数</th></tr></thead>
+        <thead><tr><th>モール</th><th class="n">出荷数<br>（注文数）</th></tr></thead>
         <tbody>
           ${mallRows.join('\n          ')}
           <tr class="grand"><th>合計</th><td class="n">${ship.total}</td></tr>
@@ -1408,6 +1408,10 @@ function renderCombinedPickingHTML(amazon, rakuten) {
                     font-variant-numeric:tabular-nums; }
   .sum-table tr.grand th, .sum-table tr.grand td { background:#f2f2f2; font-weight:bold;
                     -webkit-print-color-adjust:exact; print-color-adjust:exact; }
+  /* 数値列のヘッダは <br> の位置だけで折る。nowrap が無いと「（注文数）」が
+     「（注文」「数）」に割れて3行になるため。あわせて左右パディングを詰め、
+     26mm 幅のまま2行に収める（表幅・2表を並べた行幅は不変。字は小さくしない）。 */
+  .sum-table th.n { white-space:nowrap; padding-left:1.5mm; padding-right:1.5mm; }
   .sum-yamato { width:110mm; }
   .sum-mall   { width:72mm; }
   .ship-note { font-size:9.5pt; color:#555; margin:0 0 6mm; }
