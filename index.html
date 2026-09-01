@@ -1128,10 +1128,33 @@ function renderCombinedPickingHTML(amazon, rakuten) {
   const dateStr = (document.getElementById('s1-shipDate') || {}).value || '';
   const dateNum = dateStr.replace(/-/g, '');   // YYYY-MM-DD → YYYYMMDD
   const suf = dateNum ? '_' + dateNum : '';
+  // 帳票見出し用の日付表記（表示専用）。ファイル名（b2cloud_… / printHtmlDocument の
+  // 印刷タイトル）は従来どおり YYYYMMDD 系を使うため、suf とは別に組み立てる。
+  // ゼロ埋めはしない（現場の読みやすさ優先：08月31日ではなく8月31日）。
+  const sufDisp = (() => {
+    const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(dateStr);
+    return m ? `　${Number(m[1])}年${Number(m[2])}月${Number(m[3])}日` : '';
+  })();
 
   // マケプレ配送（ネコポス以外）の印。商品別合計・梱包発送明細の2帳票で同一のHTML／CSSを使い、
   // 現場が同じものだと即座に分かるようにする（文言・体裁を分岐させないこと）。
   const MP_BADGE = `<span class="mp-badge">⚠ 送り状は別発行（マケプレ配送）</span>`;
+
+  // 商品別合計の列幅。colgroup で明示指定し、商品名の幅を確保する。
+  // 画像12% ／ G番号11% ／ ピッキング合計13% ／ 出荷数（注文数）13% ／ 商品名 残り51%。
+  // Amazon・楽天の2表で必ず同一の列幅にする（現場が同じ表として読めるようにするため）。
+  const TOTAL_COLGROUP = `<colgroup><col class="c-thumb"><col class="c-num"><col class="c-qty"><col class="c-cnt"><col class="c-name"></colgroup>`;
+
+  // 商品別合計のヘッダ。「ピッキング合計」「出荷数（注文数）」は2行に折り返す
+  // （<br> で明示。line-height:1.25 で高さを抑える。文字は小さくしない）。
+  const totalHead = nameLabel =>
+    `<thead><tr><th class="thumb-cell">画像</th><th class="num">G番号</th><th class="qty">ピッキング<br>合計</th><th class="cnt">出荷数<br>（注文数）</th><th class="name">${nameLabel}</th></tr></thead>`;
+
+  // ピッキング合計 ≠ 出荷数（注文数）の行は、ピッキング合計セルのみ黒地・白抜きにする。
+  // 判定は表示側の単純比較だけで行い、集計データ（total / orders）は一切変更しない。
+  // 集約行（複数商品注文）は数量が「—」なので、そもそもこのヘルパーを通さない＝対象外。
+  const qtyCellCls = (totalQty, orderCount) =>
+    (totalQty !== orderCount) ? 'qty qty-mismatch' : 'qty';
 
   const aOrders = amazon ? (amazon.single || []).length : 0;
   const rOrders = rakuten ? (rakuten.orders || []).length : 0;
@@ -1150,15 +1173,16 @@ function renderCombinedPickingHTML(amazon, rakuten) {
       const skuTag = (t.sku && t.sku !== t.name) ? ` <span class="sku">(${esc(t.sku)})</span>` : '';
       // バッジは商品名セル内・SKU表記の直後に置く。行末（注文数の後ろ）だと商品名が長いときに
       // 折り返しでバッジが商品から離れ、どの商品の話か分からなくなるため。
-      return `<tr><td class="thumb-cell">${thumbInner(t.sku)}</td><td class="num">${esc(t.num)}</td><td class="qty">${esc(t.totalQty)}</td><td class="name">${esc(t.name)}${skuTag}${t.nonNekopos ? MP_BADGE : ''}</td><td class="cnt">${esc(t.orderCount)}</td></tr>`;
+      return `<tr><td class="thumb-cell">${thumbInner(t.sku)}</td><td class="num">${esc(t.num)}</td><td class="${qtyCellCls(t.totalQty, t.orderCount)}">${esc(t.totalQty)}</td><td class="cnt">${esc(t.orderCount)}</td><td class="name">${esc(t.name)}${skuTag}${t.nonNekopos ? MP_BADGE : ''}</td></tr>`;
     }).join('');
     const multiRow = (amazon.multiCount || 0) > 0
-      ? `<tr><td class="thumb-cell"></td><td class="num">—</td><td class="qty">—</td><td class="name">（複数商品注文：梱包・発送明細を参照）</td><td class="cnt">${amazon.multiCount}</td></tr>`
+      ? `<tr><td class="thumb-cell"></td><td class="num">—</td><td class="qty">—</td><td class="cnt">${amazon.multiCount}</td><td class="name">（複数商品注文：梱包・発送明細を参照）</td></tr>`
       : '';
     return `
-  ${band(`${mallLabel('Amazon', amazon.storeNames)}　商品別合計`)}
+  ${band(`${mallLabel('Amazon', amazon.storeNames)}　商品別合計（Amazon）`)}
   <table class="total">
-    <thead><tr><th class="thumb-cell">画像</th><th class="num">G番号</th><th class="qty">合計数量</th><th class="name">商品名（SKU）</th><th class="cnt">注文数</th></tr></thead>
+    ${TOTAL_COLGROUP}
+    ${totalHead('商品名（SKU）')}
     <tbody>${rows}${multiRow}</tbody>
   </table>
   ${mallEnd('Amazon', aOrders)}`;
@@ -1201,11 +1225,12 @@ function renderCombinedPickingHTML(amazon, rakuten) {
   // 同じSKUの行が複数並ぶため、どちらを取るかを倉庫側が現物で判断する必要がある。
   const RAKUTEN_DUP_BADGE = `<span class="mp-badge">⚠ SKU重複あり</span>`;
   const rakutenTotalSection = !rakuten ? '' : `
-  ${band(`${mallLabel('楽天市場', rakuten.storeName)}　商品別合計`)}
+  ${band(`${mallLabel('楽天市場', rakuten.storeName)}　商品別合計（楽天市場）`)}
   <table class="total">
-    <thead><tr><th class="thumb-cell">画像</th><th class="num">G番号</th><th class="qty">合計数量</th><th class="name">商品名（SKU管理番号）</th><th class="cnt">注文数</th></tr></thead>
+    ${TOTAL_COLGROUP}
+    ${totalHead('商品名（SKU管理番号）')}
     <tbody>${(rakuten.total || []).map(t =>
-      `<tr><td class="thumb-cell">${thumbInner(t.sku)}</td><td class="num">${esc(t.num)}</td><td class="qty">${esc(t.totalQty)}</td><td class="name">${rakutenNameCell(t.name, t.skuInfo, t.sku)}${t.dupWarning ? RAKUTEN_DUP_BADGE : ''}${rakutenShipBadges(t.clusterKey)}</td><td class="cnt">${esc(t.orderCount)}</td></tr>`
+      `<tr><td class="thumb-cell">${thumbInner(t.sku)}</td><td class="num">${esc(t.num)}</td><td class="${qtyCellCls(t.totalQty, t.orderCount)}">${esc(t.totalQty)}</td><td class="cnt">${esc(t.orderCount)}</td><td class="name">${rakutenNameCell(t.name, t.skuInfo, t.sku)}${t.dupWarning ? RAKUTEN_DUP_BADGE : ''}${rakutenShipBadges(t.clusterKey)}</td></tr>`
     ).join('')}</tbody>
   </table>
   ${mallEnd('楽天市場', rOrders)}`;
@@ -1317,7 +1342,8 @@ function renderCombinedPickingHTML(amazon, rakuten) {
   /* 表が改ページを跨いだとき、2ページ目以降にもヘッダ行を繰り返す */
   thead { display: table-header-group; }
 
-  td.qty, th.qty, td.cnt, th.cnt { text-align:right; white-space:nowrap; }
+  /* 数字は2桁までのため中央寄せの方が読みやすい（右寄せから変更） */
+  td.qty, th.qty, td.cnt, th.cnt { text-align:center; white-space:nowrap; }
   td.qty, th.qty { width:22mm; font-weight:bold; }
   td.cnt, th.cnt { width:18mm; }
   td.num, th.num { width:14mm; text-align:center; white-space:nowrap; font-variant-numeric:tabular-nums; }
@@ -1331,12 +1357,39 @@ function renderCombinedPickingHTML(amazon, rakuten) {
   .sku { color:#666; font-size:9pt; font-weight:normal; }
   .skuinfo { color:#000; font-size:9.5pt; font-weight:bold; }
 
-  /* 商品別合計：合計数量のみ16pt。2段組みにしない・文字を小さくしない */
+  /* 商品別合計：ピッキング合計のみ16pt。2段組みにしない・文字を小さくしない */
   .total td.qty { font-size:16pt; }
   .total td.num { font-size:10.5pt; }
 
+  /* 列幅は colgroup（TOTAL_COLGROUP）で決める。共通の td/th 側 mm 指定が残っていると
+     自動テーブルレイアウトでそちらが下限として効き、商品名が想定より狭くなるため、
+     商品別合計に限って幅指定を外す。font-size・font-weight には触れない。 */
+  .total th, .total td { width:auto; }
+  .total col.c-thumb { width:12%; }
+  .total col.c-num   { width:11%; }
+  .total col.c-qty   { width:13%; }
+  .total col.c-cnt   { width:13%; }
+  .total col.c-name  { width:51%; }
+  /* ヘッダは <br> で2行に折る。行間を詰めてヘッダ行の高さ増加を抑える（字は小さくしない） */
+  .total th { line-height:1.25; }
+
+  /* 数量不一致（ピッキング合計 ≠ 出荷数（注文数））の印。ピッキング合計セルのみ黒地・白抜き。
+     濃度は .mall-band と同じ #333 に揃える（純黒 #000 は使わない）。
+     白黒レーザーで確実に出るよう print-color-adjust:exact を付ける（.mall-band と同手法）。
+     文字サイズは .total td.qty の 16pt のまま変更しない。 */
+  .qty-mismatch { background:#333; color:#fff;
+                  -webkit-print-color-adjust:exact; print-color-adjust:exact; }
+
   .staff-field { font-size:11pt; margin:0 0 5mm; }
   .staff-line  { display:inline-block; width:70mm; border-bottom:1px solid #333; vertical-align:bottom; }
+
+  /* タイトル行：左＝h1／右＝担当者記入欄（ピッキングリスト）・合計注文数（梱包・発送明細）。
+     ベースラインを揃えるため flex-end。h1 と同じ行に置くことで縦を1行ぶん節約する。 */
+  .head-row { display:flex; align-items:flex-end; justify-content:space-between; gap:6mm; }
+  .head-row h1 { margin:0; }
+  .head-row .staff-field, .head-row .summary { margin:0; white-space:nowrap; }
+  /* 同じ行に収めるぶん下線は短くする（記入幅としては十分。字は小さくしない） */
+  .head-row .staff-line { width:50mm; }
 
   /* 冒頭の2表を横並びにする。左＝ヤマト集荷依頼の申告数（3区分）／右＝モール別内訳 */
   .summary-row { display:flex; gap:8mm; align-items:flex-start; margin:0 0 3mm; }
@@ -1391,7 +1444,8 @@ function renderCombinedPickingHTML(amazon, rakuten) {
                      break-before:page; page-break-before:always; }
 
   /* 明細のみ2段組み。フォントサイズは10.5ptのまま不変 */
-  .detail-cols { column-count:2; column-gap:8mm; }
+  /* 段間の縦罫線。表の罫線（1px solid #333）と同じ太さだと表の一部に見えるため 1.5pt にする。 */
+  .detail-cols { column-count:2; column-gap:8mm; column-rule:1.5pt solid #333; }
   .order { margin-bottom:6mm; page-break-inside:avoid; break-inside:avoid; }
   .detail-cols td.thumb-cell, .detail-cols th.thumb-cell { width:22mm; }
   .detail-cols td.num,  .detail-cols th.num  { width:14mm; }
@@ -1402,10 +1456,11 @@ function renderCombinedPickingHTML(amazon, rakuten) {
 
   <div class="pg-unit" data-ph="${PAGE_BODY_MM.portrait}">
     <div class="sheet-head">
-      <h1>📦 ピッキングリスト${suf}</h1>
+      <div class="head-row">
+        <h1>📦 ピッキングリスト${sufDisp}</h1>
+        <div class="staff-field">担当者：<span class="staff-line"></span></div>
+      </div>
     </div>
-
-    <div class="staff-field">担当者：<span class="staff-line"></span></div>
 ${totalUnits[0] || ''}${tailIdx <= 0 ? summaryBlock : ''}
   </div>
 ${totalUnits.slice(1).map((s, i) => `  <div class="pg-unit" data-ph="${PAGE_BODY_MM.portrait}">${s}${i + 1 === tailIdx ? summaryBlock : ''}
@@ -1415,8 +1470,10 @@ ${totalUnits.slice(1).map((s, i) => `  <div class="pg-unit" data-ph="${PAGE_BODY
 <section class="sheet-landscape">
   <div class="pg-unit" data-ph="${PAGE_BODY_MM.landscape}">
     <div class="sheet-head detail">
-      <h1>📋 梱包・発送明細${suf}</h1>
-      <p class="summary" style="margin:0">${detailSummary}</p>
+      <div class="head-row">
+        <h1>📋 梱包・発送明細${sufDisp}</h1>
+        <p class="summary">${detailSummary}</p>
+      </div>
     </div>
 ${amazonDetailSection}${rakutenDetailSection}
   </div>
