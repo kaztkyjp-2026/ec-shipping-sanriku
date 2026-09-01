@@ -1179,7 +1179,7 @@ function renderCombinedPickingHTML(amazon, rakuten) {
       ? `<tr><td class="thumb-cell"></td><td class="num">—</td><td class="qty">—</td><td class="cnt">${amazon.multiCount}</td><td class="name">（複数商品注文：梱包・発送明細を参照）</td></tr>`
       : '';
     return `
-  ${band(`${mallLabel('Amazon', amazon.storeNames)}　商品別合計（Amazon）`)}
+  ${band('商品別集計（Amazon）')}
   <table class="total">
     ${TOTAL_COLGROUP}
     ${totalHead('商品名（SKU）')}
@@ -1225,7 +1225,7 @@ function renderCombinedPickingHTML(amazon, rakuten) {
   // 同じSKUの行が複数並ぶため、どちらを取るかを倉庫側が現物で判断する必要がある。
   const RAKUTEN_DUP_BADGE = `<span class="mp-badge">⚠ SKU重複あり</span>`;
   const rakutenTotalSection = !rakuten ? '' : `
-  ${band(`${mallLabel('楽天市場', rakuten.storeName)}　商品別合計（楽天市場）`)}
+  ${band('商品別集計（楽天市場）')}
   <table class="total">
     ${TOTAL_COLGROUP}
     ${totalHead('商品名（SKU管理番号）')}
@@ -1372,6 +1372,13 @@ function renderCombinedPickingHTML(amazon, rakuten) {
   .total col.c-name  { width:51%; }
   /* ヘッダは <br> で2行に折る。行間を詰めてヘッダ行の高さ増加を抑える（字は小さくしない） */
   .total th { line-height:1.25; }
+  /* 数量2列の左右パディングを詰める。ヘッダ2行の最長行（「ピッキング」「（注文数）」＝
+     全角5文字＝約18.5mm）＋左右3mm では colgroup の 13%（23.4mm）を超えてしまい、
+     内容の最小幅が優先されて商品名が圧迫されるため。1.5mm なら 13% に収まる。
+     対象は商品別合計の qty / cnt セルのみ（明細側テーブル・他の列には影響させない）。
+     font-size は変更しない。 */
+  .total th.qty, .total td.qty,
+  .total th.cnt, .total td.cnt { padding-left:1.5mm; padding-right:1.5mm; }
 
   /* 数量不一致（ピッキング合計 ≠ 出荷数（注文数））の印。ピッキング合計セルのみ黒地・白抜き。
      濃度は .mall-band と同じ #333 に揃える（純黒 #000 は使わない）。
