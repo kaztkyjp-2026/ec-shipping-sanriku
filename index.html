@@ -1085,11 +1085,6 @@ function thumbInner(sku) {
 // G番号は Amazon=A-NNN／楽天市場=R-NNN で名前空間を分ける（採番ロジックは各モール側のまま）。
 // ============================================================
 
-// 1ページあたりの本文高さ(mm)。@page の margin 15mm を引いた実効サイズで、
-// ページ番号の焼き込み（stampPageNumbers）が所要ページ数を数えるのに使う。
-//   縦: A4 297mm − 15mm×2 = 267mm ／ 横: A4 210mm − 15mm×2 = 180mm
-const PAGE_BODY_MM = { portrait: 267, landscape: 180 };
-
 // 楽天市場の店舗コード。梱包・発送明細と商品別合計の黒帯に出す表示名で、
 // 送り状に印字される依頼主名（loadRakutenSender().name）とは別物。
 // KPL／MMD は店舗コードでありモールに従属しないため、Amazon側の店舗名表示と体裁を揃える。
@@ -1120,7 +1115,7 @@ function buildShipMethodSummary(amazon, rakuten) {
 
 // 統合ピッキング帳票の印刷用HTML。
 //   amazon  … { total, single, multiCount, storeNames } ／ 未読込なら null
-//   rakuten … { total, orders, storeName }              ／ 未読込なら null
+//   rakuten … { total, orders, multiCount, storeName }  ／ 未読込なら null
 // 片方が null のときは、そのモールのセクションを丸ごと出力しない。
 function renderCombinedPickingHTML(amazon, rakuten) {
   const esc = s => String(s == null ? '' : s)
@@ -1156,6 +1151,14 @@ function renderCombinedPickingHTML(amazon, rakuten) {
   const qtyCellCls = (totalQty, orderCount) =>
     (totalQty !== orderCount) ? 'qty qty-mismatch' : 'qty';
 
+  // 複数商品注文の集約行。Amazon・楽天市場で同じ列順・同じ文言・同じ体裁にする
+  // （現場が同じ意味の行だと即座に分かるようにするため、モールで分岐させないこと）。
+  // 画像欄には「複」を1文字だけ大きく出す（.multi-mark）。数量は「—」のため
+  // qtyCellCls（黒地反転＝数量不一致の印）は通さない。配送方法・SKU重複バッジも出さない。
+  const multiTotalRow = count => ((count || 0) > 0
+    ? `<tr><td class="thumb-cell"><span class="multi-mark">複</span></td><td class="num">—</td><td class="qty">—</td><td class="cnt">${count}</td><td class="name">（複数商品注文：梱包・発送明細を参照）</td></tr>`
+    : '');
+
   const aOrders = amazon ? (amazon.single || []).length : 0;
   const rOrders = rakuten ? (rakuten.orders || []).length : 0;
 
@@ -1175,9 +1178,7 @@ function renderCombinedPickingHTML(amazon, rakuten) {
       // 折り返しでバッジが商品から離れ、どの商品の話か分からなくなるため。
       return `<tr><td class="thumb-cell">${thumbInner(t.sku)}</td><td class="num">${esc(t.num)}</td><td class="${qtyCellCls(t.totalQty, t.orderCount)}">${esc(t.totalQty)}</td><td class="cnt">${esc(t.orderCount)}</td><td class="name">${esc(t.name)}${skuTag}${t.nonNekopos ? MP_BADGE : ''}</td></tr>`;
     }).join('');
-    const multiRow = (amazon.multiCount || 0) > 0
-      ? `<tr><td class="thumb-cell"></td><td class="num">—</td><td class="qty">—</td><td class="cnt">${amazon.multiCount}</td><td class="name">（複数商品注文：梱包・発送明細を参照）</td></tr>`
-      : '';
+    const multiRow = multiTotalRow(amazon.multiCount);
     return `
   ${band('商品別集計（Amazon）')}
   <table class="total">
@@ -1188,7 +1189,8 @@ function renderCombinedPickingHTML(amazon, rakuten) {
   ${mallEnd('Amazon', aOrders)}`;
   })();
 
-  // 楽天市場は複数商品注文の明細も商品クラスタに算入する（buildRakutenPickingData の従来仕様）。
+  // 楽天市場も複数商品注文は商品クラスタに算入せず、末尾の集約行1行にまとめる
+  // （buildRakutenPickingData。Amazon と同じ規則）。
   // SKU情報（バリエーション）は取り違え防止に要るため商品名の後ろに残す。
   const rakutenNameCell = (name, skuInfo, sku) => {
     const info = skuInfo ? ` <span class="skuinfo">${esc(skuInfo)}</span>` : '';
@@ -1231,7 +1233,7 @@ function renderCombinedPickingHTML(amazon, rakuten) {
     ${totalHead('商品名（SKU管理番号）')}
     <tbody>${(rakuten.total || []).map(t =>
       `<tr><td class="thumb-cell">${thumbInner(t.sku)}</td><td class="num">${esc(t.num)}</td><td class="${qtyCellCls(t.totalQty, t.orderCount)}">${esc(t.totalQty)}</td><td class="cnt">${esc(t.orderCount)}</td><td class="name">${rakutenNameCell(t.name, t.skuInfo, t.sku)}${t.dupWarning ? RAKUTEN_DUP_BADGE : ''}${rakutenShipBadges(t.clusterKey)}</td></tr>`
-    ).join('')}</tbody>
+    ).join('')}${multiTotalRow(rakuten.multiCount)}</tbody>
   </table>
   ${mallEnd('楽天市場', rOrders)}`;
 
@@ -1319,8 +1321,21 @@ function renderCombinedPickingHTML(amazon, rakuten) {
 <title>ピッキングリスト${suf}</title>
 <style>
   /* 名前付きページ：商品別合計＝A4縦 ／ 梱包・発送明細＝A4横 */
-  @page portraitPage  { size: A4 portrait;  margin: 15mm; }
-  @page landscapePage { size: A4 landscape; margin: 15mm; }
+  /* ページ番号は @page の余白ボックス（@bottom-right）に置き、ブラウザの実際の改頁で
+     採番させる（counter(page) / counter(pages)）。JS側で高さから所要ページ数を推定すると
+     2段組みの改頁で捨てられる余白を数えられず、実ページより少なくなる
+     （2026-09-21 本番：実物9ページに対しバッジ 1/8〜8/8・9ページ目は番号なし）。
+     字の大きさ・太さは従来の焼き込みバッジ（15pt bold）と同じにする＝小さくしない。 */
+  @page portraitPage  { size: A4 portrait;  margin: 15mm;
+    @bottom-right { content: counter(page) " / " counter(pages);
+                    font-family: "Hiragino Kaku Gothic ProN","Hiragino Sans","Meiryo",sans-serif;
+                    font-size: 15pt; font-weight: bold; font-variant-numeric: tabular-nums;
+                    letter-spacing: .02em; color: #000; } }
+  @page landscapePage { size: A4 landscape; margin: 15mm;
+    @bottom-right { content: counter(page) " / " counter(pages);
+                    font-family: "Hiragino Kaku Gothic ProN","Hiragino Sans","Meiryo",sans-serif;
+                    font-size: 15pt; font-weight: bold; font-variant-numeric: tabular-nums;
+                    letter-spacing: .02em; color: #000; } }
 
   * { box-sizing: border-box; }
   html, body { margin: 0; padding: 0; }
@@ -1379,6 +1394,11 @@ function renderCombinedPickingHTML(amazon, rakuten) {
      font-size は変更しない。 */
   .total th.qty, .total td.qty,
   .total th.cnt, .total td.cnt { padding-left:1.5mm; padding-right:1.5mm; }
+
+  /* 集約行（複数商品注文）の画像欄に出す「複」。画像の代わりの1文字なので大きく出す。
+     太字・黒文字・白地（黒地反転は .qty-mismatch＝数量不一致の印と紛れるため使わない）。
+     画像列は colgroup の 12%＝縦A4本文180mm×0.12＝21.6mm。30pt≒10.6mm で余裕をもって収まる。 */
+  .multi-mark { font-size:30pt; font-weight:bold; color:#000; line-height:1.1; }
 
   /* 数量不一致（ピッキング合計 ≠ 出荷数（注文数））の印。ピッキング合計セルのみ黒地・白抜き。
      濃度は .mall-band と同じ #333 に揃える（純黒 #000 は使わない）。
@@ -1440,14 +1460,11 @@ function renderCombinedPickingHTML(amazon, rakuten) {
                break-before:avoid; page-break-before:avoid; }
   .mall-end:last-child { margin-bottom:0; }
 
-  /* ---- ページ番号：stampPageNumbers() で焼き込む ---- */
+  /* ---- モール単位の強制改頁 ---- */
   /* .pg-unit は強制改頁で始まる独立ブロック。2つ目以降の頭で必ず改頁する＝
-     商品別合計は「モールの黒帯の前」で必ずページが変わる。 */
-  .pg-unit { position: relative; }
+     商品別合計は「モールの黒帯の前」で必ずページが変わる。
+     ページ番号は @page の余白ボックスが振るため、ここには番号用の指定を持たない。 */
   .pg-unit + .pg-unit { break-before: page; page-break-before: always; }
-  .pg-badge { position:absolute; right:0; width:44mm; text-align:right;
-              font-size:15pt; font-weight:bold; font-variant-numeric:tabular-nums;
-              line-height:1.2; letter-spacing:.02em; color:#000; }
 
   /* 幅を実寸で固定する（ページ番号の mm 計算と画面プレビューを印刷結果に合わせるため） */
   .sheet-portrait  { page: portraitPage; width:180mm; }
@@ -1465,7 +1482,7 @@ function renderCombinedPickingHTML(amazon, rakuten) {
 
 <section class="sheet-portrait">
 
-  <div class="pg-unit" data-ph="${PAGE_BODY_MM.portrait}">
+  <div class="pg-unit">
     <div class="sheet-head">
       <div class="head-row">
         <h1>📦 ピッキングリスト${sufDisp}</h1>
@@ -1474,12 +1491,12 @@ function renderCombinedPickingHTML(amazon, rakuten) {
     </div>
 ${totalUnits[0] || ''}${tailIdx <= 0 ? summaryBlock : ''}
   </div>
-${totalUnits.slice(1).map((s, i) => `  <div class="pg-unit" data-ph="${PAGE_BODY_MM.portrait}">${s}${i + 1 === tailIdx ? summaryBlock : ''}
+${totalUnits.slice(1).map((s, i) => `  <div class="pg-unit">${s}${i + 1 === tailIdx ? summaryBlock : ''}
   </div>`).join('\n')}
 </section>
 
 <section class="sheet-landscape">
-  <div class="pg-unit" data-ph="${PAGE_BODY_MM.landscape}">
+  <div class="pg-unit">
     <div class="sheet-head detail">
       <div class="head-row">
         <h1>📋 梱包・発送明細${sufDisp}</h1>
@@ -1490,62 +1507,6 @@ ${amazonDetailSection}${rakutenDetailSection}
   </div>
 </section>
 
-<script>
-// ページ番号の焼き込み。
-// 各 .pg-unit は強制改頁で始まる独立ブロック。data-ph はそのユニットの
-// 1ページあたり本文高さ(mm)。ユニット高さ÷本文高さ で所要ページ数を求め、
-// 各ページの右下に「n / N」を絶対配置する。
-// mm→px 換算は 96dpi 前提（印刷でも mm は同じ物理長に写像される）。
-// ※ 呼び出しは印刷実行の直前（printHtmlDocument 内）。レイアウト確定前に走らせると
-//   ユニット高さが確定せずページ数を誤るため、ここでは定義だけして自動実行しない。
-window.stampPageNumbers = function stampPageNumbers() {
-  const MM = document.createElement('div');
-  MM.style.cssText = 'position:absolute;visibility:hidden;height:100mm';
-  document.body.appendChild(MM);
-  const pxPerMm = MM.getBoundingClientRect().height / 100;
-  MM.remove();
-
-  // 許容値 0.001（＝縦0.27mm／横0.18mm）。ちょうど1ページ分の高さが丸め誤差で
-  // 1.0000… になって2ページと数えられるのを防ぐためだけの値。
-  // モック v4 の 0.02 は1ページの2%（縦5.3mm）にあたり、ページ境界をわずかに
-  // 超えたユニットを1ページ少なく数えて以降の番号を全部ずらすため採らない。
-  const PAGE_EPS = 0.001;
-  const units = Array.from(document.querySelectorAll('.pg-unit'));
-  const counts = units.map(u => {
-    const ph = parseFloat(u.dataset.ph);
-    const hMm = u.getBoundingClientRect().height / pxPerMm;
-    return Math.max(1, Math.ceil(hMm / ph - PAGE_EPS));
-  });
-  const total = counts.reduce((a, b) => a + b, 0);
-
-  // バッジ高さの実測。top指定＝上端基準のため、下端位置を決めるには高さが要る。
-  // CSSの font-size / line-height をJS側に定数で持つと二重管理になるので実測する
-  // （pxPerMm と同じ隠しプローブ方式）。文字列は最大幅ケースを与える。
-  const probe = document.createElement('div');
-  probe.className = 'pg-badge';
-  probe.style.visibility = 'hidden';
-  probe.textContent = total + ' / ' + total;
-  document.body.appendChild(probe);
-  const badgeHMm = probe.getBoundingClientRect().height / pxPerMm;
-  probe.remove();
-
-  let page = 0;
-  units.forEach((u, i) => {
-    const ph = parseFloat(u.dataset.ph);
-    for (let j = 0; j < counts[i]; j++) {
-      page++;
-      const b = document.createElement('div');
-      b.className = 'pg-badge';
-      b.textContent = page + ' / ' + total;
-      // バッジ「下端」をそのページの下端から 6mm 上に置く。
-      // 上端基準で 6mm にすると下端が本文高を 1.94mm 超え、行ボックスごと
-      // 次ページへ押し出されて全番号が1ページずれ、最後に白紙が1枚出る。
-      b.style.top = ((j + 1) * ph - 6 - badgeHMm) + 'mm';
-      u.appendChild(b);
-    }
-  });
-};
-<\/script>
 </body></html>`;
 }
 
@@ -2078,6 +2039,7 @@ s1Convert.addEventListener('click', async () => {
       const rData  = buildRakutenPickingData(rActive, new Date());
       if (rData.orders.length) {
         rakutenPicking = { total: rData.total, orders: rData.orders,
+                           multiCount: rData.multiCount,   // 商品別集計の集約行に出す件数
                            storeName: RAKUTEN_STORE_CODES.join('／') };
       }
       const sender = getRakutenSenderStore();
@@ -2806,16 +2768,40 @@ function buildRakutenPickingData(groups, today) {
   // 連結の曖昧さが起きないため。
   // sku フィールドは画像参照（sku-images.json）のキーなので元の値のまま残すこと。
   const lineKey = l => (l.sku || '') + '\u001f' + (l.itemMgmtNo || '');
-  const clusters = new Map();
+  // 複数商品注文（明細2行以上）は商品クラスタに算入しない（Amazon側 buildPickingItems と同じ規則）。
+  // 算入すると同じ1注文が商品別集計の別々の行に割れ、同一注文だと現場から分からなくなる
+  // （2026-09-21 実データ：433084-20260921-0650105389 が R-003 と R-006 に割れていた）。
+  // 複数商品注文は商品別集計の末尾に「集約行」1行でまとめる（件数＝multiCount）。
+  const rIsMulti = g => g.lines.length > 1;
+  const addLine = (map, l) => {
+    const key = lineKey(l);
+    if (!map.has(key)) map.set(key, { clusterKey: key, sku: l.sku, itemMgmtNo: l.itemMgmtNo || '',
+                                      name: l.name, skuInfo: l.skuInfo || '', totalQty: 0, orderCount: 0 });
+    const c = map.get(key);
+    c.totalQty += l.quantity;
+    if (!c.skuInfo && l.skuInfo) c.skuInfo = l.skuInfo;   // 同一SKUのバリエーション情報を補完
+    return c;
+  };
+  const clusters = new Map();        // 単一商品注文のクラスタ＝商品別集計に行として出る商品
+  const multiClusters = new Map();   // 複数商品注文にしか出ない商品（集計行は出さないが採番は要る）
+  let multiCount = 0;                // 複数商品注文の件数＝集約行の「出荷数（注文数）」
   for (const { g } of pickGroups) {
+    if (rIsMulti(g)) { multiCount++; continue; }
+    const seen = new Set();
+    for (const l of g.lines) {
+      const c = addLine(clusters, l);
+      if (!seen.has(c.clusterKey)) { c.orderCount += 1; seen.add(c.clusterKey); }
+    }
+  }
+  // 複数商品注文にしか出ない商品。商品別集計には出さないが、明細のG番号・B2記事欄・
+  // SKU重複判定・画面の商品一覧（画像URL登録）に必要なのでクラスタとして持つ。
+  for (const { g } of pickGroups) {
+    if (!rIsMulti(g)) continue;
     const seen = new Set();
     for (const l of g.lines) {
       const key = lineKey(l);
-      if (!clusters.has(key)) clusters.set(key, { clusterKey: key, sku: l.sku, itemMgmtNo: l.itemMgmtNo || '',
-                                                  name: l.name, skuInfo: l.skuInfo || '', totalQty: 0, orderCount: 0 });
-      const c = clusters.get(key);
-      c.totalQty += l.quantity;
-      if (!c.skuInfo && l.skuInfo) c.skuInfo = l.skuInfo;   // 同一SKUのバリエーション情報を補完
+      if (clusters.has(key)) continue;   // 単一商品注文にも出る商品はそちらのクラスタが持つ
+      const c = addLine(multiClusters, l);
       if (!seen.has(key)) { c.orderCount += 1; seen.add(key); }
     }
   }
@@ -2832,8 +2818,10 @@ function buildRakutenPickingData(groups, today) {
   // 同一SKU管理番号に複数の商品管理番号がぶら下がっている＝RMS側のSKU重複。
   // 該当クラスタ全部に警告フラグを立て、商品別合計で赤バッジを出す（renderCombinedPickingHTML）。
   // clusterKey が sku＋商品管理番号である以上、同じ sku で2クラスタ以上＝商品管理番号が異なる。
+  // 判定対象は単一・複数の全クラスタ。複数商品注文にしか出ない商品を母集団から外すと、
+  // 「単一側の1行」と「複数側の1行」で重複していても検知できなくなる。
   const bySku = new Map();
-  for (const c of total) {
+  for (const c of [...total, ...multiClusters.values()]) {
     if (!bySku.has(c.sku)) bySku.set(c.sku, []);
     bySku.get(c.sku).push(c);
   }
@@ -2848,11 +2836,13 @@ function buildRakutenPickingData(groups, today) {
   // 楽天は単一店舗のため storeIndex に相当するキーは無い。
   // クラスタ件数は total の採番に使った clusters.orderCount をそのまま参照する
   // （別基準で採番し直さない）。上の total / numMap は算出済みのため R-NNN は不変。
-  const rIsMulti = g => g.lines.length > 1;
+  // rIsMulti はクラスタ集計側で宣言済みのものを共用する（判定基準を1か所に保つ）。
   const rQty     = g => g.lines.reduce((a, l) => a + (l.quantity || 0), 0);
   const rSku     = g => (g.lines[0] ? g.lines[0].sku : '');
   // clusters が複合キー化されたため、参照も複合キーで引く（rSku 単独では引けず全件0件になる）。
   // 並べ替えのタイブレークに使う rSku 自体は SKU管理番号のまま＝正常データでの順序は不変。
+  // clusters から複数商品注文を外した影響はない：rCluster に到達するのは ma===mb===false
+  // （単一同士の比較）のときだけで、単一商品注文の明細は必ず clusters に入っているため。
   const rCluster = g => { const c = g.lines[0] ? clusters.get(lineKey(g.lines[0])) : null; return c ? c.orderCount : 0; };
   pickGroups.sort((a, b) => {
     const ga = a.g, gb = b.g;
@@ -2868,6 +2858,23 @@ function buildRakutenPickingData(groups, today) {
     return String(ga.orderNumber).localeCompare(String(gb.orderNumber));
   });
 
+  // 複数商品注文にしか出ない商品は、単一商品クラスタの採番の後ろへ続き番号で振る
+  // （Amazon側 buildSkuNumberMap の Pass2 と同じ考え方）。順序はピッキング順での出現順に
+  // 揃えるため、pickGroups のソート確定後に採番する。
+  let multiNum = total.length;
+  const multiTotal = [];
+  for (const { g } of pickGroups) {
+    if (!rIsMulti(g)) continue;
+    for (const l of g.lines) {
+      const key = lineKey(l);
+      if (numMap.has(key)) continue;
+      const c = multiClusters.get(key);
+      c.num = 'R-' + String(++multiNum).padStart(3, '0');
+      numMap.set(key, c.num);
+      multiTotal.push(c);
+    }
+  }
+
   const orders = pickGroups.map(({ g, delayed, isLastChance }) => ({
     orderNumber: g.orderNumber, shipType: g.shipType, shipMethodRaw: g.shipMethodRaw,
     recipient: g.recipient,   // B2行生成（S1統合）用に引き継ぐ
@@ -2877,7 +2884,10 @@ function buildRakutenPickingData(groups, today) {
     delayed, isLastChance,
     lines: g.lines.map(l => ({ ...l, num: numMap.get(lineKey(l)) || '' }))
   }));
-  return { total, orders, scheduled };
+  // total        … 商品別集計に行として出る商品（単一商品注文のクラスタ）
+  // multiTotal    … 複数商品注文にしか出ない商品（集計行には出さない。画面一覧・画像登録用）
+  // multiCount    … 複数商品注文の件数＝商品別集計の集約行に出す出荷数（注文数）
+  return { total, multiTotal, multiCount, orders, scheduled };
 }
 
 // 宅配便注文の配送方法選択（注文番号→'宅急便コンパクト'|'宅急便'）。既定はコンパクト。
@@ -3075,8 +3085,8 @@ function printHtmlDocument(html, printTitle) {
   const iframe = document.createElement('iframe');
   iframe.id = 'generic-print-frame';
   iframe.setAttribute('aria-hidden', 'true');
-  // 0×0 ではなく実寸のビューポートを与えて画面外へ逃がす。ページ番号の焼き込みは
-  // 要素の実高さを測って所要ページ数を数えるため、まともにレイアウトさせる必要がある。
+  // 0×0 ではなく実寸のビューポートを与えて画面外へ逃がす。0×0 だと段組み・表が
+  // まともにレイアウトされないまま印刷に入るため。
   // 幅は A4横の本文幅（267mm）が収まる値。印刷の用紙は @page が決めるので影響しない。
   Object.assign(iframe.style, { position:'fixed', left:'-10000px', top:'0',
                                 width:'320mm', height:'400mm', border:'0' });
@@ -3087,11 +3097,9 @@ function printHtmlDocument(html, printTitle) {
   if (printTitle) document.title = printTitle;
   // 自己完結HTML（外部リソースなし）のため短い遅延で描画完了させてから印刷する。
   setTimeout(() => {
-    // ページ番号はレイアウト確定後・印刷実行の直前に焼き込む（文書側が定義していれば）
+    // ページ番号は印刷HTML側の @page 余白ボックス（counter(page)/counter(pages)）が
+    // ブラウザの実際の改頁で振る。JS側で焼き込む処理は持たない。
     const w = iframe.contentWindow;
-    if (w && typeof w.stampPageNumbers === 'function') {
-      try { w.stampPageNumbers(); } catch (_) {}   // 番号が出なくても印刷は止めない
-    }
     w.focus();
     w.print();
     document.title = prevTitle;
@@ -3246,7 +3254,10 @@ function renderRakutenResults(parsed) {
     return `<div class="rp-sub">${info}<span class="rp-sku">(${esc(sku)})</span></div>`;
   };
 
-  const totalRows = data.total.map(t => `<tr>
+  // 画面の一覧は商品別集計（印刷）と違い集約行を持たない。複数商品注文にしか出ない商品
+  // （multiTotal）もそのまま並べる＝画面から商品が消えず、画像URL登録もできる状態を保つ。
+  const screenTotal = [...data.total, ...(data.multiTotal || [])];
+  const totalRows = screenTotal.map(t => `<tr>
       <td class="rp-prev">${thumbInner(t.sku)}</td>
       <td class="rp-num">${esc(t.num)}</td>
       <td>${esc(t.name)}${subLine(t.skuInfo, t.sku)}</td>
@@ -3338,7 +3349,7 @@ function renderRakutenResults(parsed) {
 
   // 画像URL登録UI（Amazon側と同じ運用：入力→JSON下書きコピー→sku-images.jsonへ手動反映）。
   // キーは楽天市場の SKU管理番号。未登録SKUは「画像なし」表示＝正常挙動。
-  renderImageRegisterSection({ total: data.total }, rArea, 'r-img-register-wrap');
+  renderImageRegisterSection({ total: screenTotal }, rArea, 'r-img-register-wrap');
 }
 
 // S1（楽天市場ペイン）のファイル読み込み配線。読み込んだ時点でパースし、
