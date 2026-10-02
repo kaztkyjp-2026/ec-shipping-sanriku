@@ -699,24 +699,27 @@ function buildAddress(state, city, addr1, addr2, addr3) {
 }
 
 // ============================================================
-// Amazon 発送方法（ネコポス／宅急便コンパクト／宅急便）の決定ロジック。
+// Amazon 発送方法（ネコポス／宅急便コンパクト／宅急便・別発行）の決定ロジック。
 // 楽天市場の宅配便プルダウン（rakutenShipChoice／rakutenResolvedMethod）と同じ作り：
 //   判定値（レポートの ssa-ship-method から注文ごとに決める initialMethod）
 //   ＋ 注文単位の上書き（画面のプルダウン amazonShipChoice）
 // を amazonResolvedMethod() 1か所で解決する。下流（B2 CSV・ピッキング帳票・
 // ヤマト集荷申告数・変換ボタンの件数表示）は必ずこの確定値だけを見ること。
+//   ネコポス         … B2発行（送り状種類は画面の選択＝通常 A）
+//   宅急便コンパクト … B2発行（送り状種類 8）。楽天の宅急便コンパクト行と同じ埋め方
+//   宅急便・別発行   … B2から除外。送り状はセラーセントラルで発行する
 // ============================================================
 const AMAZON_NEKOPOS   = 'ネコポス';
 const AMAZON_COMPACT   = '宅急便コンパクト';
-const AMAZON_TAKKYUBIN = '宅急便';
-// 別発行（ネコポス以外）の強さ。1注文に複数の判定が混ざったら強い方を採る
-// （1明細でも別発行なら、その注文はまるごと別発行）。
+const AMAZON_TAKKYUBIN = '宅急便・別発行';
+// ネコポス以外の強さ。1注文に複数の判定が混ざったら強い方を採る
+// （宅急便・別発行 ＞ 宅急便コンパクト ＞ ネコポス。1明細でも別発行なら注文ごと別発行）。
 const AMAZON_METHOD_RANK = { [AMAZON_NEKOPOS]: 0, [AMAZON_COMPACT]: 1, [AMAZON_TAKKYUBIN]: 2 };
 // 画面のプルダウンに並べる選択肢（順序＝この配列の順）。
 const AMAZON_METHOD_OPTIONS = [
   [AMAZON_NEKOPOS,   'ネコポス'],
-  [AMAZON_COMPACT,   '宅急便コンパクト（別発行）'],
-  [AMAZON_TAKKYUBIN, '宅急便（別発行）'],
+  [AMAZON_COMPACT,   '宅急便コンパクト'],
+  [AMAZON_TAKKYUBIN, '宅急便（セラーセントラルで発行）'],
 ];
 
 function amazonStrongerMethod(a, b) {
@@ -739,7 +742,7 @@ function amazonMethodFromSsa(raw) {
   return AMAZON_TAKKYUBIN;
 }
 
-// 注文単位の発送方法の上書き（order-id → 'ネコポス'|'宅急便コンパクト'|'宅急便'）。
+// 注文単位の発送方法の上書き（order-id → 'ネコポス'|'宅急便コンパクト'|'宅急便・別発行'）。
 // 未操作の注文はキーを持たない＝判定値がそのまま使われる。
 // 楽天の rakutenShipChoice と同じく画面限りの状態で、ファイル読み込み直しでクリアする。
 const amazonShipChoice = new Map();
@@ -750,6 +753,16 @@ const amazonShipChoice = new Map();
 function amazonResolvedMethod(o) {
   if (!o) return AMAZON_NEKOPOS;
   return amazonShipChoice.get(o.orderId) || o.initialMethod || AMAZON_NEKOPOS;
+}
+
+// 確定発送方法 → B2送り状種類コード。B2から除外する注文（宅急便・別発行）は null。
+//   ネコポス         … 画面の送り状種類（nekoposCode。従来どおり s1-invoiceType の値）
+//   宅急便コンパクト … SHIP_METHOD_MAP の逆引き（'8'。楽天側 rakutenInvoiceCode と同じ体系）
+function amazonB2InvoiceCode(o, nekoposCode) {
+  const m = amazonResolvedMethod(o);
+  if (m === AMAZON_NEKOPOS) return nekoposCode;
+  if (m === AMAZON_COMPACT) return Object.keys(SHIP_METHOD_MAP).find(k => SHIP_METHOD_MAP[k] === m) || null;
+  return null;
 }
 
 // 共通パーサ（純粋改善・公開版へそのまま移植可）：
@@ -848,12 +861,13 @@ function buildOrderRecords(groups, shipDate, invoiceType, store, storeIndex) {
       firstItemId: g.itemIds[0] || '',   // 単一商品注文の記事欄に付与する order-item-id
       picking: { orderId: g.orderId, lines }
     };
-    // 別発行（ネコポス以外）は送り状をセラーセントラルで発行するためB2行を作らない。
+    // 宅急便・別発行は送り状をセラーセントラルで発行するためB2行を作らない。
+    // 宅急便コンパクトは送り状種類 8 でB2行を作る（列・値の埋め方はネコポス行と同じ）。
     // ピッキング／梱包・発送明細には含めるので picking は必ず生成する。
     // ※確定値はプルダウンの選択を含む。buildOrderRecords は変換ボタン押下時に走るため、
     //   ここで読む選択値は「ボタンを押した時点」の値になる。
-    rec.b2Row = (amazonResolvedMethod(rec) === AMAZON_NEKOPOS)
-      ? buildB2Row(g, shipDate, invoiceType, store) : null;
+    const code = amazonB2InvoiceCode(rec, invoiceType);
+    rec.b2Row = code ? buildB2Row(g, shipDate, code, store) : null;
     recs.push(rec);
   }
   return recs;
@@ -1003,11 +1017,11 @@ function buildSkuNumberMap(sortedRecords) {
   return map;
 }
 
-// ※ G番号（A-NNN）は出荷方法で分けない。別発行（ネコポス以外）の注文にも
+// ※ G番号（A-NNN）は出荷方法で分けない。ネコポス以外の注文にも
 //   通常どおり A-NNN を振る。第一の役割は商品別合計シートと梱包・発送明細の突合で、
 //   ここで番号を変えると1ページ目で A-003 の棚から取った商品が明細では別番号になり、
 //   現場が突合できなくなる（2026-08-08 に ZZ-NNN 方式で実際に発生したため廃止した）。
-//   別発行の判別は梱包・発送明細の注文番号横のバッジが担う（renderCombinedPickingHTML）。
+//   別発行・宅急便コンパクトの判別は梱包・発送明細の注文番号横のバッジが担う（renderCombinedPickingHTML）。
 
 // cp932エンコード時のバイト数を返す。全角=2バイト、半角(ASCII)=1バイトとして概算。
 // 厳密なcp932変換ではなく、実用上の概算（サロゲートペア等の特殊文字は考慮しない）。
@@ -1139,7 +1153,7 @@ const RAKUTEN_STORE_CODES = ['MMD'];
 //   宅急便コンパクト … Amazon・楽天で宅急便コンパクトを選んだもの
 //   宅急便         … Amazon・楽天で宅急便を選んだもの
 // Amazon分は確定値（amazonResolvedMethod＝判定値＋注文単位のプルダウン上書き）で振り分ける。
-// 別発行（ネコポス以外）を一律「宅急便」へ合算していたのをやめた（宅急便コンパクトを
+// ネコポス以外を一律「宅急便」へ合算していたのをやめた（宅急便コンパクトを
 // 宅急便として申告すると、集荷の個数と実際の荷姿が合わなくなるため）。
 // 楽天で配送方法が判定できない注文（shipType='不明'）は宅急便に寄せたうえで件数を注記する
 // （3区分の合計＝全注文数 を必ず保つため。黙って0件にすると申告数が実態と合わなくなる）。
@@ -1179,9 +1193,13 @@ function renderCombinedPickingHTML(amazon, rakuten) {
     return m ? `　${Number(m[1])}年${Number(m[2])}月${Number(m[3])}日` : '';
   })();
 
-  // マケプレ配送（ネコポス以外）の印。商品別合計・梱包発送明細の2帳票で同一のHTML／CSSを使い、
+  // マケプレ配送（宅急便・別発行）の印。商品別合計・梱包発送明細の2帳票で同一のHTML／CSSを使い、
   // 現場が同じものだと即座に分かるようにする（文言・体裁を分岐させないこと）。
   const MP_BADGE = `<span class="mp-badge">⚠ 送り状は別発行（マケプレ配送）</span>`;
+  // 宅急便コンパクト（B2発行）の印。楽天の rakutenShipBadges と同じ見た目（.mp-badge）・文言。
+  const AMAZON_COMPACT_BADGE = `<span class="mp-badge">⚠ ${AMAZON_COMPACT}</span>`;
+  const amazonMethodBadge = m =>
+    m === AMAZON_COMPACT ? AMAZON_COMPACT_BADGE : m === AMAZON_TAKKYUBIN ? MP_BADGE : '';
 
   // 商品別合計の列幅。colgroup で明示指定し、商品名の幅を確保する。
   // 画像12% ／ G番号11% ／ ピッキング合計13% ／ 出荷数（注文数）13% ／ 商品名 残り51%。
@@ -1217,16 +1235,27 @@ function renderCombinedPickingHTML(amazon, rakuten) {
   const band = text => `<div class="mall-band">${text}</div>`;
   const mallEnd = (mall, n) => `<div class="mall-end">── ${mall}分 ここまで（${n}注文） ──</div>`;
 
-  // Amazon：別発行（ネコポス以外）になったSKUの集合。商品別集計の行に印を出すために使う。
+  // Amazon：SKU → その SKU を含む単一商品注文の確定発送方法の集合（ネコポス以外のみ）。
+  // 商品別集計の行に印を出すために使う。
   // 確定値は amazonResolvedMethod（プルダウン選択 amazonShipChoice を解決したもの）を使い、
   // 印刷HTMLはボタン押下時に組まれるため、ここで最新の選択値が読める。
   // 商品別集計に行として出るのは単一商品注文のクラスタだけ（複数商品注文は集約行に畳まれる）
   // ＝集合も単一商品注文からのみ作る。従来の nonNekopos クラスタ印と対象範囲は同じ。
-  const amazonNonNekoposSkus = new Set();
+  // 混在時は両方を並べる（順序固定：宅急便コンパクト→別発行。楽天の RAKUTEN_BADGE_ORDER と同じ）。
+  const amazonSkuMethods = new Map();   // sku → Set<確定発送方法>
   for (const o of (amazon ? (amazon.single || []) : [])) {
     if ((o.lines || []).length !== 1) continue;
-    if (amazonResolvedMethod(o) !== AMAZON_NEKOPOS) amazonNonNekoposSkus.add(o.lines[0].sku);
+    const m = amazonResolvedMethod(o);
+    if (m === AMAZON_NEKOPOS) continue;
+    const sku = o.lines[0].sku;
+    if (!amazonSkuMethods.has(sku)) amazonSkuMethods.set(sku, new Set());
+    amazonSkuMethods.get(sku).add(m);
   }
+  const amazonSkuBadges = sku => {
+    const s = amazonSkuMethods.get(sku);
+    if (!s) return '';
+    return [AMAZON_COMPACT, AMAZON_TAKKYUBIN].filter(m => s.has(m)).map(amazonMethodBadge).join('');
+  };
 
   // ---- 商品別合計（A4縦・1段） ----
   // 複数商品注文は商品クラスタに含めず1行に集約する（Amazon側の従来仕様）。
@@ -1235,7 +1264,7 @@ function renderCombinedPickingHTML(amazon, rakuten) {
       const skuTag = (t.sku && t.sku !== t.name) ? ` <span class="sku">(${esc(t.sku)})</span>` : '';
       // バッジは商品名セル内・SKU表記の直後に置く。行末（注文数の後ろ）だと商品名が長いときに
       // 折り返しでバッジが商品から離れ、どの商品の話か分からなくなるため。
-      return `<tr><td class="thumb-cell">${thumbInner(t.sku)}</td><td class="num">${esc(t.num)}</td><td class="${qtyCellCls(t.totalQty, t.orderCount)}">${esc(t.totalQty)}</td><td class="cnt">${esc(t.orderCount)}</td><td class="name">${esc(t.name)}${skuTag}${amazonNonNekoposSkus.has(t.sku) ? MP_BADGE : ''}</td></tr>`;
+      return `<tr><td class="thumb-cell">${thumbInner(t.sku)}</td><td class="num">${esc(t.num)}</td><td class="${qtyCellCls(t.totalQty, t.orderCount)}">${esc(t.totalQty)}</td><td class="cnt">${esc(t.orderCount)}</td><td class="name">${esc(t.name)}${skuTag}${amazonSkuBadges(t.sku)}</td></tr>`;
     }).join('');
     const multiRow = multiTotalRow(amazon.multiCount);
     return `
@@ -1305,10 +1334,11 @@ function renderCombinedPickingHTML(amazon, rakuten) {
     const rows = o.lines.map(l =>
       `<tr><td class="thumb-cell">${thumbInner(l.sku)}</td><td class="num">${esc(l.num)}</td><td class="qty">${esc(l.quantity)}</td><td class="name">${esc(l.name)}</td></tr>`
     ).join('');
-    // 別発行（ネコポス以外）はB2の送り状が出ない。倉庫の担当者が気づけるよう注文番号と同じ行に印を出す。
+    // 宅急便・別発行はB2の送り状が出ない。宅急便コンパクトは荷姿が違う。
+    // 倉庫の担当者が気づけるよう注文番号と同じ行に印を出す。
     // ※ G番号は分けない（商品別合計との突合が壊れるため。冒頭の再発防止コメント参照）。
     return `<section class="order">
-      <h2>${esc(o.orderId)}${amazonResolvedMethod(o) !== AMAZON_NEKOPOS ? MP_BADGE : ''}</h2>
+      <h2>${esc(o.orderId)}${amazonMethodBadge(amazonResolvedMethod(o))}</h2>
       <table>${detailHead}<tbody>${rows}</tbody></table>
     </section>`;
   }).join('')}</div>
@@ -1336,7 +1366,7 @@ function renderCombinedPickingHTML(amazon, rakuten) {
   if (rakuten) mallRows.push(`<tr><td>楽天市場</td><td class="n">${rOrders}</td></tr>`);
   const detailSummary = `合計 ${ship.total}注文`
     + (bothMalls ? `（Amazon ${aOrders} ／ 楽天市場 ${rOrders}）` : '');
-  const shipNote = '※送り状を別発行する注文（ネコポス以外）も、その配送方法の区分で数えています。'
+  const shipNote = '※送り状をセラーセントラルで別発行する注文も、その配送方法の区分で数えています。'
     + (ship.unknown ? `／配送方法を判定できない ${ship.unknown}注文は「宅急便」に含めています。` : '');
 
   // 2表は帳票冒頭ではなく商品別合計の末尾（最後の mall-end の直後）に出す。
@@ -1994,12 +2024,12 @@ function s1AmazonOrderCount() {
   let n = 0;
   for (const buf of Object.values(s1Buffers)) {
     if (!buf) continue;
-    // ボタンのラベルはB2 CSVの出力件数。別発行（ネコポス以外）は送り状を別発行するため数えない
+    // ボタンのラベルはB2 CSVの出力件数。宅急便・別発行は送り状を別発行するため数えない
     // （楽天側が送り状発行済みを除いた active.length を出しているのと揃える）。
     // 判定は確定値（amazonResolvedMethod）＝注文単位のプルダウン選択を反映した値で行う。
     try {
       n += parseAmazonTsvGroups(decodeBuffer(buf))
-        .filter(g => g.orderId && amazonResolvedMethod(g) === AMAZON_NEKOPOS).length;
+        .filter(g => g.orderId && amazonResolvedMethod(g) !== AMAZON_TAKKYUBIN).length;
     } catch (_) {}
   }
   return n;
@@ -2075,7 +2105,7 @@ s1Convert.addEventListener('click', async () => {
       const groups = parseAmazonTsvGroups(text);
       const recs   = buildOrderRecords(groups, shipDate, s1Invoice.value, store, storeIndex);
       if (recs.length === 0) throw new Error('変換できるデータがありません');
-      // 別発行（ネコポス以外）はB2行を持たない（ピッキング・梱包には含める）ため件数を分けて数える
+      // 宅急便・別発行はB2行を持たない（ピッキング・梱包には含める）ため件数を分けて数える
       const b2Count = recs.filter(r => r.b2Row).length;
       const mpCount = recs.length - b2Count;
       allRecords.push(...recs); totalCount += b2Count;
@@ -2091,7 +2121,7 @@ s1Convert.addEventListener('click', async () => {
   });
 
   // 統一ソート：B2 CSV 行順 と ピッキング順 の両方に同一順序を適用。
-  // ソートは別発行（ネコポス以外）も含めた全件で行う（ピッキング順は出荷方法で分けない）。
+  // ソートは別発行も含めた全件で行う（ピッキング順は出荷方法で分けない）。
   const sortedAmazon = allRecords.length ? sortOrderRecords(allRecords) : [];
 
   // ネコポス以外と判定された注文の一覧（発送方法プルダウン）を組み直す。
@@ -2476,16 +2506,24 @@ function renderAmazonShipMethodSection() {
   container.appendChild(wrap);
   auxBar(container).appendChild(toggle);   // トグルだけ補助表示バーへ移す
 
-  // 見出しは現在の確定値で組む（ネコポスに戻した分は「別発行」の件数から減る）
+  // 見出しは現在の確定値で組む（ネコポスに戻した分は「ネコポス以外」の件数から減る）
   const refreshHead = () => {
     const nonNeko  = rows.filter(r => amazonResolvedMethod(r) !== AMAZON_NEKOPOS).length;
+    const compact  = rows.filter(r => amazonResolvedMethod(r) === AMAZON_COMPACT).length;
+    const separate = nonNeko - compact;
     const switched = rows.length - nonNeko;
     head.className = 'result-item ' + (nonNeko ? 'error' : 'success');
+    // 宅急便コンパクトを選んだ注文が無いときは従来どおりの文言（すべて別発行）。
+    // ある場合だけ内訳を出す（宅急便コンパクトはB2 CSVに出力するため「別発行」と書かない）。
+    const detail = compact
+      ? `（宅急便コンパクト ${compact}件はB2 CSVに出力`
+        + (separate ? `／宅急便 ${separate}件は送り状を別発行）` : '）')
+      : '（送り状は別発行）';
     head.textContent = nonNeko
-      ? `⚠ ネコポス以外と判定された注文：${nonNeko}件（送り状は別発行）`
+      ? `⚠ ネコポス以外と判定された注文：${nonNeko}件${detail}`
         + (switched ? `／ネコポスに変更：${switched}件（B2 CSVに出力します）` : '')
         + '／いずれもピッキング・梱包の対象には含まれています。'
-        + '別発行分はセラーセントラルで配送ラベルを購入して発行してください'
+        + (separate ? '別発行分はセラーセントラルで配送ラベルを購入して発行してください' : '')
       : `✓ ネコポス以外と判定された注文：0件`
         + `（判定${rows.length}件はすべてネコポスに変更済み。B2 CSVに出力します）`;
     redo.style.display = s1ShipChoiceStale ? 'block' : 'none';
