@@ -2179,9 +2179,10 @@ s1Convert.addEventListener('click', async () => {
         noCode.map(o => [o.orderNumber, o.shipMethodRaw || '（空）']), 'error');
       // 住所欄・建物名欄の上限超過（B2へは出力済み。RMS側の住所を短縮するか手動で調整する）
       const hasIssue = k => addrIssues.filter(x => x.issues.includes(k));
-      const issueRow = x => [x.orderNumber, x.fullAddress, fullwidthCharLength(x.fullAddress),
+      // 対象：お届け先住所か、注文者をご依頼主にした注文のご依頼主住所か（party）
+      const issueRow = x => [x.orderNumber, x.party || 'お届け先', x.fullAddress, fullwidthCharLength(x.fullAddress),
                              x.building, fullwidthCharLength(x.building)];
-      const issueCols = ['注文番号', '住所欄', '住所（全角換算）', '建物名欄', '建物名（全角換算）'];
+      const issueCols = ['注文番号', '対象', '住所欄', '住所（全角換算）', '建物名欄', '建物名（全角換算）'];
       renderRakutenWarningSection(s1Results, 's1-rk-addr-bldgused',
         `⚠ 要確認：住所文字数超過・建物名欄使用中のため自動振り分け不可（全角${B2_ADDRESS_LIMIT}文字上限）: ${hasIssue('addrOverflowBuildingUsed').length}件`,
         issueCols, hasIssue('addrOverflowBuildingUsed').map(issueRow), 'error');
@@ -2194,6 +2195,19 @@ s1Convert.addEventListener('click', async () => {
       renderRakutenWarningSection(s1Results, 's1-rk-addr-split',
         `📍 住所が全角${B2_ADDRESS_LIMIT}文字を超えたため建物名欄へ自動振り分けしました（番地の途中で割れる場合があります。印字内容を確認してください）: ${hasIssue('addrSplit').length}件`,
         issueCols, hasIssue('addrSplit').map(issueRow), 'warn');
+      // ご依頼主を注文者にした注文（送付先一致フラグ '0'）。B2へは出力済み・確認用の一覧。
+      const joinName = p => [p.lastName, p.firstName].filter(Boolean).join(' ');
+      const senderOrderer = usable.filter(o => rakutenSenderSource(o) === 'orderer');
+      renderRakutenWarningSection(s1Results, 's1-rk-sender-orderer',
+        `ご依頼主を注文者にした注文（注文者≠送付先）：${senderOrderer.length}件`,
+        ['注文番号', '注文者名', '送付先名'],
+        senderOrderer.map(o => [o.orderNumber, joinName(o.orderer), joinName(o.recipient || {})]), 'warn');
+      // 注文者≠送付先なのに注文者の氏名が空：黙って店舗にせず、店舗で出力したことを知らせる
+      const senderFallback = usable.filter(o => rakutenSenderSource(o) === 'fallback');
+      renderRakutenWarningSection(s1Results, 's1-rk-sender-fallback',
+        `⚠ 要確認：注文者≠送付先ですが注文者の氏名が空のため、ご依頼主を店舗設定で出力しました: ${senderFallback.length}件`,
+        ['注文番号', '送付先名'],
+        senderFallback.map(o => [o.orderNumber, joinName(o.recipient || {})]), 'error');
     } catch(e) {
       item.className = 'result-item error';
       item.textContent = `⚠ 楽天市場：${e.message}`;
@@ -2765,6 +2779,12 @@ function parseRakutenCsv(csvText) {
     throw new Error('このCSVに「ステータス」列がありません。\nRMSのデータダウンロードで出力テンプレート「全カラムダウンロード用」を選んで取得してください。');
   }
 
+  // 送付先一致フラグ・注文者列はB2のご依頼主判定にだけ使う。無いCSVでもエラーにはしない。
+  const hasDestMatchCol = colIdx['送付先一致フラグ'] != null;
+  const hasOrdererCols = ['注文者姓', '注文者名', '注文者電話番号1', '注文者電話番号2', '注文者電話番号3',
+    '注文者郵便番号1', '注文者郵便番号2', '注文者住所都道府県', '注文者住所郡市区', '注文者住所それ以降の住所']
+    .every(h => colIdx[h] != null);
+
   const groups = new Map();
   const statusExcluded = [], mcfExcluded = [], needsCheck = [], unknownMethods = [];
 
@@ -2830,7 +2850,18 @@ function parseRakutenCsv(csvText) {
           phone1: gc(row, '送付先電話番号1'), phone2: gc(row, '送付先電話番号2'), phone3: gc(row, '送付先電話番号3'),
           postal1: gc(row, '送付先郵便番号1'), postal2: gc(row, '送付先郵便番号2'),
           pref: gc(row, '送付先住所都道府県'), city: gc(row, '送付先住所郡市区'), rest: gc(row, '送付先住所それ以降の住所')
-        } });
+        },
+        // 送付先一致フラグ（'0'＝注文者と送付先が異なる）。'0' のとき buildRakutenB2Row が
+        // ご依頼主を注文者にする。列が無いCSVでは null（従来どおり店舗設定）。
+        destMatchFlag: hasDestMatchCol ? gc(row, '送付先一致フラグ') : null,
+        // 注文者情報（recipient と同じ形）。注文者列が1つでも欠けたCSVでは null。
+        orderer: hasOrdererCols ? {
+          lastName:  gc(row, '注文者姓'),
+          firstName: gc(row, '注文者名'),
+          phone1: gc(row, '注文者電話番号1'), phone2: gc(row, '注文者電話番号2'), phone3: gc(row, '注文者電話番号3'),
+          postal1: gc(row, '注文者郵便番号1'), postal2: gc(row, '注文者郵便番号2'),
+          pref: gc(row, '注文者住所都道府県'), city: gc(row, '注文者住所郡市区'), rest: gc(row, '注文者住所それ以降の住所')
+        } : null });
     }
     const destId = gc(row, '送付先ID');
     if (destId) groups.get(orderNumber).destIds.add(destId);
@@ -3072,6 +3103,7 @@ function buildRakutenPickingData(groups, today) {
   const orders = pickGroups.map(({ g, delayed, isLastChance }) => ({
     orderNumber: g.orderNumber, shipType: g.shipType, shipMethodRaw: g.shipMethodRaw,
     recipient: g.recipient,   // B2行生成（S1統合）用に引き継ぐ
+    destMatchFlag: g.destMatchFlag, orderer: g.orderer,   // 同上（ご依頼主＝注文者の判定用）
     shipInstructedAt: g.shipInstructedAt,
     desiredDeliveryDate: g.desiredDeliveryDate, desiredDeliveryTime: g.desiredDeliveryTime,
     orderType: g.orderType,
@@ -3169,7 +3201,8 @@ function formatB2DeliveryDate(dateRaw) {
 //      '810…' と区別できないため触らない
 // ハイフンの再挿入はしない。ハイフンなしでもB2で受理される実績があり（Kaz確認済み）、
 // 市外局番の桁数判定という不確実な処理には踏み込まない。
-// ※依頼主電話番号（row[19]）には適用しない。自社情報で国際表記は想定されないため。
+// ※依頼主電話番号（row[19]）のうち店舗の設定値には適用しない（自社情報で国際表記は想定されないため）。
+//   注文者をご依頼主にする注文（buildRakutenB2Row）では、注文者の電話番号に適用する。
 function normalizeJapanesePhone(raw) {
   const digits = String(raw == null ? '' : raw).replace(/[^0-9]/g, '');
   if (digits.startsWith('81') && digits[2] !== '0') return '0' + digits.slice(2);
@@ -3239,9 +3272,23 @@ function buildRakutenAddress(pref, city, rest) {
   return { fullAddress: addr, building: bldg, issues };
 }
 
+// B2のご依頼主に何を使うか（注文単位）。判定は送付先一致フラグのみで、氏名比較はしない
+// （同一人物・別住所の注文も注文者にする。Kaz決定 2026-10-11）。
+//   'orderer'  … フラグ '0' かつ注文者の姓名あり → 注文者
+//   'fallback' … フラグ '0' だが注文者の姓名が空（列なし含む） → 店舗設定（s1Convert が警告表示）
+//   'store'    … それ以外（'1'・空・フラグ列なし） → 店舗設定（従来どおり）
+function rakutenSenderSource(order) {
+  if (order.destMatchFlag !== '0') return 'store';
+  const o = order.orderer;
+  return (o && (o.lastName || o.firstName)) ? 'orderer' : 'fallback';
+}
+
 // 楽天市場注文（buildRakutenPickingData の orders 要素）→ B2クラウド1行（95列）。
 // 各列は Amazon側 buildB2Row と同じ位置に同じ種類の値を入れる（データ源の列名のみ異なる）。
 // addressIssues を渡すと、住所欄・建物名欄の上限超過を注文単位で積む（表示用・任意）。
+// ご依頼主住所の超過は party:'ご依頼主' 付きで積む（お届け先の分は party なし）。
+// ご依頼主（row[19][21][22][23][24]）は rakutenSenderSource が 'orderer' の注文だけ注文者、
+// それ以外は店舗設定。row[39]（請求先顧客コード）・row[41]（運賃管理番号）は常に店舗設定。
 function buildRakutenB2Row(order, shipDate, store, addressIssues) {
   const row = new Array(95).fill('');
   const r = order.recipient || {};
@@ -3262,8 +3309,22 @@ function buildRakutenB2Row(order, shipDate, store, addressIssues) {
   row[10] = [r.postal1, r.postal2].filter(Boolean).join('-');
   row[11] = fullAddress; row[12] = building;
   row[15] = [r.lastName, r.firstName].filter(Boolean).join(' ');
-  row[19] = store.tel; row[21] = store.postal;
-  row[22] = store.address; row[23] = store.building; row[24] = store.name;
+  if (rakutenSenderSource(order) === 'orderer') {
+    // 注文者≠送付先（送付先一致フラグ '0'）：ご依頼主を注文者にする。書式はお届け先側と同じ。
+    const o = order.orderer;
+    const ob = buildRakutenAddress(o.pref || '', o.city || '', o.rest || '');
+    if (addressIssues && ob.issues.length) {
+      addressIssues.push({ orderNumber: order.orderNumber, issues: ob.issues,
+                           fullAddress: ob.fullAddress, building: ob.building, party: 'ご依頼主' });
+    }
+    row[19] = normalizeJapanesePhone([o.phone1, o.phone2, o.phone3].filter(Boolean).join(''));
+    row[21] = [o.postal1, o.postal2].filter(Boolean).join('-');
+    row[22] = ob.fullAddress; row[23] = ob.building;
+    row[24] = [o.lastName, o.firstName].filter(Boolean).join(' ');
+  } else {
+    row[19] = store.tel; row[21] = store.postal;
+    row[22] = store.address; row[23] = store.building; row[24] = store.name;
+  }
   row[27] = ((order.lines[0] && order.lines[0].name) || '').slice(0, 25).trimEnd();
   row[32] = buildRakutenKiji(order);
   row[38] = String(order.lines.reduce((a, l) => a + (l.quantity || 0), 0));
