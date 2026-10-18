@@ -1629,8 +1629,7 @@ ${amazonDetailSection}${rakutenDetailSection}
 // 生成もそのタイミングで行う。
 function renderCombinedPickingButton(amazon, rakuten) {
   const old = document.getElementById('picking-print-wrap');
-  if (old) old.remove();
-  if (!amazon && !rakuten) return;
+  if (!amazon && !rakuten) { if (old) old.remove(); return; }
 
   const wrap = document.createElement('div');
   wrap.id = 'picking-print-wrap';
@@ -1648,7 +1647,9 @@ function renderCombinedPickingButton(amazon, rakuten) {
                       'ピッキングリスト' + (dateNum ? '_' + dateNum : ''));
   });
   wrap.appendChild(btn);
-  s1Results.appendChild(wrap);
+  // 照合の後に対象を絞って作り直すときは、同じ位置で差し替える
+  if (old && old.isConnected) old.replaceWith(wrap);
+  else s1Results.appendChild(wrap);
 }
 // ==== PICKING FEATURE (portable to public fbm-tool) — END ====
 
@@ -1982,9 +1983,30 @@ function essPropValue(key, value) {
 // ============================================================
 // Google 認証（GIS トークンモデル・drive.file のみ）。トークンはメモリにだけ置く。
 // ============================================================
-const essAuth = { token: null, expiresAt: 0, client: null };
+const essAuth = { token: null, expiresAt: 0, client: null, pending: null };
 function essTokenValid() { return !!essAuth.token && Date.now() < essAuth.expiresAt - 60000; }
+// 実行中の要求があれば同じ Promise を返す（requestAccessToken を二重に呼ばない）
 function essRequestToken() {
+  if (essAuth.pending) return essAuth.pending;
+  const p = essRequestTokenOnce();
+  essAuth.pending = p;
+  const clear = () => { if (essAuth.pending === p) essAuth.pending = null; };
+  p.then(clear, clear);
+  return p;
+}
+// ボタンのクリックハンドラの先頭（最初の await より前）で同期的に呼ぶ。
+// 有効なトークンが無ければ、ユーザー操作の中で requestAccessToken を呼んでポップアップを開く
+// （await の後で呼ぶとブラウザにブロックされる：popup_failed_to_open）。
+// 戻り値は Promise<'ok'|'login'|'failed'>（'login'＝このクリックで新しくログインした）。失敗しても reject しない。
+function essPreAuth() {
+  if (essIsTestStore() || !ESS_OAUTH_CLIENT_ID || essTokenValid()) return Promise.resolve('ok');
+  return essRequestToken().then(() => 'login', () => 'failed');
+}
+// ログインできたら、その STEP の帯で失敗している保存（未ログインで落ちたもの）をやり直す
+function essRetryFailed(step) {
+  for (const [, e] of essBands[step]) if (e.status === 'fail' && e.retry) e.retry();
+}
+function essRequestTokenOnce() {
   return new Promise((resolve, reject) => {
     if (!ESS_OAUTH_CLIENT_ID) return reject(new Error('クライアントID未設定'));
     if (!(window.google && google.accounts && google.accounts.oauth2)) {
@@ -2193,7 +2215,7 @@ function essRenderBand(step) {
       const b = document.createElement('button');
       b.type = 'button'; b.className = 'btn-aux ess-retry'; b.style.marginLeft = '10px';
       b.textContent = '再試行';
-      b.addEventListener('click', () => e.retry());
+      b.addEventListener('click', () => { essPreAuth().then(() => e.retry()); });
       item.appendChild(b);
     }
     el.appendChild(item);
@@ -2288,6 +2310,37 @@ async function essCollate(rows, workDate) {
   return res;
 }
 
+// ピッキング帳票の対象を照合結果にそろえる。採番（A-NNN／R-NNN）はB2記事欄と同じ値のまま残し、
+// 商品別合計・複数商品注文の件数だけを残った注文で数え直す。対象が0件なら null（印刷ボタンを出さない）。
+function essPickingAmazonExcluding(src, exclude) {
+  if (!src) return null;
+  const recs = src.records.filter(r => !exclude.has(r.picking.orderId));
+  if (!recs.length) return null;
+  return { ...buildPickingItems(recs, src.skuNumMap), storeNames: src.storeNames };
+}
+function essPickingRakutenExcluding(rk, exclude) {
+  if (!rk) return null;
+  const orders = rk.orders.filter(o => !exclude.has(o.orderNumber));
+  if (!orders.length) return null;
+  // buildRakutenPickingData と同じ数え方：商品別集計は単一商品注文だけ、複数商品注文は件数のみ
+  const key = l => (l.sku || '') + '\u001f' + (l.itemMgmtNo || '');
+  const sums = new Map();
+  let multiCount = 0;
+  for (const o of orders) {
+    if (o.lines.length > 1) { multiCount++; continue; }
+    const seen = new Set();
+    for (const l of o.lines) {
+      const k = key(l);
+      if (!sums.has(k)) sums.set(k, { totalQty: 0, orderCount: 0 });
+      const c = sums.get(k);
+      c.totalQty += l.quantity;
+      if (!seen.has(k)) { c.orderCount += 1; seen.add(k); }
+    }
+  }
+  const total = rk.total.filter(c => sums.has(c.clusterKey)).map(c => ({ ...c, ...sums.get(c.clusterKey) }));
+  return { ...rk, orders, total, multiCount };
+}
+
 // B2用CSVのバイト列（本番と同じ組み立て：ヘッダ＋行を CRLF でつなぎ末尾 CRLF・Shift-JIS）
 function essB2Bytes(rows) {
   const csvText = [toCsvLine(B2_HEADER), ...rows.map(toCsvLine)].join('\r\n') + '\r\n';
@@ -2359,7 +2412,7 @@ function essRenderExportedList(container, list, include) {
 }
 
 // STEP1 の出力（照合 → ダウンロード → 02 に保存）。rows は Amazon分→楽天分の順のB2行。
-async function essB2Output(rows, dateStr) {
+async function essB2Output(rows, dateStr, onExclude) {
   const include = essS1Include || new Set();
   essS1Include = null;
   const work = essWorkStamp();
@@ -2377,8 +2430,9 @@ async function essB2Output(rows, dateStr) {
     btn.textContent = '照合なしで出力';
     err.appendChild(btn);
     s1Results.appendChild(err);
-    btn.addEventListener('click', () => {
+    btn.addEventListener('click', async () => {
       btn.disabled = true;
+      await essPreAuth();
       const st = essWorkStamp();
       const filename = `b2cloud_${dateStr}_${nowStamp().hms}_照合なし.csv`;
       const bytes = essB2Bytes(rows);
@@ -2398,6 +2452,7 @@ async function essB2Output(rows, dateStr) {
   const exclude = new Set(col.issued.map(x => x.id));
   for (const x of col.exported) if (!include.has(x.id)) exclude.add(x.id);
   const outRows = rows.filter(r => !exclude.has(r[0]));
+  if (onExclude) onExclude(exclude);
   const nIssued = col.issued.length;
   const nExported = col.exported.filter(x => !include.has(x.id)).length;
 
@@ -2718,6 +2773,8 @@ function updateS1ConvertLabel() {
 }
 
 s1Convert.addEventListener('click', async () => {
+  // 未ログインならここで（同期的に）ログイン画面を出し、トークンを待ってから続ける
+  if (await essPreAuth() === 'login') essRetryFailed('s1');
   const stores = loadStores();
   const [y, m, d] = s1ShipDate.value.split('-');
   const shipDate   = `${y}/${parseInt(m)}/${parseInt(d)}`;
@@ -2856,6 +2913,7 @@ s1Convert.addEventListener('click', async () => {
   // ---- Amazon分（従来処理そのまま・出力行は不変） ----
   let amazonRows = [];
   let amazonPicking = null;
+  let amazonPickSrc = null;
   if (allRecords.length) {
     const sorted = sortedAmazon;   // 統一ソート済み（マケプレ配送も含む全件）
 
@@ -2868,8 +2926,11 @@ s1Convert.addEventListener('click', async () => {
     amazonRows = sorted.filter(r => r.b2Row).map(r => r.b2Row);
 
     // PICKING: no-PII のピッキングデータ（total）を生成
-    const pickingData = buildPickingItems(enrichPickingItems(sorted), skuNumMap);
+    const enriched = enrichPickingItems(sorted);
+    const pickingData = buildPickingItems(enriched, skuNumMap);
     amazonPicking = { ...pickingData, storeNames: loadedStoreNames.join('／') };
+    // 照合で除外した注文を外して作り直すための材料（採番 skuNumMap はB2記事欄と共有のまま使う）
+    amazonPickSrc = { records: enriched, skuNumMap, storeNames: amazonPicking.storeNames };
     // 画像URL登録用の画面一覧（各行にURL入力欄）を生成（トグルで開閉）
     renderImageRegisterSection(pickingData);
   }
@@ -2891,7 +2952,9 @@ s1Convert.addEventListener('click', async () => {
 
   // 出力順：Amazon分 → 楽天市場分（Amazon分の行順・行内容は従来と完全一致のまま末尾に追加）
   // ダウンロードの前に、直近7日の Drive の記録（02・03）と照合する（A）。
-  await essB2Output([...amazonRows, ...rakutenB2Rows], dateStr);
+  // 照合で除外した注文は、ピッキングリスト＋梱包・発送明細の対象からも外す（照合なしで出力のときは全件のまま）。
+  await essB2Output([...amazonRows, ...rakutenB2Rows], dateStr, exclude => renderCombinedPickingButton(
+    essPickingAmazonExcluding(amazonPickSrc, exclude), essPickingRakutenExcluding(rakutenPicking, exclude)));
 });
 
 // ============================================================
@@ -2933,6 +2996,8 @@ function s2HandleFiles(files) {
 }
 
 s2Convert.addEventListener('click', async () => {
+  // 未ログインならここで（同期的に）ログイン画面を出し、トークンを待ってから続ける
+  if (await essPreAuth() === 'login') essRetryFailed('s2');
   s2Results.innerHTML = '';
   const outputFiles = [];   // { baseFilename, ext, mime, data }
   const allRakuten  = [];   // 楽天市場の注文番号形式だった行の全ファイル分累積
