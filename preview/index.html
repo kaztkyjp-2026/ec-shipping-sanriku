@@ -4,7 +4,19 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>EC出荷オペレーションツール - Amazon FBM / 楽天市場 × ヤマトB2クラウド</title>
-  <link rel="icon" type="image/png" href="./assets/icon.png">
+  <script>
+  // ==== 検証版（/preview/）の定数 ====
+  // Google OAuth クライアントID（drive.file スコープのトークンモデル用。秘密情報ではない）。
+  // 空のときは Drive 機能を「未設定」とし、照合はできない扱いにする。
+  const ESS_OAUTH_CLIENT_ID = '774421056329-0oglk5tfngd2km9ik5sc4hhq89ejrabo.apps.googleusercontent.com';
+  // ルート直下の資産（sku-images.json・assets/・manual.html）への接頭辞。
+  // /preview/ で開いたときは ../ を前置し、複製を作らずルートの資産を参照する。
+  // ルートへ戻したときは同じコードのまま '' になる。
+  const ASSET_BASE = location.pathname.includes('/preview/') ? '../' : '';
+  </script>
+  <link rel="icon" type="image/png" id="app-icon">
+  <script>document.getElementById('app-icon').href = ASSET_BASE + 'assets/icon.png';</script>
+  <script src="https://accounts.google.com/gsi/client" async></script>
   <meta name="description" content="Amazon FBM（自己発送）と楽天市場の出荷業務を支援するブラウザツール。ヤマトB2クラウド取込CSV・ピッキングリスト・Amazon出荷通知TXT・楽天市場発送完了報告CSVを生成します。入力データは外部に送信されません。">
   <script src="https://cdn.jsdelivr.net/npm/encoding-japanese@2/encoding.min.js"></script>
   <style>
@@ -336,14 +348,23 @@
   </style>
 </head>
 <body>
+<!-- 検証版の帯：本番（ルート直下）と取り違えないため。色は本番で使っていない紫 -->
+<style>body { padding-top: 76px; }</style>
+<div id="ess-preview-band" style="position:fixed;top:0;left:0;right:0;z-index:1000;box-shadow:0 2px 6px rgba(0,0,0,0.2);background:#5b21b6;color:#fff;font-size:14px;font-weight:700;padding:8px 16px;display:flex;align-items:center;gap:12px;flex-wrap:wrap;">
+  <span>検証版（/preview/）— 本番はルート直下</span>
+  <span id="ess-asof-label" style="display:none;background:#fff;color:#5b21b6;border-radius:6px;padding:2px 8px;"></span>
+  <span id="ess-drive-status" style="font-weight:400;"></span>
+  <button type="button" id="ess-login-btn" style="display:none;font-size:13px;font-weight:700;color:#5b21b6;background:#fff;border:none;border-radius:6px;padding:4px 12px;cursor:pointer;">Googleにログイン</button>
+</div>
 <div class="container">
 
   <div class="app-header">
     <div class="app-logo">Amazon FBM ＋ 楽天市場 出荷オペレーション</div>
     <div class="app-title">EC出荷オペレーションツール</div>
     <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-top:10px;">
-      <div class="security-badge">🔒 データはブラウザ内のみで処理。外部サーバーへの送信はありません。</div>
-      <a href="./manual.html" target="_blank" style="font-size:13px;font-weight:700;color:#fff;background:#e77a1a;border-radius:8px;padding:5px 14px;text-decoration:none;letter-spacing:0.03em;">📖 使い方マニュアル</a>
+      <div class="security-badge">🔒 データはブラウザ内で処理。検証版は入力・出力ファイルをご自身の Google ドライブ（EC出荷記録）にだけ保存します。</div>
+      <a id="manual-link" target="_blank" style="font-size:13px;font-weight:700;color:#fff;background:#e77a1a;border-radius:8px;padding:5px 14px;text-decoration:none;letter-spacing:0.03em;">📖 使い方マニュアル</a>
+      <script>document.getElementById('manual-link').href = ASSET_BASE + 'manual.html';</script>
     </div>
   </div>
 
@@ -433,7 +454,7 @@
       <div class="dropzone drop-red" id="r-ship-dropzone" style="margin-bottom:14px;">
         <div class="dropzone-icon">🚚</div>
         <div class="dropzone-text" id="r-ship-dropzone-text">発送完了報告用DLデータをドロップ<br>またはクリックして選択</div>
-        <div class="dropzone-hint">RMSのデータダウンロード画面で、出力テンプレートを「発送完了報告用」に切り替えて取得してください<br>お荷物伝票番号が入っている注文＝送り状発行済みとして、ピッキング・B2出力から除外します</div>
+        <div class="dropzone-hint">RMSのデータダウンロード画面で、出力テンプレートを「発送完了報告用」に切り替えて取得してください<br>お荷物伝票番号が入っている注文（発送完了報告済み）は除外します。B2で発行しただけの注文は、Drive の記録との照合（A）で除外します</div>
       </div>
       <input type="file" id="r-ship-fileInput" accept=".csv" style="display:none">
       <div class="results" id="r-results"></div>
@@ -441,6 +462,7 @@
     </div>
     <div id="s1-convert-note"></div>
     <button class="btn-primary btn-orange" id="s1-convertBtn" disabled>B2取込CSVを作る</button>
+    <div class="results" id="s1-drive-band"></div>
     <div class="results" id="s1-results"></div>
     <hr class="divider">
     <div class="section-label">出力ファイル</div>
@@ -478,6 +500,7 @@
     </div>
     <input type="file" id="s2-fileInput" accept=".csv,.txt" multiple style="display:none">
     <button class="btn-primary btn-blue" id="s2-convertBtn" disabled>出荷通知ファイルを作る</button>
+    <div class="results" id="s2-drive-band"></div>
     <div class="results" id="s2-results"></div>
     <hr class="divider">
     <div class="section-label">出力ファイル</div>
@@ -503,7 +526,7 @@
       <a href="https://docs.google.com/forms/d/e/1FAIpQLSdeymUyCmegcPe6v2r4eOmVLpl-8I2j2rjXoO_uYbWxo1DYMQ/viewform" target="_blank">お問い合わせフォーム</a>
     </div>
     <div style="font-size:11px;color:#bbb;margin-bottom:10px;">© 2026 ec-tools-jp / <a href="https://github.com/kaztkyjp-2026/ec-shipping-sanriku/blob/main/LICENSE" target="_blank" style="color:#bbb;">MIT License</a></div>
-    <div style="font-size:11px;color:#bbb;">Build: 2026-10-11 4f0fe0f</div>
+    <div id="build-line" style="font-size:11px;color:#bbb;">Build: 2026-10-18 0000000 PREVIEW</div>
     <details>
       <summary>免責事項</summary>
       <div class="disclaimer-text">
@@ -1849,6 +1872,616 @@ document.getElementById('save-settings-btn').addEventListener('click', () => {
 });
 
 // ============================================================
+// ==== ESS：Drive保管（01・02・03）＋ A（重複発行の照合） — BEGIN ====
+// 入力・出力ファイルをそのままのバイト列で Google ドライブ（EC出荷記録/作業日/01〜03）へ保存し、
+// B2取込CSVを出す前に、直近7日の 02（B2用CSV）・03（発行済データ）と注文番号を照合する。
+// Drive を呼ぶ部分はすべて EssStore（ready／listHistory／save）の裏に置く。
+// フォルダは名前ではなく appProperties で探す。フォルダIDは localStorage に覚えさせない。
+// ============================================================
+
+// ---- テスト用の日付差し替え：localhost / 127.0.0.1 のときだけ ?asof=YYYYMMDD が効く ----
+const ESS_IS_LOCAL = ['localhost', '127.0.0.1'].includes(location.hostname);
+const ESS_ASOF = (() => {
+  if (!ESS_IS_LOCAL) return null;
+  const m = /^(\d{4})(\d{2})(\d{2})$/.exec(new URLSearchParams(location.search).get('asof') || '');
+  return m ? { y: +m[1], m: +m[2], d: +m[3], raw: m[0] } : null;
+})();
+
+// 楽天の出荷対象判定に渡す today・出荷予定日の初期値。asof 有効時はその日付（時刻は現在時刻）。
+function essToday() {
+  const now = new Date();
+  if (!ESS_ASOF) return now;
+  return new Date(ESS_ASOF.y, ESS_ASOF.m - 1, ESS_ASOF.d, now.getHours(), now.getMinutes(), now.getSeconds());
+}
+
+// 作業日（保存した時点の JST の日付）とファイル名用の時刻。asof 有効時は日付だけ差し替える。
+//   { date:'YYYY-MM-DD', ymd:'YYYYMMDD', hms:'HHMMSS' }
+function essWorkStamp() {
+  const f = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Tokyo', year: 'numeric', month: '2-digit',
+    day: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false });
+  const o = {}; for (const p of f.formatToParts(new Date())) o[p.type] = p.value;
+  const ymd = ESS_ASOF ? ESS_ASOF.raw : `${o.year}${o.month}${o.day}`;
+  const hms = `${o.hour === '24' ? '00' : o.hour}${o.minute}${o.second}`;
+  return { ymd, hms, date: `${ymd.slice(0, 4)}-${ymd.slice(4, 6)}-${ymd.slice(6, 8)}` };
+}
+
+// 'YYYY-MM-DD' を n 日ずらす（暦日。TZ非依存）
+function essAddDays(date, n) {
+  const [y, m, d] = date.split('-').map(Number);
+  return new Date(Date.UTC(y, m - 1, d + n)).toISOString().slice(0, 10);
+}
+
+// 照合期間：作業日を含む直近7日（作業日−6日〜作業日）。
+// 参考表示：その直前の7日（作業日−13日〜作業日−7日）＝照合期間外。除外はしない。
+const ESS_WINDOW_DAYS = 7;
+const ESS_REF_DAYS = 7;
+
+// ---- ハッシュ ----
+async function essSha256Hex(bytes) {
+  const h = await crypto.subtle.digest('SHA-256', bytes);
+  return Array.from(new Uint8Array(h), b => b.toString(16).padStart(2, '0')).join('');
+}
+// MD5（Drive の md5Checksum と照らして保存を検証するため。WebCrypto に無いので自前）
+function essMd5Hex(bytes) {
+  const S = [7, 12, 17, 22, 5, 9, 14, 20, 4, 11, 16, 23, 6, 10, 15, 21];
+  const K = new Uint32Array(64);
+  for (let i = 0; i < 64; i++) K[i] = Math.floor(Math.abs(Math.sin(i + 1)) * 4294967296) >>> 0;
+  const len = bytes.length, nBlk = ((len + 8) >>> 6) + 1;
+  const buf = new Uint8Array(nBlk * 64); buf.set(bytes); buf[len] = 0x80;
+  const dv = new DataView(buf.buffer);
+  dv.setUint32(nBlk * 64 - 8, (len * 8) >>> 0, true);
+  dv.setUint32(nBlk * 64 - 4, Math.floor(len / 0x20000000), true);
+  let a0 = 0x67452301, b0 = 0xefcdab89, c0 = 0x98badcfe, d0 = 0x10325476;
+  for (let o = 0; o < buf.length; o += 64) {
+    let A = a0, B = b0, C = c0, D = d0;
+    for (let i = 0; i < 64; i++) {
+      let F, g;
+      if (i < 16)      { F = (B & C) | (~B & D); g = i; }
+      else if (i < 32) { F = (D & B) | (~D & C); g = (5 * i + 1) % 16; }
+      else if (i < 48) { F = B ^ C ^ D;          g = (3 * i + 5) % 16; }
+      else             { F = C ^ (B | ~D);       g = (7 * i) % 16; }
+      F = (F + A + K[i] + dv.getUint32(o + g * 4, true)) >>> 0;
+      const s = S[(i >> 4) * 4 + (i % 4)];
+      A = D; D = C; C = B; B = (B + ((F << s) | (F >>> (32 - s)))) >>> 0;
+    }
+    a0 = (a0 + A) >>> 0; b0 = (b0 + B) >>> 0; c0 = (c0 + C) >>> 0; d0 = (d0 + D) >>> 0;
+  }
+  return [a0, b0, c0, d0].map(v => [0, 8, 16, 24].map(s => ((v >>> s) & 255).toString(16).padStart(2, '0')).join('')).join('');
+}
+
+// ---- 保存するファイルの種類 ----
+const ESS_KINDS = {
+  in_amazon:        { sub: '01_入力',         label: '01', suffix: s => `Amazon未出荷_${s}.txt`, mime: 'text/plain' },
+  in_rakuten_order: { sub: '01_入力',         label: '01', suffix: () => '楽天_通常購入データ.csv', mime: 'text/csv' },
+  in_rakuten_dl:    { sub: '01_入力',         label: '01', suffix: () => '楽天_発送完了報告用DL.csv', mime: 'text/csv' },
+  b2csv:            { sub: '02_B2用CSV',      label: '02', suffix: (s, o) => o.nomatch ? 'B2用CSV_照合なし.csv' : 'B2用CSV.csv', mime: 'text/csv' },
+  issued:           { sub: '03_発行済データ', label: '03', suffix: () => '発行済データ.csv', mime: 'text/csv' },
+};
+
+// 店舗名（設定の依頼主名）→ ファイル名・一覧に出す短い名前
+function essStoreShort(name) {
+  const n = String(name || '');
+  if (n.includes('萬福堂')) return '萬福堂';
+  if (n.includes('健康プラス')) return '健プラ';
+  return toSafeFilename(n) || '店舗不明';
+}
+
+function essBuildLabel() {
+  const el = document.getElementById('build-line');
+  return el ? el.textContent.replace(/^Build:\s*/, '').trim() : '';
+}
+
+// appProperties は キー＋値 で124バイトまで。元のファイル名など長くなりうる値は UTF-8 で切り詰める。
+function essPropValue(key, value) {
+  const enc = new TextEncoder();
+  let v = String(value == null ? '' : value);
+  while (enc.encode(key + v).length > 124) v = v.slice(0, -1);
+  return v;
+}
+
+// ============================================================
+// Google 認証（GIS トークンモデル・drive.file のみ）。トークンはメモリにだけ置く。
+// ============================================================
+const essAuth = { token: null, expiresAt: 0, client: null };
+function essTokenValid() { return !!essAuth.token && Date.now() < essAuth.expiresAt - 60000; }
+function essRequestToken() {
+  return new Promise((resolve, reject) => {
+    if (!ESS_OAUTH_CLIENT_ID) return reject(new Error('クライアントID未設定'));
+    if (!(window.google && google.accounts && google.accounts.oauth2)) {
+      return reject(new Error('Googleのログイン部品を読み込めません（通信を確認してください）'));
+    }
+    let done = false;
+    const finish = (fn, v) => { if (!done) { done = true; clearTimeout(timer); fn(v); } };
+    const timer = setTimeout(() => finish(reject, new Error('ログインが完了しませんでした')), 120000);
+    if (!essAuth.client) {
+      essAuth.client = google.accounts.oauth2.initTokenClient({
+        client_id: ESS_OAUTH_CLIENT_ID,
+        scope: 'https://www.googleapis.com/auth/drive.file',
+        callback: () => {},
+      });
+    }
+    essAuth.client.callback = resp => {
+      if (resp && resp.access_token) {
+        essAuth.token = resp.access_token;
+        essAuth.expiresAt = Date.now() + (Number(resp.expires_in) || 3600) * 1000;
+        essRenderDriveStatus();
+        finish(resolve);
+      } else {
+        finish(reject, new Error('ログインできませんでした' + (resp && resp.error ? `（${resp.error}）` : '')));
+      }
+    };
+    essAuth.client.error_callback = err =>
+      finish(reject, new Error('ログインできませんでした' + (err && err.type ? `（${err.type}）` : '')));
+    essAuth.client.requestAccessToken({ prompt: '' });
+  });
+}
+
+// ============================================================
+// EssStore（Drive 実装）
+// ============================================================
+const ESS_DRIVE  = 'https://www.googleapis.com/drive/v3';
+const ESS_UPLOAD = 'https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id,name,md5Checksum';
+const ESS_FOLDER_MIME = 'application/vnd.google-apps.folder';
+
+async function essApi(url, opts = {}) {
+  const res = await fetch(url, { ...opts, headers: { ...(opts.headers || {}), Authorization: `Bearer ${essAuth.token}` } });
+  if (res.status === 401) {
+    essAuth.token = null; essRenderDriveStatus();
+    throw new Error('ログインの期限切れ（帯の「Googleにログイン」からもう一度ログインしてください）');
+  }
+  if (!res.ok) {
+    let msg = '';
+    try { msg = (await res.json()).error.message; } catch (_) {}
+    throw new Error(`Drive API ${res.status}${msg ? '：' + msg : ''}`);
+  }
+  return res;
+}
+const essProp = (k, v) => `appProperties has { key='${k}' and value='${String(v).replace(/\\/g, '\\\\').replace(/'/g, "\\'")}' }`;
+async function essListFiles(q, fields = 'files(id,name,appProperties,md5Checksum)') {
+  const out = []; let pageToken = '';
+  do {
+    const u = new URL(ESS_DRIVE + '/files');
+    u.searchParams.set('q', q);
+    u.searchParams.set('fields', 'nextPageToken,' + fields);
+    u.searchParams.set('pageSize', '1000');
+    u.searchParams.set('spaces', 'drive');
+    if (pageToken) u.searchParams.set('pageToken', pageToken);
+    const j = await (await essApi(u)).json();
+    out.push(...(j.files || []));
+    pageToken = j.nextPageToken || '';
+  } while (pageToken);
+  return out;
+}
+// フォルダIDはこのページを開いている間だけメモリに持つ（localStorage には入れない）
+const essFolderCache = new Map();
+async function essEnsureFolder(cacheKey, conds, name, parentId, props) {
+  if (essFolderCache.has(cacheKey)) return essFolderCache.get(cacheKey);
+  const found = await essListFiles([...conds, `mimeType='${ESS_FOLDER_MIME}'`, 'trashed=false'].join(' and '), 'files(id)');
+  let id;
+  if (found.length) id = found[0].id;
+  else {
+    const body = { name, mimeType: ESS_FOLDER_MIME, appProperties: props };
+    if (parentId) body.parents = [parentId];
+    const res = await essApi(ESS_DRIVE + '/files?fields=id', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+    id = (await res.json()).id;
+  }
+  essFolderCache.set(cacheKey, id);
+  return id;
+}
+// 保存先（EC出荷記録/作業日/サブフォルダ）を用意する。その種別を最初に保存するときに作る。
+async function essEnsureSubFolder(date, sub) {
+  const rootId = await essEnsureFolder('root', [essProp('ess_kind', 'root')], 'EC出荷記録', null, { ess_kind: 'root' });
+  const dayId = await essEnsureFolder(`day:${date}`,
+    [`'${rootId}' in parents`, essProp('ess_kind', 'day'), essProp('ess_date', date)],
+    date, rootId, { ess_kind: 'day', ess_date: date });
+  return essEnsureFolder(`sub:${date}:${sub}`,
+    [`'${dayId}' in parents`, essProp('ess_kind', 'sub'), essProp('ess_sub', sub)],
+    sub, dayId, { ess_kind: 'sub', ess_sub: sub, ess_date: date });
+}
+
+const EssDriveStore = {
+  async ready() {
+    if (!ESS_OAUTH_CLIENT_ID) throw new Error('Drive 未設定（クライアントIDが空です）');
+    if (essTokenValid()) return;
+    try { await essRequestToken(); }
+    catch (e) { throw new Error(`未ログイン（${e.message}）。帯の「Googleにログイン」を押してください`); }
+  },
+  // 期間内の 02・03 を返す：[{ fileId, kind, date, name, bytes }]
+  async listHistory(fromDate, toDate) {
+    await this.ready();
+    const out = [];
+    for (const kind of ['b2csv', 'issued']) {
+      const files = await essListFiles([essProp('ess_kind', kind), 'trashed=false'].join(' and '));
+      for (const f of files) {
+        const date = (f.appProperties || {}).ess_date || '';
+        if (date < fromDate || date > toDate) continue;
+        const res = await essApi(`${ESS_DRIVE}/files/${encodeURIComponent(f.id)}?alt=media`);
+        out.push({ fileId: f.id, kind, date, name: f.name, bytes: new Uint8Array(await res.arrayBuffer()) });
+      }
+    }
+    return out;
+  },
+  // meta: { name, date, mimeType, props, sha256, md5 }。戻り値 { fileId, name, skipped }
+  async save(kind, store, bytes, origName, meta) {
+    await this.ready();
+    const subId = await essEnsureSubFolder(meta.date, ESS_KINDS[kind].sub);
+    const dayId = essFolderCache.get(`day:${meta.date}`);
+    // 同じ日付フォルダに同じ内容（sha256）があれば保存を省く
+    const dup = await essListFiles([essProp('ess_sha256', meta.sha256), essProp('ess_date', meta.date), 'trashed=false'].join(' and '),
+      'files(id,name,parents)');
+    const same = dup.find(f => (f.parents || []).some(p => p === subId || p === dayId)) || null;
+    if (same) return { fileId: same.id, name: same.name, skipped: true };
+    const boundary = 'ess_' + Math.random().toString(36).slice(2);
+    const head = JSON.stringify({ name: meta.name, parents: [subId], mimeType: meta.mimeType, appProperties: meta.props });
+    const body = new Blob([
+      `--${boundary}\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n${head}\r\n`,
+      `--${boundary}\r\nContent-Type: ${meta.mimeType}\r\n\r\n`, bytes, `\r\n--${boundary}--`]);
+    const res = await essApi(ESS_UPLOAD, {
+      method: 'POST', headers: { 'Content-Type': `multipart/related; boundary=${boundary}` }, body });
+    const j = await res.json();
+    if (j.md5Checksum !== meta.md5) {
+      // 壊れたファイルを照合元に残さない
+      try { await essApi(`${ESS_DRIVE}/files/${encodeURIComponent(j.id)}`, { method: 'DELETE' }); } catch (_) {}
+      throw new Error(`保存失敗（MD5不一致：Drive ${j.md5Checksum || '（なし）'} ／ ローカル ${meta.md5}）`);
+    }
+    return { fileId: j.id, name: j.name, skipped: false };
+  },
+};
+
+// テスト：localhost で ?test=1 のときだけ window.__ESS_TEST_STORE__ を使う（本番のホスト名では無視）
+function essStore() {
+  if (ESS_IS_LOCAL && new URLSearchParams(location.search).get('test') === '1' && window.__ESS_TEST_STORE__) {
+    return window.__ESS_TEST_STORE__;
+  }
+  return EssDriveStore;
+}
+function essIsTestStore() { return essStore() !== EssDriveStore; }
+
+// ============================================================
+// 保存（共通）。保存は1本ずつ順に行う（同じ日付フォルダを二重に作らないため）。
+// ============================================================
+let essSaveChain = Promise.resolve();
+const essSessionB2FileIds = new Set();   // このページで保存した 02 の fileId（押し直しの照合から外す）
+
+// 戻り値 { ok, fileId, name, skipped, error, unset }
+function essSaveFile(kind, store, bytes, origName, opts = {}) {
+  const job = async () => {
+    const k = ESS_KINDS[kind];
+    const st = opts.stamp || essWorkStamp();
+    const name = `${st.ymd}_${st.hms}_${k.suffix(store, opts)}`;
+    const sha256 = await essSha256Hex(bytes);
+    const props = {
+      ess_kind: kind, ess_store: essPropValue('ess_store', store), ess_orig: essPropValue('ess_orig', origName),
+      ess_sha256: sha256, ess_build: essPropValue('ess_build', essBuildLabel()), ess_date: st.date,
+    };
+    if (opts.nomatch) props.ess_nomatch = '1';
+    const meta = { name, date: st.date, mimeType: k.mime, props, sha256, md5: essMd5Hex(bytes) };
+    try {
+      const r = await essStore().save(kind, store, bytes, origName, meta);
+      if (kind === 'b2csv' && !r.skipped) essSessionB2FileIds.add(r.fileId);
+      return { ok: true, ...r };
+    } catch (e) {
+      return { ok: false, error: e.message, unset: !essIsTestStore() && !ESS_OAUTH_CLIENT_ID };
+    }
+  };
+  const p = essSaveChain.then(job, job);
+  essSaveChain = p.catch(() => {});
+  return p;
+}
+
+// ============================================================
+// Drive保存の結果の帯（STEP1・STEP2 それぞれの結果欄の先頭）
+// ============================================================
+const essBands = { s1: new Map(), s2: new Map() };
+function essBandSet(step, key, entry) { essBands[step].set(key, entry); essRenderBand(step); }
+function essRenderBand(step) {
+  const el = document.getElementById(`${step}-drive-band`);
+  if (!el) return;
+  el.innerHTML = '';
+  for (const [, e] of essBands[step]) {
+    const item = document.createElement('div');
+    item.className = 'result-item' + (e.status === 'ok' ? ' success' : e.status === 'fail' ? ' error' : '');
+    if (e.status === 'pending' || e.status === 'info') {
+      item.style.cssText = 'display:block;background:#f4f4f5;border:1px solid #d4d4d8;color:#3f3f46;';
+    }
+    item.classList.add('ess-band-' + e.status);
+    const span = document.createElement('span');
+    span.textContent = e.text;
+    item.appendChild(span);
+    if (e.retry) {
+      const b = document.createElement('button');
+      b.type = 'button'; b.className = 'btn-aux ess-retry'; b.style.marginLeft = '10px';
+      b.textContent = '再試行';
+      b.addEventListener('click', () => e.retry());
+      item.appendChild(b);
+    }
+    el.appendChild(item);
+  }
+}
+
+// 保存して帯に結果を出す。failText は失敗時の見出し（02 は「明日の照合に使えません」）。
+function essSaveAndReport(step, kind, store, bytes, origName, opts = {}) {
+  const key = opts.key || `${kind}:${store}:${origName}`;
+  const label = ESS_KINDS[kind].label;
+  const run = async () => {
+    essBandSet(step, key, { status: 'pending', text: `… ${ESS_KINDS[kind].sub} に保存中：${origName}` });
+    const r = await essSaveFile(kind, store, bytes, origName, opts);
+    if (r.ok) {
+      essBandSet(step, key, { status: 'ok', text: r.skipped
+        ? `✓ ${ESS_KINDS[kind].sub}：同じ内容が保存済みのため省略（${origName}）`
+        : `✓ ${ESS_KINDS[kind].sub} に保存：${r.name}` });
+    } else if (r.unset) {
+      essBandSet(step, key, { status: 'info', text: `Drive 未設定のため ${ESS_KINDS[kind].sub} に保存していません（${origName}）` });
+    } else {
+      essBandSet(step, key, { status: 'fail',
+        text: `${opts.failText || `⚠ ${label}の保存に失敗`}：${r.error}（${origName}）`, retry: run });
+    }
+    if (opts.onDone) opts.onDone(r);
+    return r;
+  };
+  return run();
+}
+
+// ============================================================
+// A：重複発行の照合
+// ============================================================
+// 02・03 のCSV（Shift-JIS）→ データ行（見出し行は除く）
+function essCsvRows(bytes) {
+  return splitCsvRecords(decodeBuffer(bytes)).filter(l => l.trim()).map(parseCsvLine)
+    .filter(r => (r[0] || '').trim() !== B2_HEADER[0]);
+}
+// ファイル名の YYYYMMDD_HHMMSS（Drive の 02 名・b2cloud_ 名の両方）→ '2026/10/15 14:06:45'
+function essStampFromName(name) {
+  const m = /(\d{4})(\d{2})(\d{2})_(\d{2})(\d{2})(\d{2})/.exec(String(name || ''));
+  return m ? `${m[1]}/${m[2]}/${m[3]} ${m[4]}:${m[5]}:${m[6]}` : '';
+}
+// B2行 → 一覧の「店舗」
+function essRowStore(row) {
+  if (RAKUTEN_ORDER_ID_RE.test(row[0])) return '楽天';
+  return essStoreShort(row[24]);
+}
+
+// rows（B2用CSVの行）の注文番号を、作業日を含む直近7日の 02・03 と照らす。
+// 照合元に届かなければ例外（呼び出し側で「照合できません」）。
+// 戻り値 { issued:[{id,store,lastOut,trackings}], exported:[{id,store,lastOut}], ref:[{id,store,lastOut}] }
+async function essCollate(rows, workDate) {
+  const store = essStore();
+  await store.ready();
+  const winFrom = essAddDays(workDate, -(ESS_WINDOW_DAYS - 1));
+  const refFrom = essAddDays(winFrom, -ESS_REF_DAYS);
+  const files = await store.listHistory(refFrom, workDate);
+  if (!Array.isArray(files)) throw new Error('照合元の一覧を取得できません');
+
+  const out02 = new Map(), ref02 = new Map(), issued03 = new Map();
+  const later = (a, b) => (!a || (b && b > a)) ? b : a;
+  for (const f of files) {
+    if (f.kind === 'b2csv' && essSessionB2FileIds.has(f.fileId)) continue;   // このページで出した分（押し直し）
+    const inWin = f.date >= winFrom && f.date <= workDate;
+    const stamp = essStampFromName(f.name);
+    for (const r of essCsvRows(f.bytes)) {
+      const id = (r[0] || '').trim();
+      if (!id) continue;
+      if (f.kind === 'b2csv') {
+        const m = inWin ? out02 : ref02;
+        m.set(id, later(m.get(id), stamp));
+      } else if (f.kind === 'issued' && inWin) {
+        const tr = (r[3] || '').trim();
+        if (!tr) continue;
+        if (!issued03.has(id)) issued03.set(id, new Set());
+        issued03.get(id).add(tr);
+      }
+    }
+  }
+
+  const res = { issued: [], exported: [], ref: [] };
+  const seen = new Set();
+  for (const row of rows) {
+    const id = row[0];
+    if (seen.has(id)) continue;   // 同じ番号の複数行＝複数個口。1つの注文として判定する
+    seen.add(id);
+    const base = { id, store: essRowStore(row), lastOut: out02.get(id) || '' };
+    if (issued03.has(id))   res.issued.push({ ...base, trackings: [...issued03.get(id)] });
+    else if (out02.has(id)) res.exported.push(base);
+    else if (ref02.has(id)) res.ref.push({ ...base, lastOut: ref02.get(id) });
+  }
+  return res;
+}
+
+// B2用CSVのバイト列（本番と同じ組み立て：ヘッダ＋行を CRLF でつなぎ末尾 CRLF・Shift-JIS）
+function essB2Bytes(rows) {
+  const csvText = [toCsvLine(B2_HEADER), ...rows.map(toCsvLine)].join('\r\n') + '\r\n';
+  return toSjisUint8(csvText);
+}
+
+// 赤の一覧から「再出力に含める」に戻した注文番号。作り直しボタンから変換を走らせるときだけ入る。
+let essS1Include = null;
+
+function essResultItem(cls, text) {
+  const el = document.createElement('div');
+  el.className = 'result-item ' + cls; el.style.marginTop = '6px';
+  el.textContent = text;
+  return el;
+}
+
+// 出力済み・発行記録なし（赤）：行ごとの「再出力に含める」＋「全件チェック」＋作り直しボタン
+function essRenderExportedList(container, list, include) {
+  if (!list.length) return;
+  const wrap = document.createElement('div');
+  wrap.id = 's1-ess-exported';
+  wrap.style.marginTop = '6px';
+  const head = document.createElement('div');
+  head.className = 'result-item error';
+  const excludedN = list.filter(x => !include.has(x.id)).length;
+  head.textContent = `⛔ 出力済み・発行記録なし（直近${ESS_WINDOW_DAYS}日にB2用CSVへ出力済みで、発行済データに伝票番号がない）：${list.length}件`
+    + ` — うち ${excludedN}件 をB2取込CSVから除外しました。B2で未発行のまま残っている場合だけ、チェックして作り直してください`;
+  const sec = document.createElement('div');
+  sec.style.marginTop = '8px';
+  sec.innerHTML = `
+    <style>
+      #s1-ess-exported .rw-table { width:100%; border-collapse:collapse; font-size:13px; }
+      #s1-ess-exported .rw-table th, #s1-ess-exported .rw-table td {
+        border-bottom:1px solid #e2e2e2; padding:5px 8px; vertical-align:middle; text-align:left; }
+      #s1-ess-exported .rw-table th { background:#f4f4f4; }
+    </style>
+    <label style="display:inline-flex;align-items:center;gap:6px;font-size:13px;margin-bottom:6px;cursor:pointer;">
+      <input type="checkbox" class="ess-check-all"> 全件チェック
+    </label>
+    <table class="rw-table">
+      <thead><tr><th>再出力に含める</th><th>注文番号</th><th>店舗</th><th>前回出力した日時</th></tr></thead>
+      <tbody>${list.map(x => `<tr>
+        <td><input type="checkbox" class="ess-include" data-id="${esc(x.id)}"${include.has(x.id) ? ' checked' : ''}></td>
+        <td>${esc(x.id)}</td><td>${esc(x.store)}</td><td>${esc(x.lastOut)}</td></tr>`).join('')}</tbody>
+    </table>`;
+  const btn = document.createElement('button');
+  btn.type = 'button';
+  btn.className = 'btn-primary btn-orange';
+  btn.id = 's1-ess-rebuild';
+  btn.style.marginTop = '10px';
+  btn.textContent = 'チェックした注文を含めてB2取込CSVを作り直す';
+  wrap.appendChild(head); wrap.appendChild(sec); wrap.appendChild(btn);
+  container.appendChild(wrap);
+
+  const boxes = () => Array.from(sec.querySelectorAll('.ess-include'));
+  const all = sec.querySelector('.ess-check-all');
+  const sync = () => {
+    const n = boxes().filter(b => b.checked).length;
+    all.checked = n === boxes().length;
+    btn.disabled = n === 0;
+  };
+  all.addEventListener('change', () => { boxes().forEach(b => { b.checked = all.checked; }); sync(); });
+  sec.addEventListener('change', e => { if (e.target.classList.contains('ess-include')) sync(); });
+  btn.addEventListener('click', () => {
+    essS1Include = new Set(boxes().filter(b => b.checked).map(b => b.dataset.id));
+    s1Convert.click();
+  });
+  sync();
+}
+
+// STEP1 の出力（照合 → ダウンロード → 02 に保存）。rows は Amazon分→楽天分の順のB2行。
+async function essB2Output(rows, dateStr) {
+  const include = essS1Include || new Set();
+  essS1Include = null;
+  const work = essWorkStamp();
+
+  let col;
+  try {
+    col = await essCollate(rows, work.date);
+  } catch (e) {
+    // 照合できない：ダウンロードしない。「照合なしで出力」だけを出す。
+    const err = essResultItem('error', `⛔ 照合できません：${e.message}`);
+    err.id = 's1-ess-nocollate';
+    const btn = document.createElement('button');
+    btn.type = 'button'; btn.className = 'btn-aux'; btn.id = 's1-ess-nomatch-btn';
+    btn.style.marginLeft = '10px';
+    btn.textContent = '照合なしで出力';
+    err.appendChild(btn);
+    s1Results.appendChild(err);
+    btn.addEventListener('click', () => {
+      btn.disabled = true;
+      const st = essWorkStamp();
+      const filename = `b2cloud_${dateStr}_${nowStamp().hms}_照合なし.csv`;
+      const bytes = essB2Bytes(rows);
+      downloadBlob(filename, new Blob([bytes], { type: 'text/csv' }));
+      const ok = essResultItem('success', `✓ ${filename}（${rows.length}件）を出力（照合なし）`);
+      ok.id = 's1-ess-done';
+      s1Results.appendChild(ok);
+      s1OutputDone = true;
+      updateS1ConvertLabel();
+      essSaveAndReport('s1', 'b2csv', '', bytes, filename, {
+        stamp: st, nomatch: true, key: `b2csv:${filename}`,
+        failText: '⚠ 02の保存に失敗：明日の照合に使えません' });
+    });
+    return;
+  }
+
+  const exclude = new Set(col.issued.map(x => x.id));
+  for (const x of col.exported) if (!include.has(x.id)) exclude.add(x.id);
+  const outRows = rows.filter(r => !exclude.has(r[0]));
+  const nIssued = col.issued.length;
+  const nExported = col.exported.filter(x => !include.has(x.id)).length;
+
+  renderRakutenWarningSection(s1Results, 's1-ess-issued',
+    `🟡 発行済み（直近${ESS_WINDOW_DAYS}日の発行済データに伝票番号あり）のためB2取込CSVから除外：${nIssued}件 — B2では発行しないでください。出荷通知だけ送ってください`,
+    ['注文番号', '店舗', '前回出力した日時', '伝票番号'],
+    col.issued.map(x => [x.id, x.store, x.lastOut, x.trackings.join(' ／ ')]), 'warn');
+  essRenderExportedList(s1Results, col.exported, include);
+  renderRakutenWarningSection(s1Results, 's1-ess-ref',
+    `8日以上前にB2へ出力済み（照合期間外）：${col.ref.length}件 — 除外していません（照合期間${ESS_WINDOW_DAYS}日の確認用）`,
+    ['注文番号', '店舗', '前回出力した日時'],
+    col.ref.map(x => [x.id, x.store, x.lastOut]), 'warn');
+
+  if (!outRows.length) {
+    const el = essResultItem('error', `⚠ 照合の結果、B2取込CSVに出力する注文がありません（照合で除外 ${exclude.size}件：発行済み ${nIssued}／発行記録なし ${nExported}）`);
+    el.id = 's1-ess-done';
+    s1Results.appendChild(el);
+    return;
+  }
+
+  const filename = `b2cloud_${dateStr}_${nowStamp().hms}.csv`;
+  const bytes = essB2Bytes(outRows);
+  const head = `✓ ${filename}（${outRows.length}件）を出力（照合で除外 ${nIssued + nExported}件：発行済み ${nIssued}／発行記録なし ${nExported}）`;
+  let ok;
+  try {
+    downloadBlob(filename, new Blob([bytes], { type: 'text/csv' }));
+    ok = essResultItem('success', `${head} → 02_B2用CSV に保存中…`);
+    ok.id = 's1-ess-done';
+    s1Results.appendChild(ok);
+    s1OutputDone = true;
+    updateS1ConvertLabel();
+  } catch (e) {
+    s1Results.appendChild(essResultItem('error', `⚠ 保存失敗：${e.message}`));
+    return;
+  }
+  // 照合はできた：02 の保存に失敗しても出荷は止めない（帯に赤と再試行）
+  await essSaveAndReport('s1', 'b2csv', '', bytes, filename, {
+    stamp: work, key: `b2csv:${filename}`,
+    failText: '⚠ 02の保存に失敗：明日の照合に使えません',
+    onDone: r => {
+      if (!ok.isConnected) return;
+      ok.textContent = r.ok ? `${head} → 02_B2用CSV に保存` : `${head}（02_B2用CSV への保存に失敗。上の赤い帯を確認してください）`;
+    } });
+}
+
+// 帯（ページ上部）の Drive の状態表示
+function essRenderDriveStatus() {
+  const st = document.getElementById('ess-drive-status');
+  const btn = document.getElementById('ess-login-btn');
+  if (!st || !btn) return;
+  btn.style.display = 'none';
+  if (essIsTestStore())          st.textContent = 'Drive：テスト用ストア';
+  else if (!ESS_OAUTH_CLIENT_ID) st.textContent = 'Drive：未設定（照合できません）';
+  else if (essTokenValid())      st.textContent = 'Drive：ログイン済み';
+  else { st.textContent = 'Drive：未ログイン'; btn.style.display = ''; }
+}
+function essInitBand() {
+  const lab = document.getElementById('ess-asof-label');
+  if (ESS_ASOF && lab) { lab.textContent = `asof=${ESS_ASOF.raw}（テスト）`; lab.style.display = ''; }
+  const btn = document.getElementById('ess-login-btn');
+  if (btn) btn.addEventListener('click', () => {
+    essRequestToken().catch(e => {
+      const st = document.getElementById('ess-drive-status');
+      if (st) st.textContent = `Drive：${e.message}`;
+    });
+  });
+  essRenderDriveStatus();
+}
+
+// STEP2：読み込んだファイルが発行済データ（見出し お客様管理番号…伝票番号）なら 03 に保存
+function essSaveIssuedIfValid(name, buffer) {
+  let ok = false;
+  try {
+    const first = splitCsvRecords(decodeBuffer(buffer)).find(l => l.trim()) || '';
+    const head = parseCsvLine(first).map(h => h.trim());
+    ok = head[0] === B2_HEADER[0] && head.includes('伝票番号');
+  } catch (_) {}
+  if (!ok) {
+    essBandSet('s2', `issued:${name}`, { status: 'info', text: `発行済データの見出しではないため 03 に保存していません（${name}）` });
+    return;
+  }
+  essSaveAndReport('s2', 'issued', '', new Uint8Array(buffer), name);
+}
+// ==== ESS — END ====// ============================================================
 // STEP1
 // ============================================================
 const s1ShipDate = document.getElementById('s1-shipDate');
@@ -1882,7 +2515,7 @@ let skuImageMap = {};              // { sku: url }
 
 async function loadSkuImages() {
   try {
-    const res = await fetch('sku-images.json', { cache: 'no-store' });
+    const res = await fetch(ASSET_BASE + 'sku-images.json', { cache: 'no-store' });
     if (res.ok) {
       const data = await res.json();
       if (data && typeof data === 'object' && !Array.isArray(data)) skuImageMap = data;
@@ -1972,6 +2605,7 @@ function s1LoadFile(file, key, dz) {
   const reader = new FileReader();
   reader.onload = e => {
     s1Buffers[key] = e.target.result;
+    essSaveAndReport('s1', 'in_amazon', essStoreShort(key), new Uint8Array(e.target.result), file.name);
     dz.classList.add('has-file');
     dz.querySelector('.dropzone-text').textContent = `✓ ${file.name}`;
     updateS1ConvertEnabled();
@@ -2146,7 +2780,7 @@ s1Convert.addEventListener('click', async () => {
       const { active: rActive } = splitRakutenShipped(s1RakutenParsed.groups, s1RakutenShipped);
       // 出荷対象判定（classifyRakutenOrder）で 'scheduled'（お届け日が本日+4日以降）は
       // orders から外れる＝B2 CSVにも入らない。除外分は下の警告ブロックで明示する。
-      const rData  = buildRakutenPickingData(rActive, new Date());
+      const rData  = buildRakutenPickingData(rActive, essToday());
       if (rData.orders.length) {
         rakutenPicking = { total: rData.total, orders: rData.orders,
                            multiCount: rData.multiCount,   // 商品別集計の集約行に出す件数
@@ -2256,23 +2890,8 @@ s1Convert.addEventListener('click', async () => {
   }
 
   // 出力順：Amazon分 → 楽天市場分（Amazon分の行順・行内容は従来と完全一致のまま末尾に追加）
-  const csvText = [toCsvLine(B2_HEADER), ...amazonRows.map(toCsvLine), ...rakutenB2Rows.map(toCsvLine)].join('\r\n') + '\r\n';
-  const filename = `b2cloud_${dateStr}_${nowStamp().hms}.csv`;
-
-  // 単純ダウンロード（フォルダ選択ダイアログなし）
-  try {
-    downloadBlob(filename, new Blob([toSjisUint8(csvText)], { type: 'text/csv' }));
-    const ok = document.createElement('div');
-    ok.className = 'result-item success'; ok.style.marginTop = '6px';
-    ok.textContent = `✓ ${filename}（${totalCount + rakutenB2Rows.length}件）をダウンロードしました`;
-    s1Results.appendChild(ok);
-    s1OutputDone = true;
-    updateS1ConvertLabel();
-  } catch(e) {
-    const err = document.createElement('div');
-    err.className = 'result-item error'; err.style.marginTop = '6px';
-    err.textContent = `⚠ 保存失敗：${e.message}`; s1Results.appendChild(err);
-  }
+  // ダウンロードの前に、直近7日の Drive の記録（02・03）と照合する（A）。
+  await essB2Output([...amazonRows, ...rakutenB2Rows], dateStr);
 });
 
 // ============================================================
@@ -2300,6 +2919,7 @@ function s2HandleFiles(files) {
     const reader = new FileReader();
     reader.onload = e => {
       s2Files.push({ name: file.name, buffer: e.target.result });
+      essSaveIssuedIfValid(file.name, e.target.result);
       loaded++;
       if (loaded === files.length) {
         s2DzText.innerHTML = `✓ ${s2Files.length}ファイル選択済み`;
@@ -2351,7 +2971,7 @@ s2Convert.addEventListener('click', async () => {
         + 'STEP 1 で楽天市場のCSVを読み込んでください（Amazon分の出力は続行します）';
       s2Results.appendChild(need);
     } else {
-      const rep = buildRakutenShippingReport(allRakuten, s1RakutenParsed.groups, new Date());
+      const rep = buildRakutenShippingReport(allRakuten, s1RakutenParsed.groups, essToday());
       const item = document.createElement('div');
       item.className = rep.matchedCount ? 'result-item success' : 'result-item error';
       item.textContent = rep.matchedCount
@@ -2877,7 +3497,7 @@ function parseRakutenCsv(csvText) {
 }
 
 // 出荷対象判定：お届け日指定（desiredDeliveryDate）と本日（today）から注文を区分する。
-// today は Date（呼び出し側が new Date() を渡す。テストで日付を差し替えられるよう引数化）。
+// today は Date（呼び出し側が essToday() を渡す。?asof= で日付を差し替えられるよう引数化）。
 // 戻り値: { category: 'today'|'delayed'|'scheduled', isLastChance }
 //   'today'     … 本日出荷対象（指定なし／お届け日が本日〜本日+3日）
 //                 お届け日 = 本日+3日 のときは isLastChance=true（本日が最終出荷日）
@@ -2907,9 +3527,10 @@ function classifyRakutenOrder(order, today) {
 // 発送完了報告アップロードCSV（buildRakutenShippingReport が生成）
 //   … ツールがRMSへ上げる出力CSV。6列構成は同じだが向きが逆の別物。混同しないこと。
 //
-// お荷物伝票番号は発送完了報告の操作を待たず、B2クラウドで送り状を発行・登録した時点で入る
-// （2026-08-07 実機確認：ステータス「発送待ち」の9件中8件に伝票番号が入っていた）。
-// そのため「伝票番号が入っている＝既に送り状発行済み＝出荷済み」と判定できる。
+// RMSのDLデータにお荷物伝票番号が入るのは、発送完了報告を上げた後（または当社B2アカウント外で
+// 発行された場合）。B2で送り状を発行した時点では入らない（2026-10-18 確認）。
+// そのため伝票番号ありの注文は「発送完了報告済み」として除外する。B2で発行しただけでまだ
+// 報告していない注文はここでは除外できず、Drive の記録との照合（A：essCollate）で除外する。
 // 値そのものは使わず、空か否かだけを見る（ハイフン有無などの表記ゆれは判定に影響しない）。
 // ============================================================
 const RAKUTEN_SHIP_DL_HEADER = ['注文番号', '送付先ID', '発送明細ID', 'お荷物伝票番号', '配送会社', '発送日'];
@@ -3430,7 +4051,7 @@ function renderRakutenResults(parsed) {
 
   // 送り状発行済み（発送完了報告用DLデータに伝票番号あり）はピッキング・B2から除外する。
   const { active, shipped } = splitRakutenShipped(parsed.groups, s1RakutenShipped);
-  const data = buildRakutenPickingData(active, new Date());
+  const data = buildRakutenPickingData(active, essToday());
   const lineCount = active.reduce((a, g) => a + g.lines.length, 0);
   // 注文の代表商品名（警告テーブル用）：先頭明細＋点数
   const firstName = o => (o.lines[0] ? o.lines[0].name : '') + (o.lines.length > 1 ? ` 他${o.lines.length - 1}点` : '');
@@ -3649,6 +4270,7 @@ function rLoadFile(file) {
     try {
       s1RakutenBuffer = e.target.result;
       s1RakutenParsed = parseRakutenCsv(decodeBuffer(s1RakutenBuffer));
+      essSaveAndReport('s1', 'in_rakuten_order', '楽天', new Uint8Array(s1RakutenBuffer), file.name);
       rRefreshView();
       rDropzone.classList.add('has-file');
       rDzText.textContent = `✓ ${file.name}`;
@@ -3681,6 +4303,7 @@ function rShipLoadFile(file) {
       s1RakutenShipBuffer = e.target.result;
       const dl = parseRakutenShipDl(decodeBuffer(s1RakutenShipBuffer));
       s1RakutenShipped = dl.shippedMap;
+      essSaveAndReport('s1', 'in_rakuten_dl', '楽天', new Uint8Array(s1RakutenShipBuffer), file.name);
       rRefreshView();
       rShipDropzone.classList.add('has-file');
       rShipDzText.textContent = `✓ ${file.name}`;
@@ -3793,7 +4416,7 @@ function buildRakutenShippingReport(b2RakutenRows, rakutenGroups, today) {
   // buildRakutenPickingData ＋ rakutenInvoiceCode で同じ絞り込みを掛ける。
   const notShipped = [];
   if (rakutenGroups && rakutenGroups.length) {
-    for (const o of buildRakutenPickingData(rakutenGroups, today || new Date()).orders) {
+    for (const o of buildRakutenPickingData(rakutenGroups, today || essToday()).orders) {
       if (rakutenInvoiceCode(o) === '') continue;
       if (!b2ByOrder.has(o.orderNumber)) notShipped.push({ orderNumber: o.orderNumber });
     }
@@ -3845,9 +4468,10 @@ function renderRakutenReportWarnings(container, rep) {
   renderStep1Sections();
   loadSkuImages();   // sku-images.json 読み込み（失敗時は空マップ＝画像なしで通常動作）
 
-  const today = new Date();
+  const today = essToday();   // ?asof= 有効時はその日付
   s1ShipDate.value = `${today.getFullYear()}-${String(today.getMonth()+1).padStart(2,'0')}-${String(today.getDate()).padStart(2,'0')}`;
 
+  essInitBand();
   activateTab(stores.length === 0 ? 'settings' : 'step1');
 })();
 </script>
