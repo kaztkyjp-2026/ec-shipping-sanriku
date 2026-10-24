@@ -507,6 +507,7 @@
       <div class="dropzone-hint">複数ファイル同時選択可 ／ yyyymmddHHMMSS_発行済テ_ータ.csv</div>
     </div>
     <input type="file" id="s2-fileInput" accept=".csv,.txt" multiple style="display:none">
+    <div id="s2-cp"></div>
     <div class="results" id="s2-dup-band"></div>
     <button class="btn-primary btn-blue" id="s2-convertBtn" disabled>出荷通知ファイルを作る</button>
     <span id="s2-busy" class="busy" role="status" aria-live="polite"></span>
@@ -748,6 +749,9 @@ const AMAZON_TAKKYUBIN = '宅急便・別発行';
 // 送り状をB2で発行しない（同梱・手渡し等）。判定値にはならず、プルダウンの選択だけで入る。
 // B2 CSVと02から外し、ピッキング・梱包発送明細には「送り状なし」の印を付けて残す。
 const AMAZON_NONE      = '発行しない';
+// クリックポスト（日本郵便）。「発行しない」と同じく判定値にはならず、プルダウンの選択だけで入る。
+// B2 CSVと02から外し、クリックポスト用CSV に出す。STEP2 で伝票番号を受けて出荷通知に載せる。
+const AMAZON_CLICKPOST = 'クリックポスト';
 // ネコポス以外の強さ。1注文に複数の判定が混ざったら強い方を採る
 // （宅急便・別発行 ＞ 宅急便コンパクト ＞ ネコポス。1明細でも別発行なら注文ごと別発行）。
 const AMAZON_METHOD_RANK = { [AMAZON_NEKOPOS]: 0, [AMAZON_COMPACT]: 1, [AMAZON_TAKKYUBIN]: 2 };
@@ -755,6 +759,7 @@ const AMAZON_METHOD_RANK = { [AMAZON_NEKOPOS]: 0, [AMAZON_COMPACT]: 1, [AMAZON_T
 const AMAZON_METHOD_OPTIONS = [
   [AMAZON_NEKOPOS,   'ネコポス'],
   [AMAZON_COMPACT,   '宅急便コンパクト'],
+  [AMAZON_CLICKPOST, 'クリックポスト（B2に出さない）'],
   [AMAZON_TAKKYUBIN, '宅急便（セラーセントラルで発行）'],
   [AMAZON_NONE,      '発行しない（送り状なし）'],
 ];
@@ -800,6 +805,7 @@ function amazonB2InvoiceCode(o, nekoposCode) {
   if (m === AMAZON_NEKOPOS) return nekoposCode;
   if (m === AMAZON_COMPACT) return Object.keys(SHIP_METHOD_MAP).find(k => SHIP_METHOD_MAP[k] === m) || null;
   if (m === AMAZON_NONE)    return null;   // 発行しない：B2 CSVにも02にも入れない
+  if (m === AMAZON_CLICKPOST) return null; // クリックポスト：B2 CSVにも02にも入れない（クリックポスト用CSVに出す）
   return null;
 }
 
@@ -906,6 +912,11 @@ function buildOrderRecords(groups, shipDate, invoiceType, store, storeIndex) {
     //   ここで読む選択値は「ボタンを押した時点」の値になる。
     const code = amazonB2InvoiceCode(rec, invoiceType);
     rec.b2Row = code ? buildB2Row(g, shipDate, code, store) : null;
+    // クリックポストはB2行の代わりにクリックポスト用CSVの宛先を持つ（buildClickpostRow が使う）
+    if (amazonResolvedMethod(rec) === AMAZON_CLICKPOST) {
+      rec.cp = { postal: g.postal, name: g.recipientName, fullAddress: g.fullAddress, building: g.building,
+                 content: g.products[0] };
+    }
     recs.push(rec);
   }
   return recs;
@@ -934,6 +945,8 @@ function sortOrderRecords(records) {
 
 // お客様管理番号（＝各モールの注文番号）の形式。STEP2はこの2本だけでモールを振り分ける。
 // Amazon: 3-7-7桁 ／ 楽天市場: 店舗ID(433084)-受注日8桁-注文番号10桁
+// クリックポストの出荷通知の配送業者コード（carrier-code）。'Other' に替えたときは carrier-name に「日本郵便」を入れる
+const AMAZON_CARRIER_JAPANPOST = 'Japan Post';
 const AMAZON_ORDER_ID_RE  = /^\d{3}-\d{7}-\d{7}$/;
 const RAKUTEN_ORDER_ID_RE = /^433084-\d{8}-\d{10}$/;
 
@@ -1196,15 +1209,18 @@ const RAKUTEN_STORE_CODES = ['MMD'];
 // 宅急便として申告すると、集荷の個数と実際の荷姿が合わなくなるため）。
 // 楽天で配送方法が判定できない注文（shipType='不明'）は宅急便に寄せたうえで件数を注記する
 // （3区分の合計＝全注文数 を必ず保つため。黙って0件にすると申告数が実態と合わなくなる）。
-// 「発行しない」（Amazon・楽天）は none に数え、申告数（total）には含めない。全注文数＝total＋none。
+// 「発行しない」（Amazon・楽天）は none に数え、申告数（total）には含めない。
+// クリックポスト（Amazon・楽天）は clickpost に数え、申告数（total）にも unknown にも含めない（郵便ポストへ投函）。
+// 全注文数＝total＋none＋clickpost。
 function buildShipMethodSummary(amazon, rakuten) {
-  let nekopos = 0, compact = 0, takkyubin = 0, unknown = 0, none = 0;
+  let nekopos = 0, compact = 0, takkyubin = 0, unknown = 0, none = 0, clickpost = 0;
   for (const o of ((amazon && amazon.single) || [])) {
     const m = amazonResolvedMethod(o);
-    if (m === AMAZON_COMPACT)        compact++;
-    else if (m === AMAZON_TAKKYUBIN) takkyubin++;
-    else if (m === AMAZON_NONE)      none++;
-    else                             nekopos++;
+    if (m === AMAZON_COMPACT)         compact++;
+    else if (m === AMAZON_TAKKYUBIN)  takkyubin++;
+    else if (m === AMAZON_NONE)       none++;
+    else if (m === AMAZON_CLICKPOST)  clickpost++;
+    else                              nekopos++;
   }
   for (const o of ((rakuten && rakuten.orders) || [])) {
     const m = rakutenResolvedMethod(o);
@@ -1212,9 +1228,10 @@ function buildShipMethodSummary(amazon, rakuten) {
     else if (m === RAKUTEN_COMPACT)  compact++;
     else if (m === RAKUTEN_TAKKYUBIN) takkyubin++;
     else if (m === RAKUTEN_NONE)     none++;
+    else if (m === RAKUTEN_CLICKPOST) clickpost++;
     else { takkyubin++; unknown++; }   // 判定不能は宅急便へ寄せる（合計を全注文数に一致させる）
   }
-  return { nekopos, compact, takkyubin, unknown, none, total: nekopos + compact + takkyubin };
+  return { nekopos, compact, takkyubin, unknown, none, clickpost, total: nekopos + compact + takkyubin };
 }
 
 // 梱包・発送明細の行番号（001…）と、複数商品注文の識別子（複-01…）。
@@ -1283,9 +1300,11 @@ function renderCombinedPickingHTML(amazon, rakuten, seq) {
   const AMAZON_COMPACT_BADGE = `<span class="mp-badge">⚠ ${AMAZON_COMPACT}</span>`;
   // 発行しない（B2で送り状を出さない）の印。楽天の「発行しない」と同じ文言・見た目。
   const NO_LABEL_BADGE = `<span class="mp-badge">⚠ 送り状なし</span>`;
+  // クリックポスト（B2で送り状を出さず、クリックポストのラベルを貼る）の印。楽天の rakutenShipBadges と同じ文言・見た目。
+  const CLICKPOST_BADGE = `<span class="mp-badge">⚠ クリックポスト</span>`;
   const amazonMethodBadge = m =>
     m === AMAZON_COMPACT ? AMAZON_COMPACT_BADGE : m === AMAZON_TAKKYUBIN ? MP_BADGE
-      : m === AMAZON_NONE ? NO_LABEL_BADGE : '';
+      : m === AMAZON_NONE ? NO_LABEL_BADGE : m === AMAZON_CLICKPOST ? CLICKPOST_BADGE : '';
 
   // 商品別合計の列幅。colgroup で明示指定し、商品名の幅を確保する。
   // 画像12% ／ G番号11% ／ ピッキング合計13% ／ 出荷数（注文数）13% ／ 商品名 残り51%。
@@ -1345,7 +1364,7 @@ function renderCombinedPickingHTML(amazon, rakuten, seq) {
   const amazonSkuBadges = sku => {
     const s = amazonSkuMethods.get(sku);
     if (!s) return '';
-    return [AMAZON_COMPACT, AMAZON_TAKKYUBIN, AMAZON_NONE].filter(m => s.has(m)).map(amazonMethodBadge).join('');
+    return [AMAZON_COMPACT, AMAZON_CLICKPOST, AMAZON_TAKKYUBIN, AMAZON_NONE].filter(m => s.has(m)).map(amazonMethodBadge).join('');
   };
 
   // ---- 商品別合計（A4縦・1段） ----
@@ -1395,7 +1414,7 @@ function renderCombinedPickingHTML(amazon, rakuten, seq) {
   // 楽天注文の大多数がネコポスであり、全行に付けると赤が意味を失うため。
   // 判定できない配送方法（'（不明）'等）はバッジを付けない（B2除外の警告で担保済み）。
   // 混在時は両方を並べる（順序固定：コンパクト→宅急便）。件数内訳は持たない。
-  const RAKUTEN_BADGE_ORDER = [RAKUTEN_COMPACT, RAKUTEN_TAKKYUBIN, RAKUTEN_NONE];
+  const RAKUTEN_BADGE_ORDER = [RAKUTEN_COMPACT, RAKUTEN_CLICKPOST, RAKUTEN_TAKKYUBIN, RAKUTEN_NONE];
   const rakutenShipBadges = (clusterKey) => {
     const s = rakutenSkuMethods.get(clusterKey);
     if (!s) return '';
@@ -1457,13 +1476,15 @@ function renderCombinedPickingHTML(amazon, rakuten, seq) {
   const mallRows = [];
   if (amazon)  mallRows.push(`<tr><td>Amazon</td><td class="n">${aOrders}</td></tr>`);
   if (rakuten) mallRows.push(`<tr><td>楽天市場</td><td class="n">${rOrders}</td></tr>`);
-  // モール別内訳の合計・明細の合計は全注文数（申告数＋発行しない）。申告数の表には「発行しない」の行を足さない。
-  const allOrders = ship.total + ship.none;
+  // モール別内訳の合計・明細の合計は全注文数（申告数＋発行しない＋クリックポスト）。
+  // 申告数の表には「発行しない」「クリックポスト」の行を足さない。
+  const allOrders = ship.total + ship.none + ship.clickpost;
   const detailSummary = `合計 ${allOrders}注文`
     + (bothMalls ? `（Amazon ${aOrders} ／ 楽天市場 ${rOrders}）` : '');
   const shipNote = '※送り状をセラーセントラルで別発行する注文も、その配送方法の区分で数えています。'
     + (ship.unknown ? `／配送方法を判定できない ${ship.unknown}注文は「宅急便」に含めています。` : '')
-    + (ship.none ? `／「発行しない」${ship.none}注文はヤマト申告数に含めていません。` : '');
+    + (ship.none ? `／「発行しない」${ship.none}注文はヤマト申告数に含めていません。` : '')
+    + (ship.clickpost ? `／クリックポスト ${ship.clickpost}注文はヤマト申告数に含めていません（郵便ポストへ投函）。` : '');
 
   // 2表は帳票冒頭ではなく商品別合計の末尾（最後の mall-end の直後）に出す。
   // 倉庫はピッキングを終えてから集荷を申告するため、作業の順番と並びを一致させる。
@@ -2015,6 +2036,151 @@ document.getElementById('save-settings-btn').addEventListener('click', () => {
 });
 
 // ============================================================
+// ==== CLICKPOST（クリックポスト用CSV・STEP2 の伝票番号） — BEGIN ====
+// 発送方法でクリックポストを選んだ注文を、GoQ の拡張で取り込むクリックポスト用CSVにする。
+//   見出し行 … クリックポストの公式テンプレート（clickpost-template.csv）の文字列そのまま
+//   データ行 … GoQ の拡張で取込に成功した試験ファイル（clickpost_test_stores_20261024.csv）と同じ書式：
+//              引用符なし・CRLF・最終行の後にも CRLF・CP932。値に , " 改行を含むときだけ "…" で囲む
+// 文字数はすべての文字を1字と数える（全角換算ではない。クリックポストが半角を何字と数えるかが
+// 未確認のため、どちらの仕様でも上限を超えない安全側に倒す）。
+// ============================================================
+const CLICKPOST_HEADER_TEXT = 'お届け先郵便番号,お届け先氏名,お届け先敬称,お届け先住所1行目,お届け先住所2行目,お届け先住所3行目,お届け先住所4行目,内容品';
+const CLICKPOST_HEADER = CLICKPOST_HEADER_TEXT.split(',');
+const CLICKPOST_MAX_ROWS = 40;          // 1ファイルの行数の上限（超えたら _1・_2… に分ける）
+const CLICKPOST_LINE_CHARS = 20;        // 氏名・住所1行の上限（字）
+const CLICKPOST_ADDRESS_LINES = 4;      // 住所の行数の上限
+const CLICKPOST_CONTENT_CHARS = 15;     // 内容品の上限（字）
+
+function cpCharLength(s) { return [...String(s == null ? '' : s)].length; }
+function cpSlice(s, n) { return [...String(s == null ? '' : s)].slice(0, n).join(''); }
+const cpStripSpaces = s => String(s == null ? '' : s).replace(/[ 　]/g, '');
+const cpChunk = (s, n) => { const a = [...s], out = []; for (let i = 0; i < a.length; i += n) out.push(a.slice(i, i + n).join('')); return out; };
+// CP932 で表せるか：toSjisUint8 で書いた値を SJIS として読み戻し、元と一致するか（? に化けたラベルを出さないため）
+function cpRoundTrips(v) {
+  return Encoding.convert(toSjisUint8(v), { to: 'UNICODE', from: 'SJIS', type: 'string' }) === v;
+}
+
+// クリックポストの対象1件（s1ConvertRun の cpRecs の要素）→ クリックポスト用CSVの1行（A〜H 列）。
+// 戻り値 { ok:true, cells, warnings } または { ok:false, reason }。warnings は黄の警告（出力はする）。
+function buildClickpostRow(cpRec) {
+  const src = cpRec.src || {};
+  let postalRaw, name, fullAddress, building, content;
+  if (cpRec.mall === 'amazon') {
+    const cp = src.cp || {};
+    postalRaw = cp.postal;
+    name = String(cp.name || '');
+    fullAddress = cpStripSpaces(cp.fullAddress);
+    building = cpStripSpaces(cp.building);
+    content = String(cp.content || '');
+  } else {
+    const r = src.recipient || {};
+    postalRaw = String(r.postal1 || '') + String(r.postal2 || '');
+    name = r.firstName ? `${r.lastName || ''}　${r.firstName}` : String(r.lastName || '');
+    // buildRakutenAddress と同じく全角・半角スペースを除いてから buildAddress を通す
+    const a = buildAddress(cpStripSpaces(r.pref), cpStripSpaces(r.city), cpStripSpaces(r.rest), '', '');
+    fullAddress = a.fullAddress;
+    building = a.building;
+    content = String((src.lines && src.lines[0] && src.lines[0].name) || '');
+  }
+  const warnings = [];
+  const postal = String(postalRaw == null ? '' : postalRaw).replace(/[^0-9]/g, '');
+  if (postal.length !== 7) return { ok: false, reason: '郵便番号が7桁でない' };
+  if (!name) return { ok: false, reason: '氏名が空' };
+  // 住所：先頭から20字ずつ。建物名があれば新しい行から20字ずつ
+  const lines = cpChunk(fullAddress, CLICKPOST_LINE_CHARS);
+  if (building) lines.push(...cpChunk(building, CLICKPOST_LINE_CHARS));
+  if (!lines.length) return { ok: false, reason: '住所が空' };
+  if (lines.length > CLICKPOST_ADDRESS_LINES) return { ok: false, reason: '住所が4行に収まらない' };
+  while (lines.length < CLICKPOST_ADDRESS_LINES) lines.push('');
+  if (cpCharLength(name) > CLICKPOST_LINE_CHARS) {
+    warnings.push(`氏名が${CLICKPOST_LINE_CHARS}字を超えたため切り詰めました（元：${name}）`);
+    name = cpSlice(name, CLICKPOST_LINE_CHARS);
+  }
+  const bad = [[CLICKPOST_HEADER[1], name], ...lines.map((v, i) => [CLICKPOST_HEADER[3 + i], v])]
+    .find(([, v]) => !cpRoundTrips(v));
+  if (bad) return { ok: false, reason: `CP932に無い文字（${bad[0]}）` };
+  // 内容品：CP932 に無い文字を除いてから15字で切る（切り詰めは仕様のため警告しない）
+  const kept = [...content].filter(ch => cpRoundTrips(ch)).join('');
+  if (kept !== content) warnings.push(`内容品から CP932 に無い文字を除きました（元：${content}）`);
+  const contentOut = cpSlice(kept, CLICKPOST_CONTENT_CHARS);
+  if (!contentOut) return { ok: false, reason: '内容品が空' };
+  return { ok: true, cells: [postal, name, '様', ...lines, contentOut], warnings };
+}
+
+// 行の配列（見出し行を含む）→ クリックポスト用CSVのバイト列
+function cpCsvCell(v) {
+  const s = String(v == null ? '' : v);
+  return /[",\r\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
+}
+function clickpostCsvBytes(rows) {
+  return toSjisUint8(rows.map(r => r.map(cpCsvCell).join(',')).join('\r\n') + '\r\n');
+}
+
+// 照合キー（ツールが書いた値 ⇔ GoQ のレポート）：郵便番号・氏名・住所・内容品を U+001F で連結。
+// 住所は全角・半角スペースを除いて比べる。氏名は全角スペースを含めてそのまま比べる。
+function clickpostKey(postal, name, address, content) {
+  return [postal, name, cpStripSpaces(address), content].join('\u001f');
+}
+// ツールが書いた行（cells）→ 照合キー。住所は住所1〜4行目を連結したもの
+function clickpostKeyOfCells(c) { return clickpostKey(c[0], c[1], c.slice(3, 3 + CLICKPOST_ADDRESS_LINES).join(''), c[7]); }
+
+// STEP1：クリックポスト用CSVを組み立ててダウンロードし、s1CpOutput を置き換える。
+// cpRecs は照合で除外した注文を外したもの。opts: { nomatch, stamp }。出力した行が0件なら null を返す。
+async function s1ClickpostOutput(cpRecs, dateStr, hms, opts = {}) {
+  const built = cpRecs.map(rec => ({ rec, r: buildClickpostRow(rec) }));
+  const ok = built.filter(x => x.r.ok), ng = built.filter(x => !x.r.ok);
+  renderRakutenWarningSection(s1Results, 's1-cp-ng',
+    `⛔ クリックポスト用CSVに出せない注文（手動で対応してください）: ${ng.length}件`,
+    ['注文番号', '店舗', '理由'], ng.map(x => [x.rec.orderId, x.rec.storeName, x.r.reason]), 'error');
+  const warns = [];
+  for (const x of ok) for (const w of x.r.warnings) warns.push([x.rec.orderId, x.rec.storeName, w]);
+  renderRakutenWarningSection(s1Results, 's1-cp-warn',
+    `⚠ クリックポスト用CSV：確認してください（出力はしています）: ${warns.length}件`,
+    ['注文番号', '店舗', '内容'], warns, 'warn');
+  if (!ok.length) return null;
+
+  const chunks = [];
+  for (let i = 0; i < ok.length; i += CLICKPOST_MAX_ROWS) chunks.push(ok.slice(i, i + CLICKPOST_MAX_ROWS));
+  const files = chunks.map((c, i) => {
+    const part = chunks.length > 1 ? i + 1 : null;
+    const name = `clickpost_${dateStr}_${hms}${part ? '_' + part : ''}${opts.nomatch ? '_照合なし' : ''}.csv`;
+    return { name, part, count: c.length, bytes: clickpostCsvBytes([CLICKPOST_HEADER, ...c.map(x => x.r.cells)]) };
+  });
+  for (const f of files) {
+    await new Promise(r => setTimeout(r, 150));   // 連続DLのブラウザ側取りこぼし防止（s2ConvertRun と同じ）
+    downloadBlob(f.name, new Blob([f.bytes], { type: 'text/csv' }));
+  }
+  s1CpOutput = {
+    shipDate: s1ShipDate.value,
+    rows: ok.map(x => ({ orderId: x.rec.orderId, mall: x.rec.mall, storeIndex: x.rec.storeIndex, storeName: x.rec.storeName,
+                         cells: x.r.cells, key: clickpostKeyOfCells(x.r.cells) })),
+    fileNames: files.map(f => f.name),
+  };
+  const done = essResultItem('success', `✓ ${files.map(f => `${f.name}（${f.count}件）`).join('・')}を出力`
+    + ' — GoQ の拡張で取り込み、決済・印字のあと［レポート出力］の CSV を STEP2 に落としてください（ラベルの有効期限は支払いの翌日から7日）');
+  done.id = 's1-cp-done';
+  s1Results.appendChild(done);
+  s1OutputDone = true;
+  updateS1ConvertLabel();
+  s2RenderCp();
+
+  // 06 に保存（cp_csv＝ダウンロードしたバイト列そのもの／cp_out＝出力記録）。変換ボタンのハンドラは完了まで待つ（02 と同じ）
+  essBusyShow('s1-busy', '06_クリックポスト に保存中…');
+  const failText = '⚠ 06の保存に失敗：明日の照合に使えません';
+  const st = opts.stamp || essWorkStamp();
+  const saves = files.map(f => essSaveAndReport('s1', 'cp_csv', '', f.bytes, f.name,
+    { stamp: st, nomatch: !!opts.nomatch, cpPart: f.part, key: `cp_csv:${f.name}`, failText }));
+  const outAt = `${st.ymd.slice(0, 4)}/${st.ymd.slice(4, 6)}/${st.ymd.slice(6, 8)} ${st.hms.slice(0, 2)}:${st.hms.slice(2, 4)}:${st.hms.slice(4, 6)}`;
+  const outText = [['注文番号', '店舗', '照合キー', '出力時刻'], ...s1CpOutput.rows.map(r => [r.orderId, r.storeName, r.key, outAt])]
+    .map(toCsvLine).join('\r\n') + '\r\n';
+  saves.push(essSaveAndReport('s1', 'cp_out', '', new TextEncoder().encode(outText), files[0].name,
+    { stamp: st, nomatch: !!opts.nomatch, key: `cp_out:${files[0].name}`, failText }));
+  await Promise.all(saves);
+  return files;
+}
+// ==== CLICKPOST — END ====
+
+// ============================================================
 // ==== ESS：Drive保管（01・02・03）＋ A（重複発行の照合） — BEGIN ====
 // 入力・出力ファイルをそのままのバイト列で Google ドライブ（EC出荷記録/作業日/01〜03）へ保存し、
 // B2取込CSVを出す前に、直近7日の 02（B2用CSV）・03（発行済データ）と注文番号を照合する。
@@ -2099,7 +2265,13 @@ const ESS_KINDS = {
   in_rakuten_dl:    { sub: '01_入力',         label: '01', suffix: () => '楽天_発送完了報告用DL.csv', mime: 'text/csv' },
   b2csv:            { sub: '02_B2用CSV',      label: '02', suffix: (s, o) => o.nomatch ? 'B2用CSV_照合なし.csv' : 'B2用CSV.csv', mime: 'text/csv' },
   issued:           { sub: '03_発行済データ', label: '03', suffix: () => '発行済データ.csv', mime: 'text/csv' },
+  // 06：クリックポスト。cp_csv＝出力したクリックポスト用CSV（40件で分けたときは _{n}）／cp_out＝出力記録（照合キー付き）／
+  // cp_trk＝伝票番号（GoQ のレポートはバイト列のまま・手入力分は 注文番号,伝票番号）。cp_trk の2つはファイル名の末尾で見分ける
+  cp_csv:           { sub: '06_クリックポスト', label: '06', suffix: (s, o) => o.cpPart ? `クリックポストCSV_${o.cpPart}.csv` : 'クリックポストCSV.csv', mime: 'text/csv' },
+  cp_out:           { sub: '06_クリックポスト', label: '06', suffix: () => 'クリックポスト出力記録.csv', mime: 'text/csv' },
+  cp_trk:           { sub: '06_クリックポスト', label: '06', suffix: (s, o) => o.cpSrc === 'manual' ? CP_TRK_MANUAL_SUFFIX : 'クリックポストレポート.csv', mime: 'text/csv' },
 };
+const CP_TRK_MANUAL_SUFFIX = 'クリックポスト伝票手入力.csv';
 
 // 店舗名（設定の依頼主名）→ ファイル名・一覧に出す短い名前
 function essStoreShort(name) {
@@ -2251,11 +2423,11 @@ const EssDriveStore = {
     try { await essRequestToken(); }
     catch (e) { throw new Error(`未ログイン（${e.message}）。帯の「Googleにログイン」を押してください`); }
   },
-  // 期間内の 02・03 を返す：[{ fileId, kind, date, name, bytes }]
+  // 期間内の 02・03・06（cp_out・cp_trk）を返す：[{ fileId, kind, date, name, bytes }]
   async listHistory(fromDate, toDate) {
     await this.ready();
     const out = [];
-    for (const kind of ['b2csv', 'issued']) {
+    for (const kind of ['b2csv', 'issued', 'cp_out', 'cp_trk']) {
       const files = await essListFiles([essProp('ess_kind', kind), 'trashed=false'].join(' and '));
       for (const f of files) {
         const date = (f.appProperties || {}).ess_date || '';
@@ -2307,6 +2479,7 @@ function essIsTestStore() { return essStore() !== EssDriveStore; }
 // ============================================================
 let essSaveChain = Promise.resolve();
 const essSessionB2FileIds = new Set();   // このページで保存した 02 の fileId（押し直しの照合から外す）
+const essSessionCpFileIds = new Set();   // このページで保存した 06 の cp_out の fileId（同上）
 
 // 戻り値 { ok, fileId, name, skipped, error, unset }
 function essSaveFile(kind, store, bytes, origName, opts = {}) {
@@ -2324,6 +2497,7 @@ function essSaveFile(kind, store, bytes, origName, opts = {}) {
     try {
       const r = await essStore().save(kind, store, bytes, origName, meta);
       if (kind === 'b2csv' && !r.skipped) essSessionB2FileIds.add(r.fileId);
+      if (kind === 'cp_out' && !r.skipped) essSessionCpFileIds.add(r.fileId);
       return { ok: true, ...r };
     } catch (e) {
       return { ok: false, error: e.message, unset: !essIsTestStore() && !ESS_OAUTH_CLIENT_ID };
@@ -2406,10 +2580,21 @@ function essRowStore(row) {
   return essStoreShort(row[24]);
 }
 
-// rows（B2用CSVの行）の注文番号を、作業日を含む直近7日の 02・03 と照らす。
+// 06 の CSV（UTF-8・cp_out と手入力の cp_trk）→ データ行（1列目が「注文番号」の見出し行は除く）
+function essCpUtf8Rows(bytes) {
+  return splitCsvRecords(new TextDecoder('utf-8').decode(bytes)).filter(l => l.trim()).map(parseCsvLine)
+    .filter(r => (r[0] || '').trim() !== '注文番号');
+}
+
+// rows（B2用CSVの行）と cpRecs（クリックポストの対象）の注文番号を、作業日を含む直近7日の 02・03・06 と照らす。
+// 02・03 の判定（従来どおり）と 06 の判定を独立に行い、同じ一覧（発行済み／出力済み・発行記録なし／参考）に合わせて出す。
+//   06 の「発行済み」… 照合期間内の cp_trk に伝票番号がある注文。手入力の cp_trk は注文番号を持つ。レポートの cp_trk は
+//                       照合期間内のすべての cp_out の照合キーで注文番号を引き、ちょうど1つの注文に当たったときだけ数える
+//   06 の「出力済み」… 照合期間内の cp_out にあり、上に当たらない注文（このページで出した cp_out は除く＝押し直し）
+//   06 の「参考」    … 照合期間外の cp_out
 // 照合元に届かなければ例外（呼び出し側で「照合できません」）。
 // 戻り値 { issued:[{id,store,lastOut,trackings}], exported:[{id,store,lastOut}], ref:[{id,store,lastOut}] }
-async function essCollate(rows, workDate) {
+async function essCollate(rows, workDate, cpRecs = []) {
   const store = essStore();
   await store.ready();
   const winFrom = essAddDays(workDate, -(ESS_WINDOW_DAYS - 1));
@@ -2420,6 +2605,7 @@ async function essCollate(rows, workDate) {
   const out02 = new Map(), ref02 = new Map(), issued03 = new Map();
   const later = (a, b) => (!a || (b && b > a)) ? b : a;
   for (const f of files) {
+    if (f.kind !== 'b2csv' && f.kind !== 'issued') continue;   // 06 は下で別に読む
     if (f.kind === 'b2csv' && essSessionB2FileIds.has(f.fileId)) continue;   // このページで出した分（押し直し）
     const inWin = f.date >= winFrom && f.date <= workDate;
     const stamp = essStampFromName(f.name);
@@ -2438,16 +2624,59 @@ async function essCollate(rows, workDate) {
     }
   }
 
+  // ---- 06（クリックポスト）----
+  const outCp = new Map(), refCp = new Map(), issuedCp = new Map();
+  const keyToIds = new Map();   // 照合期間内の cp_out の照合キー → 注文番号の集合（このページで出した分も含む）
+  for (const f of files) {
+    if (f.kind !== 'cp_out') continue;
+    const inWin = f.date >= winFrom && f.date <= workDate;
+    const stamp = essStampFromName(f.name);
+    const session = essSessionCpFileIds.has(f.fileId);   // このページで出した分（押し直し）
+    for (const r of essCpUtf8Rows(f.bytes)) {
+      const id = (r[0] || '').trim();
+      if (!id) continue;
+      if (inWin) {
+        const k = r[2] || '';
+        if (!keyToIds.has(k)) keyToIds.set(k, new Set());
+        keyToIds.get(k).add(id);
+        if (!session) outCp.set(id, later(outCp.get(id), stamp));
+      } else if (!session) {
+        refCp.set(id, later(refCp.get(id), stamp));
+      }
+    }
+  }
+  const addIssuedCp = (id, tr) => { if (!issuedCp.has(id)) issuedCp.set(id, new Set()); issuedCp.get(id).add(tr); };
+  for (const f of files) {
+    if (f.kind !== 'cp_trk' || !(f.date >= winFrom && f.date <= workDate)) continue;
+    if (String(f.name || '').endsWith(CP_TRK_MANUAL_SUFFIX)) {
+      for (const r of essCpUtf8Rows(f.bytes)) {
+        const id = (r[0] || '').trim(), tr = (r[1] || '').trim();
+        if (id && tr) addIssuedCp(id, tr);
+      }
+    } else {
+      for (const x of s2CpReportRows(f.bytes)) {
+        const ids = keyToIds.get(x.key);
+        // ちょうど1つの注文に当たったときだけ。複数に当たったら（同じ宛先・同じ商品の再注文など）発行済みにしない
+        if (x.tracking && ids && ids.size === 1) addIssuedCp([...ids][0], x.tracking);
+      }
+    }
+  }
+
+  // 候補：B2用CSVの行 → クリックポストの対象（店舗の表示に使う疑似行：[0]＝注文番号、[24]＝店舗名）
+  const cands = [...rows, ...cpRecs.map(c => { const r = new Array(25).fill(''); r[0] = c.orderId; r[24] = c.storeName; return r; })];
   const res = { issued: [], exported: [], ref: [] };
   const seen = new Set();
-  for (const row of rows) {
+  for (const row of cands) {
     const id = row[0];
     if (seen.has(id)) continue;   // 同じ番号の複数行＝複数個口。1つの注文として判定する
     seen.add(id);
-    const base = { id, store: essRowStore(row), lastOut: out02.get(id) || '' };
-    if (issued03.has(id))   res.issued.push({ ...base, trackings: [...issued03.get(id)] });
-    else if (out02.has(id)) res.exported.push(base);
-    else if (ref02.has(id)) res.ref.push({ ...base, lastOut: ref02.get(id) });
+    const lastOut = later(out02.get(id) || '', outCp.get(id) || '') || '';
+    const base = { id, store: essRowStore(row), lastOut };
+    if (issued03.has(id) || issuedCp.has(id)) {
+      res.issued.push({ ...base, trackings: [...(issued03.get(id) || []), ...(issuedCp.get(id) || [])] });
+    }
+    else if (out02.has(id) || outCp.has(id)) res.exported.push(base);
+    else if (ref02.has(id) || refCp.has(id)) res.ref.push({ ...base, lastOut: later(ref02.get(id) || '', refCp.get(id) || '') || '' });
   }
   return res;
 }
@@ -2564,8 +2793,18 @@ function essRenderExportedList(container, list, include) {
   sync();
 }
 
+// B2用CSVを出さずクリックポスト用CSVだけを出すときの、B2側の結果表示（灰色の info）
+function essB2NoneItem(text) {
+  const el = essResultItem('', text);
+  el.style.cssText = 'display:block;margin-top:6px;background:#f4f4f5;border:1px solid #d4d4d8;color:#3f3f46;';
+  el.id = 's1-ess-done';
+  return el;
+}
+
 // STEP1 の出力（照合 → ダウンロード → 02 に保存）。rows は Amazon分→楽天分の順のB2行。
-async function essB2Output(rows, dateStr, onExclude) {
+// cpRecs はクリックポストの対象（B2用CSVのダウンロードの直後にクリックポスト用CSVを出す）。
+// B2 の行が0件でクリックポストがあるときは、B2用CSVのダウンロードと 02 の保存を行わない。
+async function essB2Output(rows, dateStr, onExclude, cpRecs = []) {
   const include = essS1Include || new Set();
   essS1Include = null;
   const work = essWorkStamp();
@@ -2573,7 +2812,7 @@ async function essB2Output(rows, dateStr, onExclude) {
   let col;
   try {
     essBusyShow('s1-busy', 'Drive の記録と照合中…');
-    col = await essCollate(rows, work.date);
+    col = await essCollate(rows, work.date, cpRecs);
   } catch (e) {
     // 照合できない：ダウンロードしない。「照合なしで出力」だけを出す。
     const err = essResultItem('error', `⛔ 照合できません：${e.message}`);
@@ -2588,17 +2827,24 @@ async function essB2Output(rows, dateStr, onExclude) {
       btn.disabled = true;
       await essPreAuth();
       const st = essWorkStamp();
-      const filename = `b2cloud_${dateStr}_${nowStamp().hms}_照合なし.csv`;
-      const bytes = essB2Bytes(rows);
-      downloadBlob(filename, new Blob([bytes], { type: 'text/csv' }));
-      const ok = essResultItem('success', `✓ ${filename}（${rows.length}件）を出力（照合なし）`);
-      ok.id = 's1-ess-done';
-      s1Results.appendChild(ok);
-      s1OutputDone = true;
-      updateS1ConvertLabel();
-      essSaveAndReport('s1', 'b2csv', '', bytes, filename, {
-        stamp: st, nomatch: true, key: `b2csv:${filename}`,
-        failText: '⚠ 02の保存に失敗：明日の照合に使えません' });
+      const hms = nowStamp().hms;
+      if (rows.length) {
+        const filename = `b2cloud_${dateStr}_${hms}_照合なし.csv`;
+        const bytes = essB2Bytes(rows);
+        downloadBlob(filename, new Blob([bytes], { type: 'text/csv' }));
+        const ok = essResultItem('success', `✓ ${filename}（${rows.length}件）を出力（照合なし）`);
+        ok.id = 's1-ess-done';
+        s1Results.appendChild(ok);
+        s1OutputDone = true;
+        updateS1ConvertLabel();
+        essSaveAndReport('s1', 'b2csv', '', bytes, filename, {
+          stamp: st, nomatch: true, key: `b2csv:${filename}`,
+          failText: '⚠ 02の保存に失敗：明日の照合に使えません' });
+      } else {
+        // B2 の行が0件：ヘッダだけのB2用CSVはダウンロードせず、02 にも保存しない
+        s1Results.appendChild(essB2NoneItem('B2用CSV：出力する注文なし（クリックポストのみ）'));
+      }
+      if (cpRecs.length) await s1ClickpostOutput(cpRecs, dateStr, hms, { nomatch: true, stamp: st });
     });
     return;
   }
@@ -2606,6 +2852,7 @@ async function essB2Output(rows, dateStr, onExclude) {
   const exclude = new Set(col.issued.map(x => x.id));
   for (const x of col.exported) if (!include.has(x.id)) exclude.add(x.id);
   const outRows = rows.filter(r => !exclude.has(r[0]));
+  const outCp = cpRecs.filter(c => !exclude.has(c.orderId));
   if (onExclude) onExclude(exclude);
   const nIssued = col.issued.length;
   const nExported = col.exported.filter(x => !include.has(x.id)).length;
@@ -2620,39 +2867,50 @@ async function essB2Output(rows, dateStr, onExclude) {
     ['注文番号', '店舗', '前回出力した日時'],
     col.ref.map(x => [x.id, x.store, x.lastOut]), 'warn');
 
-  if (!outRows.length) {
+  // B2 もクリックポストも0件のときだけ赤。クリックポストだけ残ったときは B2用CSV を出さずに続ける
+  if (!outRows.length && !outCp.length) {
     const el = essResultItem('error', `⚠ 照合の結果、B2取込CSVに出力する注文がありません（照合で除外 ${exclude.size}件：発行済み ${nIssued}／発行記録なし ${nExported}）`);
     el.id = 's1-ess-done';
     s1Results.appendChild(el);
     return;
   }
 
-  const filename = `b2cloud_${dateStr}_${nowStamp().hms}.csv`;
-  const bytes = essB2Bytes(outRows);
-  const head = `✓ ${filename}（${outRows.length}件）を出力（照合で除外 ${nIssued + nExported}件：発行済み ${nIssued}／発行記録なし ${nExported}）`;
-  let ok;
-  try {
-    essBusyShow('s1-busy', 'B2取込CSVを作成中…');
-    downloadBlob(filename, new Blob([bytes], { type: 'text/csv' }));
-    ok = essResultItem('success', `${head} → 02_B2用CSV に保存中…`);
-    ok.id = 's1-ess-done';
-    s1Results.appendChild(ok);
-    s1OutputDone = true;
-    updateS1ConvertLabel();
-  } catch (e) {
-    s1Results.appendChild(essResultItem('error', `⚠ 保存失敗：${e.message}`));
-    return;
+  const hms = nowStamp().hms;
+  let b2Save = null;
+  if (!outRows.length) {
+    s1Results.appendChild(essB2NoneItem(rows.length
+      ? 'B2用CSV：照合の結果、出力する注文なし（クリックポストのみ出力）'
+      : 'B2用CSV：出力する注文なし（クリックポストのみ）'));
+  } else {
+    const filename = `b2cloud_${dateStr}_${hms}.csv`;
+    const bytes = essB2Bytes(outRows);
+    const head = `✓ ${filename}（${outRows.length}件）を出力（照合で除外 ${nIssued + nExported}件：発行済み ${nIssued}／発行記録なし ${nExported}）`;
+    let ok;
+    try {
+      essBusyShow('s1-busy', 'B2取込CSVを作成中…');
+      downloadBlob(filename, new Blob([bytes], { type: 'text/csv' }));
+      ok = essResultItem('success', `${head} → 02_B2用CSV に保存中…`);
+      ok.id = 's1-ess-done';
+      s1Results.appendChild(ok);
+      s1OutputDone = true;
+      updateS1ConvertLabel();
+    } catch (e) {
+      s1Results.appendChild(essResultItem('error', `⚠ 保存失敗：${e.message}`));
+      return;
+    }
+    // 照合はできた：02 の保存に失敗しても出荷は止めない（帯に赤と再試行）。
+    // 変換ボタンのハンドラは、この保存の完了（成功・失敗）まで待ってから処理中を解く。
+    essBusyShow('s1-busy', '02_B2用CSV に保存中…');
+    b2Save = essSaveAndReport('s1', 'b2csv', '', bytes, filename, {
+      stamp: work, key: `b2csv:${filename}`,
+      failText: '⚠ 02の保存に失敗：明日の照合に使えません',
+      onDone: r => {
+        if (!ok.isConnected) return;
+        ok.textContent = r.ok ? `${head} → 02_B2用CSV に保存` : `${head}（02_B2用CSV への保存に失敗。上の赤い帯を確認してください）`;
+      } });
   }
-  // 照合はできた：02 の保存に失敗しても出荷は止めない（帯に赤と再試行）。
-  // 変換ボタンのハンドラは、この保存の完了（成功・失敗）まで待ってから処理中を解く。
-  essBusyShow('s1-busy', '02_B2用CSV に保存中…');
-  await essSaveAndReport('s1', 'b2csv', '', bytes, filename, {
-    stamp: work, key: `b2csv:${filename}`,
-    failText: '⚠ 02の保存に失敗：明日の照合に使えません',
-    onDone: r => {
-      if (!ok.isConnected) return;
-      ok.textContent = r.ok ? `${head} → 02_B2用CSV に保存` : `${head}（02_B2用CSV への保存に失敗。上の赤い帯を確認してください）`;
-    } });
+  if (outCp.length) await s1ClickpostOutput(outCp, dateStr, hms, { stamp: work });
+  if (b2Save) await b2Save;
 }
 
 // 帯（ページ上部）の Drive の状態表示
@@ -2744,6 +3002,10 @@ let s1ShipChoiceStale = false;
 // 変換ボタンの処理中（照合 → ダウンロード → 02 保存が終わるまで）。二重押下で同じB2用CSVが
 // 複数出るのを防ぐ（2026-10-20 14:07:45／14:07:47 に2本出た）。ページ限りの変数（保存しない）。
 let s1Busy = false;
+// 直近に出力したクリックポスト用CSVの中身（STEP2 の伝票番号欄・GoQ レポートの照合・出荷通知に使う）。
+// { shipDate:'YYYY-MM-DD', rows:[{ orderId, mall, storeIndex, storeName, cells, key, tracking? }], fileNames:[…] }。
+// ページ限り（localStorage には保存しない）。再出力で置き換え、入力の読み込み直しで null に戻す。
+let s1CpOutput = null;
 
 // ============================================================
 // 商品サムネイル：SKU→画像URL マッピング
@@ -2789,6 +3051,8 @@ function renderStep1Sections() {
   s1OutputDone = false;
   // 入力が変わった＝押し直しではない。このページで出した 02 も照合の対象に戻す
   essSessionB2FileIds.clear();
+  essSessionCpFileIds.clear();
+  s1CpOutput = null;        // クリックポスト用CSVの出力もこの入力限り
   updateS1ConvertLabel();   // Amazonバッファのリセットをラベルへ反映（楽天市場の読込は維持される）
 
   if (stores.length === 0) {
@@ -2865,6 +3129,8 @@ function s1LoadFile(file, key, dz) {
     // 入力を読み込み直した＝押し直しではない。このページで出した 02 も照合の対象に戻す
     // （開いたまま午前→午後と作業すると、午前の注文が午後のB2用CSVに再び入るため。2026-10-20）
     essSessionB2FileIds.clear();
+    essSessionCpFileIds.clear();
+    s1CpOutput = null;   // クリックポスト用CSVの出力もこの入力限り
     // 変換ボタンを押す前に確認・修正できるよう、ここで一覧を出す
     renderAmazonShipMethodSection();
     updateS1ConvertLabel();
@@ -2906,11 +3172,12 @@ function s1AmazonOrderCount() {
   for (const buf of Object.values(s1Buffers)) {
     if (!buf) continue;
     // ボタンのラベルはB2 CSVの出力件数。宅急便・別発行は送り状を別発行するため数えない
-    // （楽天側が送り状発行済みを除いた active.length を出しているのと揃える）。発行しないも数えない。
+    // （楽天側が送り状発行済みを除いた active.length を出しているのと揃える）。発行しない・クリックポストも数えない。
     // 判定は確定値（amazonResolvedMethod）＝注文単位のプルダウン選択を反映した値で行う。
     try {
       n += parseAmazonTsvGroups(decodeBuffer(buf))
-        .filter(g => g.orderId && amazonResolvedMethod(g) !== AMAZON_TAKKYUBIN && amazonResolvedMethod(g) !== AMAZON_NONE).length;
+        .filter(g => g.orderId && amazonResolvedMethod(g) !== AMAZON_TAKKYUBIN && amazonResolvedMethod(g) !== AMAZON_NONE
+          && amazonResolvedMethod(g) !== AMAZON_CLICKPOST).length;
     } catch (_) {}
   }
   return n;
@@ -3008,18 +3275,20 @@ async function s1ConvertRun(auth) {
       const groups = parseAmazonTsvGroups(text);
       const recs   = buildOrderRecords(groups, shipDate, s1Invoice.value, store, storeIndex);
       if (recs.length === 0) throw new Error('変換できるデータがありません');
-      // 宅急便・別発行と発行しないはB2行を持たない（ピッキング・梱包には含める）ため件数を分けて数える
+      // 宅急便・別発行と発行しない・クリックポストはB2行を持たない（ピッキング・梱包には含める）ため件数を分けて数える
       const b2Count = recs.filter(r => r.b2Row).length;
       const noneCount = recs.filter(r => !r.b2Row && amazonResolvedMethod(r) === AMAZON_NONE).length;
-      const mpCount = recs.length - b2Count - noneCount;
+      const cpCount = recs.filter(r => r.cp).length;
+      const mpCount = recs.length - b2Count - noneCount - cpCount;
       allRecords.push(...recs); totalCount += b2Count;
       loadedStoreNames.push(store.name);
       item.className = 'result-item success';
       // 0件の区分は出さない
-      const parts = [[b2Count, `B2 CSV ${b2Count}件`], [mpCount, `別発行 ${mpCount}件`], [noneCount, `発行しない ${noneCount}件`]]
+      const parts = [[b2Count, `B2 CSV ${b2Count}件`], [mpCount, `別発行 ${mpCount}件`], [noneCount, `発行しない ${noneCount}件`],
+                     [cpCount, `クリックポスト ${cpCount}件`]]
         .filter(([n]) => n).map(([, t]) => t);
       item.textContent = `✓ ${store.name}：${recs.length}件`
-        + ((mpCount || noneCount) ? `（${parts.join('／')}）` : '');
+        + ((mpCount || noneCount || cpCount) ? `（${parts.join('／')}）` : '');
     } catch(e) {
       item.className = 'result-item error';
       item.textContent = `⚠ ${store.name}：${e.message}`;
@@ -3045,6 +3314,10 @@ async function s1ConvertRun(auth) {
   // 統合ピッキング帳票用。B2生成が依頼主未設定などで落ちても、ピッキング自体は
   // 印刷できる必要があるため、rData を作った直後にここへ退避する。
   let rakutenPicking = null;
+  // クリックポストを選んだ楽天の注文。依頼主未設定でB2生成が落ちても失わないよう、try の外に持つ
+  // （クリックポストのラベルの差出人はクリックポストのアカウント側で決まるため、依頼主設定は要らない）。
+  let rakutenCp = [];
+  const isCp = o => rakutenResolvedMethod(o) === RAKUTEN_CLICKPOST;
   if (s1RakutenParsed) {
     const item = document.createElement('div');
     try {
@@ -3059,14 +3332,15 @@ async function s1ConvertRun(auth) {
                            multiCount: rData.multiCount,   // 商品別集計の集約行に出す件数
                            storeName: RAKUTEN_STORE_CODES.join('／') };
       }
+      rakutenCp = rData.orders.filter(isCp);
       const sender = getRakutenSenderStore();
       if (!sender) throw new Error('楽天市場の依頼主設定が未入力です（依頼主設定タブで登録してください）'
         + `／未入力: ${rakutenSenderMissingFields().join('・')}`);
       // 発行しない（プルダウンで選んだもの）は B2 から外す。配送方法が不明（noCode）とは分けて知らせる
       const isNone = o => rakutenResolvedMethod(o) === RAKUTEN_NONE;
       const none   = rData.orders.filter(o => isNone(o));
-      const usable = rData.orders.filter(o => rakutenInvoiceCode(o) !== '' && !isNone(o));
-      const noCode = rData.orders.filter(o => rakutenInvoiceCode(o) === '' && !isNone(o));
+      const usable = rData.orders.filter(o => rakutenInvoiceCode(o) !== '' && !isNone(o) && !isCp(o));
+      const noCode = rData.orders.filter(o => rakutenInvoiceCode(o) === '' && !isNone(o) && !isCp(o));
       const addrIssues = [];   // 住所欄・建物名欄の上限超過（出力は止めず警告のみ）
       rakutenB2Rows = usable.map(o => buildRakutenB2Row(o, shipDate, sender, addrIssues));
       item.className = 'result-item success';
@@ -3087,6 +3361,11 @@ async function s1ConvertRun(auth) {
         `📦 楽天市場：「発行しない」を選んだためB2から除外: ${none.length}件`,
         ['注文番号', '商品名'],
         none.map(o => [o.orderNumber,
+          (o.lines[0] ? o.lines[0].name : '') + (o.lines.length > 1 ? ` 他${o.lines.length - 1}点` : '')]), 'warn');
+      renderRakutenWarningSection(s1Results, 's1-rk-cp',
+        `📮 楽天市場：クリックポストを選んだためB2から除外（クリックポスト用CSVに出力）: ${rakutenCp.length}件`,
+        ['注文番号', '商品名'],
+        rakutenCp.map(o => [o.orderNumber,
           (o.lines[0] ? o.lines[0].name : '') + (o.lines.length > 1 ? ` 他${o.lines.length - 1}点` : '')]), 'warn');
       renderRakutenWarningSection(s1Results, 's1-rk-unknown',
         `⚠ 楽天市場：配送方法が不明のためB2から除外（手動対応してください）: ${noCode.length}件`,
@@ -3163,9 +3442,17 @@ async function s1ConvertRun(auth) {
   // そのモールのセクションだけが出る。B2 CSVの保存可否とは独立に常に出す。
   renderCombinedPickingButton(amazonPicking, rakutenPicking);
 
+  // クリックポストの対象（Amazon → 楽天の順。Amazon は統一ソート順、楽天は rData.orders の順）
+  const cpRecs = [
+    ...sortedAmazon.filter(r => r.cp).map(r => ({ orderId: r.orderId, mall: 'amazon', storeIndex: r.storeIndex,
+      storeName: (stores[r.storeIndex] || {}).name || '', src: r })),
+    ...rakutenCp.map(o => ({ orderId: o.orderNumber, mall: 'rakuten', storeIndex: null, storeName: '楽天市場', src: o })),
+  ];
+
   // B2行が1本も無い場合はヘッダだけのCSVを保存しない（全件がマケプレ配送のときに起きる）。
   // ピッキングリスト・梱包発送明細の印刷ボタンは上で生成済みなので、そのまま使える。
-  if (!amazonRows.length && !rakutenB2Rows.length) {
+  // クリックポストがあれば、B2用CSVは出さずにクリックポスト用CSVだけを出す（essB2Output の中で分岐する）。
+  if (!amazonRows.length && !rakutenB2Rows.length && !cpRecs.length) {
     const el = document.createElement('div');
     el.className = 'result-item error'; el.style.marginTop = '6px';
     el.textContent = '⚠ B2 CSVに出力する注文がありません（すべて送り状を別発行する注文です）。'
@@ -3178,7 +3465,7 @@ async function s1ConvertRun(auth) {
   // ダウンロードの前に、直近7日の Drive の記録（02・03）と照合する（A）。
   // 照合で除外した注文は、ピッキングリスト＋梱包・発送明細の対象からも外す（照合なしで出力のときは全件のまま）。
   await essB2Output([...amazonRows, ...rakutenB2Rows], dateStr, exclude => renderCombinedPickingButton(
-    essPickingAmazonExcluding(amazonPickSrc, exclude), essPickingRakutenExcluding(rakutenPicking, exclude)));
+    essPickingAmazonExcluding(amazonPickSrc, exclude), essPickingRakutenExcluding(rakutenPicking, exclude)), cpRecs);
 }
 
 // ============================================================
@@ -3190,6 +3477,10 @@ const s2FileInput = document.getElementById('s2-fileInput');
 const s2Convert   = document.getElementById('s2-convertBtn');
 const s2Results   = document.getElementById('s2-results');
 const s2Files     = [];
+// GoQ の［レポート出力］で落としたクリックポストのレポート（{ name, buffer }）。s2Files（発行済データ）には入れない
+const s2CpReports = [];
+// レポートと照合できなかった行（#s2-cp に赤で出す）。null＝照合していない／すべて一致
+let s2CpMismatch = null;
 
 s2Dropzone.addEventListener('click', () => s2FileInput.click());
 s2Dropzone.addEventListener('dragover', e => { e.preventDefault(); s2Dropzone.classList.add('drag-over'); });
@@ -3205,19 +3496,194 @@ function s2HandleFiles(files) {
   files.forEach(file => {
     const reader = new FileReader();
     reader.onload = e => {
-      s2Files.push({ name: file.name, buffer: e.target.result });
-      essSaveIssuedIfValid(file.name, e.target.result);
+      // GoQ のクリックポストのレポートは発行済データとして扱わない（出荷通知・伝票重複・03 に渡さない）
+      if (s2IsCpReport(e.target.result)) {
+        s2CpReports.push({ name: file.name, buffer: e.target.result });
+        s2SaveCpReportIfReady(file.name, e.target.result);   // 06 に cp_trk として保存（03 と同じく未ログインなら始めない）
+      } else {
+        s2Files.push({ name: file.name, buffer: e.target.result });
+        essSaveIssuedIfValid(file.name, e.target.result);
+      }
       loaded++;
       if (loaded === files.length) {
-        s2DzText.innerHTML = `✓ ${s2Files.length}ファイル選択済み`;
+        const parts = [];
+        if (s2Files.length) parts.push(`発行済データ ${s2Files.length} ファイル`);
+        if (s2CpReports.length) parts.push(`クリックポストのレポート ${s2CpReports.length} ファイル`);
+        s2DzText.innerHTML = `✓ ${parts.join('／')}選択済み`;
         s2Dropzone.classList.add('has-file');
-        if (!s2Busy) s2Convert.disabled = false;
+        s2CpApplyReports();
+        s2RenderCp();
+        updateS2ConvertEnabled();
         s2Results.innerHTML = '';
         s2RenderDupBand();   // 読み込み済みの全ファイルで計算し直す
       }
     };
     reader.readAsArrayBuffer(file);
   });
+}
+
+// ---- クリックポスト：GoQ のレポートと伝票番号欄 ----
+const CLICKPOST_REPORT_HEADER = ['追跡番号', 'お届け先郵便番号', 'お届け先氏名', 'お届け先敬称', 'お届け先住所', '内容品'];
+// ファイルの最初の行（ダブルクォートを外し、前後の空白を除く）が GoQ のレポートの6列と一致するか
+function s2IsCpReport(buffer) {
+  try {
+    const first = splitCsvRecords(decodeBuffer(buffer)).find(l => l.trim()) || '';
+    const head = parseCsvLine(first).map(h => h.trim());
+    return head.length === CLICKPOST_REPORT_HEADER.length && head.every((h, i) => h === CLICKPOST_REPORT_HEADER[i]);
+  } catch (_) { return false; }
+}
+// レポートのデータ行（CP932。LF・CRLF の両方を受ける。空行と見出し行は飛ばす）
+function s2CpReportRows(buffer) {
+  return splitCsvRecords(decodeBuffer(buffer)).filter(l => l.trim()).map(parseCsvLine)
+    .filter(r => (r[0] || '').trim() !== CLICKPOST_REPORT_HEADER[0])
+    .map(r => ({ tracking: (r[0] || '').trim(), postal: r[1] || '', name: r[2] || '', address: r[4] || '', content: r[5] || '',
+                 key: clickpostKey(r[1] || '', r[2] || '', r[4] || '', r[5] || '') }));
+}
+const s2CpDigits = v => String(v == null ? '' : v).replace(/[^0-9]/g, '');
+
+// 読み込み済みのレポートの全行と s1CpOutput.rows の全行が、照合キーで1対1に一致したときだけ全行の伝票番号を入れる。
+// 件数が違う・合わない行がある・同じキーが片側に2行以上ある・追跡番号が12桁の数字でない行がある、のどれかなら
+// 1件も入れない（前に自動で入れた番号も消す）。行の順番は照合に使わない。
+function s2CpApplyReports() {
+  s2CpMismatch = null;
+  if (!s2CpReports.length) return;
+  const rep = [];
+  for (const f of s2CpReports) { try { rep.push(...s2CpReportRows(f.buffer)); } catch (_) {} }
+  const tool = (s1CpOutput && s1CpOutput.rows) || [];
+  const count = (arr) => { const m = new Map(); for (const x of arr) m.set(x.key, (m.get(x.key) || 0) + 1); return m; };
+  const repCount = count(rep), toolCount = count(tool);
+  const bad = [];
+  for (const r of tool) {
+    if (toolCount.get(r.key) > 1)      bad.push(['ツール', r.orderId, r.cells[1], '同じ宛先・内容品の行がツール側に2行以上']);
+    else if (!repCount.has(r.key))     bad.push(['ツール', r.orderId, r.cells[1], 'レポートに一致する行がない']);
+    else if (repCount.get(r.key) > 1)  bad.push(['ツール', r.orderId, r.cells[1], 'レポートに一致する行が2行以上']);
+  }
+  for (const x of rep) {
+    if (!/^\d{12}$/.test(x.tracking)) bad.push(['レポート', x.tracking, x.name, '追跡番号が12桁の数字でない']);
+    else if (!toolCount.has(x.key))   bad.push(['レポート', x.tracking, x.name, 'ツールが出力した行に一致する行がない']);
+    else if (repCount.get(x.key) > 1) bad.push(['レポート', x.tracking, x.name, '同じ行がレポートに2行以上']);
+  }
+  if (!tool.length && rep.length) bad.push(['—', '', '', 'このページで STEP1 のクリックポスト用CSV を出力していないため照合できません']);
+  if (bad.length || rep.length !== tool.length) {
+    s2CpMismatch = bad.length ? bad : [['—', '', '', `件数が違う（レポート ${rep.length}行／ツール ${tool.length}行）`]];
+    for (const r of tool) if (r.trackingSrc === 'report') { r.tracking = ''; r.trackingSrc = null; r.report = null; }
+    return;
+  }
+  const byKey = new Map(rep.map(x => [x.key, x]));
+  for (const r of tool) {
+    const x = byKey.get(r.key);
+    r.tracking = x.tracking; r.trackingSrc = 'report'; r.report = x;
+  }
+}
+
+// 伝票番号欄の検証：数字以外を除いて12桁でない値、同じ番号が2行以上、を赤枠にする（空欄は赤枠にしない）
+function s2CpBadRows() {
+  const rows = (s1CpOutput && s1CpOutput.rows) || [];
+  const seen = new Map();
+  for (const r of rows) { const d = s2CpDigits(r.tracking); if (d) seen.set(d, (seen.get(d) || 0) + 1); }
+  return new Set(rows.filter(r => { const d = s2CpDigits(r.tracking); return d && (d.length !== 12 || seen.get(d) > 1); }));
+}
+function s2CpValidate() {
+  const el = document.getElementById('s2-cp');
+  if (!el || !s1CpOutput) return;
+  const bad = s2CpBadRows();
+  el.querySelectorAll('input.cp-trk').forEach(inp => {
+    const r = s1CpOutput.rows[+inp.dataset.idx];
+    inp.classList.toggle('cp-bad', !!r && bad.has(r));
+  });
+}
+
+// 「クリックポストの伝票番号」欄。s1CpOutput に行があるときだけ描画する
+function s2RenderCp() {
+  const el = document.getElementById('s2-cp');
+  if (!el) return;
+  el.innerHTML = '';
+  if (s1CpOutput && s1CpOutput.rows.length) {
+    const wrap = document.createElement('div');
+    wrap.className = 'cp-wrap';
+    const show = r => r ? `〒${r.postal}　${r.name}　${r.address}　${r.content}` : '';
+    const rowsHtml = s1CpOutput.rows.map((r, i) => `<tr>
+        <td>${i + 1}</td><td>${esc(r.storeName)}</td><td class="cp-oid">${esc(r.orderId)}</td>
+        <td>${esc(r.cells[1])}</td><td>${esc(r.cells[0])}</td>
+        <td><input type="text" class="cp-trk" inputmode="numeric" data-idx="${i}" data-order="${esc(r.orderId)}" value="${esc(r.tracking || '')}"></td>
+        <td class="cp-match">${r.trackingSrc === 'report' && r.report
+          ? `<div>ツール：${esc(show({ postal: r.cells[0], name: r.cells[1], address: r.cells.slice(3, 7).join(''), content: r.cells[7] }))}</div>`
+            + `<div>レポート：${esc(show(r.report))}</div>` : ''}</td>
+      </tr>`).join('');
+    wrap.innerHTML = `
+      <style>
+        #s2-cp .cp-wrap { margin-bottom:14px; }
+        #s2-cp .cp-table { width:100%; border-collapse:collapse; font-size:13px; margin-top:6px; }
+        #s2-cp .cp-table th, #s2-cp .cp-table td { border-bottom:1px solid #e2e2e2; padding:5px 8px; vertical-align:middle; text-align:left; }
+        #s2-cp .cp-table th { background:#f4f4f4; }
+        #s2-cp .cp-oid { white-space:nowrap; color:#555; }
+        #s2-cp .cp-trk { font-size:13px; padding:3px 6px; width:11em; border:1px solid #bbb; border-radius:4px; }
+        #s2-cp .cp-trk.cp-bad { border:2px solid #dc2626; background:#fef2f2; }
+        #s2-cp .cp-match { font-size:12px; color:#555; }
+      </style>
+      <div class="section-label">クリックポストの伝票番号（${s1CpOutput.rows.length}件：${esc(s1CpOutput.fileNames.join('・'))}）</div>
+      <div class="info-box">GoQ の［レポート出力］で落とした CSV を上のドロップ欄に入れると、宛先と内容品が一致したときに伝票番号が入ります。
+        入らなかったときは、ラベルを見て12桁の伝票番号を入力してください。</div>
+      <table class="cp-table">
+        <thead><tr><th>行</th><th>店舗</th><th>注文番号</th><th>氏名</th><th>郵便番号</th><th>伝票番号</th><th>照合</th></tr></thead>
+        <tbody>${rowsHtml}</tbody>
+      </table>`;
+    el.appendChild(wrap);
+    wrap.querySelectorAll('input.cp-trk').forEach(inp => {
+      inp.addEventListener('input', () => {
+        const r = s1CpOutput.rows[+inp.dataset.idx];
+        if (!r) return;
+        r.tracking = inp.value;
+        r.trackingSrc = 'manual';   // 自動で入れた番号でも、手で直したら手入力扱い
+        s2CpValidate();
+        updateS2ConvertEnabled();
+      });
+    });
+    s2CpValidate();
+  }
+  if (s2CpMismatch && s2CpMismatch.length) {
+    renderRakutenWarningSection(el, 's2-cp-mismatch',
+      `⛔ GoQ のレポートと照合できなかった行：${s2CpMismatch.length}件 — 伝票番号を手で入力してください`,
+      ['側', '注文番号／追跡番号', '氏名', '理由'], s2CpMismatch, 'error');
+  }
+  updateS2ConvertEnabled();
+}
+document.querySelector('.tab[data-tab="step2"]').addEventListener('click', () => s2RenderCp());
+
+// 06 の cp_trk の保存の状態（キー → { name, bytes, cpSrc, promise, r }）。ページ限り。s2IssuedSaves（03）と同じ扱い。
+//   'report:{ファイル名}' … GoQ のレポート（バイト列のまま）／'manual' … 手入力した伝票番号（注文番号,伝票番号）
+const s2CpTrkSaves = new Map();
+function s2SaveCpTrk(key, name, bytes, cpSrc) {
+  const st = s2CpTrkSaves.get(key) || { promise: null, r: null };
+  Object.assign(st, { name, bytes, cpSrc });
+  s2CpTrkSaves.set(key, st);
+  const p = essSaveAndReport('s2', 'cp_trk', '', bytes, name, { key: `cp_trk:${key}`, cpSrc,
+    failText: '⚠ 06の保存に失敗：明日の照合に使えません', onDone: r => { st.r = r; } });
+  st.promise = p;
+  const clear = () => { if (st.promise === p) st.promise = null; };
+  p.then(clear, clear);
+  return p;
+}
+// トークンが無いときは保存を始めない（essSaveIssuedIfValid と同じ理由）。「出荷通知ファイルを作る」で保存する
+function s2SaveCpReportIfReady(name, buffer) {
+  const bytes = new Uint8Array(buffer);
+  const key = `report:${name}`;
+  if (!essIsTestStore() && ESS_OAUTH_CLIENT_ID && !essTokenValid()) {
+    s2CpTrkSaves.set(key, { name, bytes, cpSrc: 'report', promise: null, r: { ok: false, error: '未ログイン' } });
+    essBandSet('s2', `cp_trk:${key}`, { status: 'fail',
+      text: `未ログインのため 06 に未保存（${name}）— 「出荷通知ファイルを作る」を押すとログインして保存します`,
+      retry: () => s2SaveCpTrk(key, name, bytes, 'report') });
+    return;
+  }
+  s2SaveCpTrk(key, name, bytes, 'report');
+}
+
+// 「出荷通知ファイルを作る」を押せるか：発行済データが1本以上、またはクリックポストの伝票番号が12桁で1件以上
+function s2CpHasTracking() {
+  return !!(s1CpOutput && s1CpOutput.rows.some(r => s2CpDigits(r.tracking).length === 12));
+}
+function updateS2ConvertEnabled() {
+  s2Convert.disabled = s2Busy || !(s2Files.length > 0 || s2CpHasTracking());
 }
 
 // 伝票が2枚以上ある注文（B2で同じ注文の送り状が2枚以上発行された）を、出荷通知を出す前に知らせる。
@@ -3253,6 +3719,23 @@ function s2DuplicateTrackings() {
   }
   return Array.from(byOrder, ([orderId, v]) => ({ orderId, store: v.store, trackings: [...v.trackings] }))
     .filter(x => x.trackings.length >= 2);
+}
+// 読み込み済みの発行済データ（03）にある注文番号（お客様管理番号）。クリックポストの二重発送の疑いの判定に使う
+function s2IssuedOrderIds() {
+  const ids = new Set();
+  for (const { buffer } of s2Files) {
+    let lines;
+    try { lines = splitCsvRecords(decodeBuffer(buffer)).filter(l => l.trim()); } catch (_) { continue; }
+    if (lines.length < 2) continue;
+    const headers = parseCsvLine(lines[0]).map(h => h.trim());
+    const i = headers.indexOf('お客様管理番号');
+    if (i < 0) continue;
+    for (let k = 1; k < lines.length; k++) {
+      const id = (parseCsvLine(lines[k])[i] || '').trim();
+      if (id) ids.add(id);
+    }
+  }
+  return ids;
 }
 function s2RenderDupBand() {
   const band = document.getElementById('s2-dup-band');
@@ -3291,7 +3774,7 @@ s2Convert.addEventListener('click', async () => {
     await s2ConvertRun(auth);
   } finally {
     s2Busy = false;
-    s2Convert.disabled = (s2Files.length === 0);
+    updateS2ConvertEnabled();
     essBusyShow('s2-busy', '');
   }
 });
@@ -3323,8 +3806,51 @@ async function s2ConvertRun(auth) {
     }
     s2Convert.textContent = '出荷通知ファイルを作る';
   }
+
+  // ---- クリックポスト：伝票番号の検証（12桁でない・重複が残っていたら何も作らない） ----
+  const cpAll = (s1CpOutput && s1CpOutput.rows) || [];
+  const cpBad = s2CpBadRows();
+  if (cpBad.size) {
+    s2CpValidate();
+    renderRakutenWarningSection(s2Results, 's2-cp-bad',
+      `⛔ クリックポストの伝票番号に誤りがあります（12桁でない・同じ番号が2行以上）: ${cpBad.size}件 — 出荷通知ファイルはまだ作っていません`,
+      ['注文番号', '店舗', '伝票番号'], cpAll.filter(r => cpBad.has(r)).map(r => [r.orderId, r.storeName, r.tracking]), 'error');
+    return;
+  }
+
+  // ---- 06（cp_trk）の保存待ち：03 と同じ手順。手入力した番号（自動で入れた番号以外）は 注文番号,伝票番号 の CSV にして保存 ----
+  const manual = cpAll.filter(r => r.trackingSrc === 'manual' && s2CpDigits(r.tracking).length === 12);
+  if (manual.length) {
+    const bytes = new TextEncoder().encode([['注文番号', '伝票番号'], ...manual.map(r => [r.orderId, s2CpDigits(r.tracking)])]
+      .map(toCsvLine).join('\r\n') + '\r\n');
+    const cur = s2CpTrkSaves.get('manual');
+    const same = cur && cur.bytes.length === bytes.length && cur.bytes.every((b, i) => b === bytes[i]);
+    if (!same) s2CpTrkSaves.set('manual', { name: `クリックポスト伝票手入力（${manual.length}件）`, bytes, cpSrc: 'manual', promise: null, r: null });
+  }
+  if (s2CpTrkSaves.size) {
+    essBusyShow('s2-busy', '06_クリックポストを保存中…（出荷通知ファイルは、保存が終わってから作ります）');
+    const failed = [];
+    for (const [key, st] of s2CpTrkSaves) {
+      if (st.promise) await st.promise;
+      let r = st.r;
+      const done = x => !!(x && (x.ok || x.unset));
+      if (!done(r) && authResult !== 'failed') r = await s2SaveCpTrk(key, st.name, st.bytes, st.cpSrc);
+      if (!done(r)) failed.push({ name: st.name, error: (r && r.error) || '未保存' });
+    }
+    if (failed.length) {
+      for (const f of failed) {
+        s2Results.appendChild(essResultItem('error',
+          `⛔ 06_クリックポストを Drive に保存できませんでした：${f.error}（${f.name}）。出荷通知ファイルはまだ作っていません。`
+          + '保存せずに進むと、次回の照合でクリックポストの注文が「出力済み・発行記録なし」になります。'));
+      }
+      s2Convert.textContent = 'ログインして再試行';
+      return;
+    }
+    s2Convert.textContent = '出荷通知ファイルを作る';
+  }
+
   essBusyShow('s2-busy', '出荷通知ファイルを作成中…');
-  const outputFiles = [];   // { baseFilename, ext, mime, data }
+  const outputFiles = [];   // { baseFilename, ext, mime, data }（Amazon は rows を持ち、末尾でまとめてエンコードする）
   const allRakuten  = [];   // 楽天市場の注文番号形式だった行の全ファイル分累積
   const allExcluded = [];   // Amazon・楽天市場のいずれの形式でもない行の全ファイル分累積
 
@@ -3335,9 +3861,9 @@ async function s2ConvertRun(auth) {
       allRakuten.push(...rakutenRows);
       allExcluded.push(...excludedOther);
       for (const { storeKey, dataRows, shipDateStr, prefix } of storeResults) {
-        const tsvText = [...NOTIFY_HEADER, ...dataRows].map(r => r.join('\t')).join('\r\n') + '\r\n';
+        // クリックポストの行を末尾に足すため、エンコードは後でまとめて行う（足さなければ従来と同じバイト列）
         const baseFilename = `${prefix}amazon_shipment_confirm_${shipDateStr}`;
-        outputFiles.push({ baseFilename, ext: 'txt', mime: 'text/plain', data: toSjisUint8(tsvText) });
+        outputFiles.push({ baseFilename, ext: 'txt', mime: 'text/plain', data: null, storeKey, rows: [...NOTIFY_HEADER, ...dataRows] });
         const item = document.createElement('div');
         item.className = 'result-item success';
         item.textContent = `✓ Amazon ${storeKey}：${dataRows.length}件（${name}）`;
@@ -3349,6 +3875,56 @@ async function s2ConvertRun(auth) {
       item.textContent = `⚠ ${name}：${e.message}`;
       s2Results.appendChild(item);
     }
+  }
+
+  // ---- クリックポスト：伝票番号が12桁の行を出荷通知に合流させる ----
+  if (cpAll.length) {
+    const blank = cpAll.filter(r => !s2CpDigits(r.tracking));
+    renderRakutenWarningSection(s2Results, 's2-cp-blank',
+      `📮 クリックポスト：伝票番号が未入力のため出荷通知に出していない注文: ${blank.length}件`,
+      ['注文番号', '店舗'], blank.map(r => [r.orderId, r.storeName]), 'warn');
+    // 同じ注文番号が読み込み済みの 03 にもある＝二重発送の疑い。その注文のクリックポストの行は出さない
+    const issuedIds = s2IssuedOrderIds();
+    const filled = cpAll.filter(r => s2CpDigits(r.tracking).length === 12);
+    const dbl = filled.filter(r => issuedIds.has(r.orderId));
+    renderRakutenWarningSection(s2Results, 's2-cp-double',
+      `⛔ B2 の発行済データにもある注文（二重発送の疑い）: ${dbl.length}件 — クリックポストの行は出荷通知に出していません`,
+      ['注文番号', '店舗', 'クリックポストの伝票番号'], dbl.map(r => [r.orderId, r.storeName, s2CpDigits(r.tracking)]), 'error');
+    const targets = filled.filter(r => !issuedIds.has(r.orderId));
+    const shipDate = s1CpOutput.shipDate;   // 'YYYY-MM-DD'（STEP1 の出荷日）
+    // Amazon：店舗ごとに、今回の出荷通知ファイルの末尾へ足す（無ければ同じ命名で作る）
+    const byStore = new Map();   // 店舗名 → 行
+    for (const r of targets.filter(x => x.mall === 'amazon')) {
+      const storeName = (loadStores()[r.storeIndex] || {}).name || r.storeName;
+      if (!byStore.has(storeName)) byStore.set(storeName, []);
+      const data = Array(19).fill('');
+      data[0] = r.orderId; data[3] = `${shipDate}T00:00:00+09:00`;
+      data[4] = AMAZON_CARRIER_JAPANPOST; data[5] = AMAZON_CARRIER_JAPANPOST === 'Other' ? '日本郵便' : '';
+      data[6] = s2CpDigits(r.tracking); data[7] = 'クリックポスト';
+      byStore.get(storeName).push(data);
+    }
+    for (const [storeName, rows] of byStore) {
+      let f = outputFiles.find(x => x.rows && x.storeKey === storeName);
+      if (!f) {
+        f = { baseFilename: `${toSafeFilename(storeName)}_amazon_shipment_confirm_${shipDate.replace(/-/g, '')}`,
+              ext: 'txt', mime: 'text/plain', data: null, storeKey: storeName, rows: [...NOTIFY_HEADER] };
+        outputFiles.push(f);
+      }
+      f.rows.push(...rows);
+      const item = document.createElement('div');
+      item.className = 'result-item success';
+      item.textContent = `✓ Amazon ${storeName}：クリックポスト ${rows.length}件`;
+      s2Results.appendChild(item);
+    }
+    // 楽天：配送会社を日本郵便（1003）にして発送完了報告の入力行に加える
+    const [cy, cm, cd] = shipDate.split('-');
+    for (const r of targets.filter(x => x.mall === 'rakuten')) {
+      allRakuten.push({ orderNumber: r.orderId, trackingRaw: s2CpDigits(r.tracking),
+                        shipDateRaw: `${cy}/${parseInt(cm, 10)}/${parseInt(cd, 10)}`, carrier: RAKUTEN_CARRIER_JAPANPOST });
+    }
+  }
+  for (const f of outputFiles) {
+    if (f.rows) f.data = toSjisUint8(f.rows.map(r => r.join('\t')).join('\r\n') + '\r\n');
   }
 
   // ---- 楽天市場分：送付先IDはSTEP1の通常購入データから引く ----
@@ -3535,16 +4111,18 @@ function renderAmazonShipMethodSection() {
     const nonNeko  = rows.filter(r => amazonResolvedMethod(r) !== AMAZON_NEKOPOS).length;
     const compact  = rows.filter(r => amazonResolvedMethod(r) === AMAZON_COMPACT).length;
     const none     = rows.filter(r => amazonResolvedMethod(r) === AMAZON_NONE).length;
-    const separate = nonNeko - compact - none;   // 別発行（発行しないは混ぜない）
+    const cp       = rows.filter(r => amazonResolvedMethod(r) === AMAZON_CLICKPOST).length;
+    const separate = nonNeko - compact - none - cp;   // 別発行（発行しない・クリックポストは混ぜない）
     const switched = rows.length - nonNeko;
     head.className = 'result-item ' + (nonNeko ? 'error' : 'success');
-    // 宅急便コンパクト・発行しないを選んだ注文が無いときは従来どおりの文言（すべて別発行）。
+    // 宅急便コンパクト・発行しない・クリックポストを選んだ注文が無いときは従来どおりの文言（すべて別発行）。
     // ある場合だけ内訳を出す（宅急便コンパクトはB2 CSVに出力するため「別発行」と書かない）。
     const detailParts = [];
     if (compact)  detailParts.push(`宅急便コンパクト ${compact}件はB2 CSVに出力`);
+    if (cp)       detailParts.push(`クリックポスト ${cp}件（B2 CSVに出さない・クリックポスト用CSVに出力）`);
     if (separate) detailParts.push(`宅急便 ${separate}件は送り状を別発行`);
     if (none)     detailParts.push(`発行しない ${none}件（B2 CSVに出さない・送り状なし）`);
-    const detail = (compact || none) ? `（${detailParts.join('／')}）` : '（送り状は別発行）';
+    const detail = (compact || none || cp) ? `（${detailParts.join('／')}）` : '（送り状は別発行）';
     head.textContent = nonNeko
       ? `⚠ ネコポス以外と判定された注文：${nonNeko}件${detail}`
         + (switched ? `／ネコポスに変更：${switched}件（B2 CSVに出力します）` : '')
@@ -3763,6 +4341,8 @@ const RAKUTEN_COMPACT   = '宅急便コンパクト';
 const RAKUTEN_TAKKYUBIN = '宅急便';
 // 送り状をB2で発行しない（同梱・手渡し等）。宅配便の注文のプルダウンで選ぶ。B2 CSVから外し、帳票には「送り状なし」の印。
 const RAKUTEN_NONE      = '発行しない';
+// クリックポスト（日本郵便）。宅配便の注文のプルダウンで選ぶ。B2 CSVから外し、クリックポスト用CSV に出す。
+const RAKUTEN_CLICKPOST = 'クリックポスト';
 // RMS通常購入データCSVの「ステータス」列で出荷対象とみなす唯一の値。
 const RAKUTEN_STATUS_SHIPPABLE = '300';   // 発送待ち
 
@@ -4541,6 +5121,7 @@ function renderRakutenResults(parsed) {
     const shipCell = (o.shipType === '宅配便')
       ? `<select class="rp-ship" data-order="${esc(o.orderNumber)}">
            <option value="${RAKUTEN_COMPACT}" selected>${RAKUTEN_COMPACT}</option>
+           <option value="${RAKUTEN_CLICKPOST}">クリックポスト（B2に出さない）</option>
            <option value="${RAKUTEN_TAKKYUBIN}">${RAKUTEN_TAKKYUBIN}</option>
            <option value="${RAKUTEN_NONE}">発行しない（送り状なし）</option>
          </select>`
@@ -4676,6 +5257,8 @@ function rAfterLoad() {
   s1OutputDone = false;
   // 入力を読み込み直した＝押し直しではない。このページで出した 02 も照合の対象に戻す
   essSessionB2FileIds.clear();
+  essSessionCpFileIds.clear();
+  s1CpOutput = null;   // クリックポスト用CSVの出力もこの入力限り
   updateS1ConvertLabel();
 }
 
@@ -4757,7 +5340,8 @@ rWireDropzone(rShipDropzone, rShipFileInput, rShipLoadFile);
 // 発送完了報告CSVは「1発送単位＝1行」構造。同一注文が複数行に分かれるケース
 // （複数送付先・複数個口）は自動処理せず警告表示に留める（Kaz確認済み運用）。
 // ============================================================
-const RAKUTEN_CARRIER_YAMATO = '1001';   // RMS配送会社コード：ヤマト運輸（当社は全てヤマト）
+const RAKUTEN_CARRIER_YAMATO = '1001';   // RMS配送会社コード：ヤマト運輸（B2 で発行した送り状）
+const RAKUTEN_CARRIER_JAPANPOST = '1003';   // RMS配送会社コード：日本郵便（クリックポスト）
 const RAKUTEN_REPORT_HEADER = ['注文番号', '送付先ID', '発送明細ID', 'お荷物伝票番号', '配送会社', '発送日'];
 
 // B2の出荷予定日（'2026/7/29' 等・月日ゼロ埋めなし）→ RMS発送完了報告が要求する
@@ -4787,14 +5371,16 @@ function buildRakutenShippingReport(b2RakutenRows, rakutenGroups, today) {
   for (const g of (rakutenGroups || [])) groupByOrder.set(g.orderNumber, g);
 
   // --- B2側（注文番号 → 伝票番号・出荷日）。伝票番号の正規化は convertToShipmentNotify を踏襲 ---
-  const b2ByOrder = new Map();      // 注文番号 → { trackings:Set, shipDateRaw, shipDate(正規化済/null) }
+  // 入力行の carrier は任意（クリックポストの行だけが日本郵便を持つ。無ければヤマト）
+  const b2ByOrder = new Map();      // 注文番号 → { trackings:Set, shipDateRaw, shipDate(正規化済/null), carrier }
   for (const r of (b2RakutenRows || [])) {
     const orderNumber = r.orderNumber;
     if (!orderNumber || !r.trackingRaw) continue;
-    const tracking = String(parseInt(String(r.trackingRaw).replace(/\.0+$/, ''), 10));
+    // carrier 付き（クリックポスト）は12桁の伝票番号をそのまま使う（数値化で先頭の0を落とさないため）
+    const tracking = r.carrier ? String(r.trackingRaw) : String(parseInt(String(r.trackingRaw).replace(/\.0+$/, ''), 10));
     if (!b2ByOrder.has(orderNumber)) {
       b2ByOrder.set(orderNumber, { trackings: new Set(), shipDateRaw: r.shipDateRaw,
-                                   shipDate: normalizeRakutenShipDate(r.shipDateRaw) });
+                                   shipDate: normalizeRakutenShipDate(r.shipDateRaw), carrier: r.carrier });
     }
     b2ByOrder.get(orderNumber).trackings.add(tracking);
   }
@@ -4823,7 +5409,7 @@ function buildRakutenShippingReport(b2RakutenRows, rakutenGroups, today) {
     // 発送明細IDは常に空欄。発送情報の登録時にRMSが採番する番号のため、新規報告では空が正しい
     // （RMSマニュアル 000038913）。実データのテンプレートでも未報告の注文は全て空欄だった。
     outRows.push([orderNumber, destIds[0], '',
-                  Array.from(b2.trackings)[0], RAKUTEN_CARRIER_YAMATO, b2.shipDate]);
+                  Array.from(b2.trackings)[0], b2.carrier || RAKUTEN_CARRIER_YAMATO, b2.shipDate]);
   }
 
   // STEP1がB2 CSVへ出したはずなのに伝票が無い注文＝出荷漏れ候補。
