@@ -1202,7 +1202,17 @@ function thumbInner(sku) {
 // 送り状に印字される依頼主名（loadRakutenSender().name）とは別物。
 // KPL／MMD は店舗コードでありモールに従属しないため、Amazon側の店舗名表示と体裁を揃える。
 // 将来 楽天の店舗が増えたらここに足す（複数なら「／」で連結して表示する）。
+// 表示名は RAKUTEN_STORE_NAMES で引く（送り状の依頼主名とは別物）。
 const RAKUTEN_STORE_CODES = ['MMD'];
+const RAKUTEN_STORE_NAMES = { MMD: 'まいど萬福堂' };   // 楽天の店舗コード → 帳票の黒帯に出す表示名
+// 楽天：店舗コード（'／' 区切り）→ 表示名（'／' 区切り）。対応が無いコードはコードのまま
+function rakutenStoreDisplayName(codes) {
+  return String(codes == null ? '' : codes).split('／').filter(c => c !== '').map(c => RAKUTEN_STORE_NAMES[c] || c).join('／');
+}
+// Amazon：店舗名（'／' 区切り）の各名前の末尾の「（Amazon）」を外す。名前の途中の「（Amazon）」は外さない
+function amazonStoreDisplayNames(names) {
+  return String(names == null ? '' : names).replace(/（Amazon）(?=／|$)/g, '');
+}
 
 // 配送方法別の申告数（ヤマトへの集荷依頼でそのまま読み上げる）。3区分に集約する。
 //   ネコポス       … Amazon・楽天のネコポス
@@ -1216,14 +1226,15 @@ const RAKUTEN_STORE_CODES = ['MMD'];
 // 「発行しない」（Amazon・楽天）は none に数え、申告数（total）には含めない。
 // クリックポスト（Amazon・楽天）は clickpost に数え、申告数（total）にも unknown にも含めない（郵便ポストへ投函）。
 // 全注文数＝total＋none＋clickpost。
+// clickpostAmazon・clickpostRakuten はクリックポストのモール別の件数（clickpost＝その和。モール別内訳の「うちクリックポスト」）。
 function buildShipMethodSummary(amazon, rakuten) {
-  let nekopos = 0, compact = 0, takkyubin = 0, unknown = 0, none = 0, clickpost = 0;
+  let nekopos = 0, compact = 0, takkyubin = 0, unknown = 0, none = 0, clickpostAmazon = 0, clickpostRakuten = 0;
   for (const o of ((amazon && amazon.single) || [])) {
     const m = amazonResolvedMethod(o);
     if (m === AMAZON_COMPACT)         compact++;
     else if (m === AMAZON_TAKKYUBIN)  takkyubin++;
     else if (m === AMAZON_NONE)       none++;
-    else if (m === AMAZON_CLICKPOST)  clickpost++;
+    else if (m === AMAZON_CLICKPOST)  clickpostAmazon++;
     else                              nekopos++;
   }
   for (const o of ((rakuten && rakuten.orders) || [])) {
@@ -1232,10 +1243,11 @@ function buildShipMethodSummary(amazon, rakuten) {
     else if (m === RAKUTEN_COMPACT)  compact++;
     else if (m === RAKUTEN_TAKKYUBIN) takkyubin++;
     else if (m === RAKUTEN_NONE)     none++;
-    else if (m === RAKUTEN_CLICKPOST) clickpost++;
+    else if (m === RAKUTEN_CLICKPOST) clickpostRakuten++;
     else { takkyubin++; unknown++; }   // 判定不能は宅急便へ寄せる（合計を全注文数に一致させる）
   }
-  return { nekopos, compact, takkyubin, unknown, none, clickpost, total: nekopos + compact + takkyubin };
+  const clickpost = clickpostAmazon + clickpostRakuten;
+  return { nekopos, compact, takkyubin, unknown, none, clickpost, clickpostAmazon, clickpostRakuten, total: nekopos + compact + takkyubin };
 }
 
 // 梱包・発送明細の行番号（001…）と、複数商品注文の識別子（複-01…）。
@@ -1342,9 +1354,10 @@ function renderCombinedPickingHTML(amazon, rakuten, seq) {
   const aOrders = amazon ? (amazon.single || []).length : 0;
   const rOrders = rakuten ? (rakuten.orders || []).length : 0;
 
-  const mallLabel = (mall, names) => {
-    const n = String(names || '').trim();
-    return n ? `${mall}（${esc(n)}）` : mall;
+  // 黒帯の見出し：{種別}（{モール} {店舗名}） 注文：{N}件。店舗名が空なら（{モール}）だけ
+  const mallHead = (kind, mall, names, n) => {
+    const s = String(names || '').trim();
+    return `${kind}（${mall}${s ? ' ' + esc(s) : ''}） 注文：${n}件`;
   };
   const band = text => `<div class="mall-band">${text}</div>`;
   const mallEnd = (mall, n) => `<div class="mall-end">── ${mall}分 ここまで（${n}注文） ──</div>`;
@@ -1382,7 +1395,7 @@ function renderCombinedPickingHTML(amazon, rakuten, seq) {
     }).join('');
     const multiRow = multiGroupRows(seq.amazonGroups);
     return `
-  ${band('商品別集計（Amazon）')}
+  ${band(mallHead('商品別集計', 'Amazon', amazonStoreDisplayNames(amazon.storeNames), aOrders))}
   <table class="total">
     ${TOTAL_COLGROUP}
     ${totalHead('商品名（SKU）')}
@@ -1429,7 +1442,7 @@ function renderCombinedPickingHTML(amazon, rakuten, seq) {
   // 同じSKUの行が複数並ぶため、どちらを取るかを倉庫側が現物で判断する必要がある。
   const RAKUTEN_DUP_BADGE = `<span class="mp-badge">⚠ SKU重複あり</span>`;
   const rakutenTotalSection = !rakuten ? '' : `
-  ${band('商品別集計（楽天市場）')}
+  ${band(mallHead('商品別集計', '楽天市場', rakutenStoreDisplayName(rakuten.storeName), rOrders))}
   <table class="total">
     ${TOTAL_COLGROUP}
     ${totalHead('商品名（SKU管理番号）')}
@@ -1443,7 +1456,7 @@ function renderCombinedPickingHTML(amazon, rakuten, seq) {
   const detailHead = `<thead><tr><th class="thumb-cell">画像</th><th class="num">G番号</th><th class="qty">数量</th><th class="name">商品名</th></tr></thead>`;
 
   const amazonDetailSection = !amazon ? '' : `
-  ${band(`${mallLabel('Amazon', amazon.storeNames)}　梱包・発送明細　${aOrders}注文`)}
+  ${band(mallHead('梱包・発送明細', 'Amazon', amazonStoreDisplayNames(amazon.storeNames), aOrders))}
   <div class="detail-cols">${(amazon.single || []).map(o => {
     const rows = o.lines.map(l =>
       `<tr><td class="thumb-cell">${thumbInner(l.sku)}</td><td class="num">${esc(l.num)}</td><td class="qty">${esc(l.quantity)}</td><td class="name">${esc(l.name)}</td></tr>`
@@ -1459,16 +1472,17 @@ function renderCombinedPickingHTML(amazon, rakuten, seq) {
   ${mallEnd('Amazon', aOrders)}`;
 
   const rakutenDetailSection = !rakuten ? '' : `
-  ${band(`${mallLabel('楽天市場', rakuten.storeName)}　梱包・発送明細　${rOrders}注文`)}
+  ${band(mallHead('梱包・発送明細', '楽天市場', rakutenStoreDisplayName(rakuten.storeName), rOrders))}
   <div class="detail-cols">${(rakuten.orders || []).map(o => {
     const rows = o.lines.map(l =>
       `<tr><td class="thumb-cell">${thumbInner(l.sku)}</td><td class="num">${esc(l.num)}</td><td class="qty">${esc(l.quantity)}</td><td class="name">${esc(l.name)}${l.skuInfo ? ` <span class="skuinfo">${esc(l.skuInfo)}</span>` : ''}</td></tr>`
     ).join('');
     // 配送方法はプルダウン選択を反映した確定値（rakutenResolvedMethod）を印字する。
-    // 発行しないときだけ、配送方法タグの代わりに「送り状なし」の印を出す。
+    // 発行しない・クリックポストのときは、配送方法タグの代わりに Amazon と同じ赤の印
+    // （「送り状なし」「クリックポスト」）を出す。
     const rm = rakutenResolvedMethod(o);
     return `<section class="order">
-      <h2>${detailNo('rakuten', o.orderNumber)}${esc(o.orderNumber)}${rm === RAKUTEN_NONE ? NO_LABEL_BADGE : `<span class="m-tag">${esc(rm)}</span>`}${detailMulti('rakuten', o.orderNumber)}</h2>
+      <h2>${detailNo('rakuten', o.orderNumber)}${esc(o.orderNumber)}${rm === RAKUTEN_NONE ? NO_LABEL_BADGE : rm === RAKUTEN_CLICKPOST ? CLICKPOST_BADGE : `<span class="m-tag">${esc(rm)}</span>`}${detailMulti('rakuten', o.orderNumber)}</h2>
       <table>${detailHead}<tbody>${rows}</tbody></table>
     </section>`;
   }).join('')}</div>
@@ -1478,17 +1492,16 @@ function renderCombinedPickingHTML(amazon, rakuten, seq) {
   const ship = buildShipMethodSummary(amazon, rakuten);
   const bothMalls = !!(amazon && rakuten);
   const mallRows = [];
-  if (amazon)  mallRows.push(`<tr><td>Amazon</td><td class="n">${aOrders}</td></tr>`);
-  if (rakuten) mallRows.push(`<tr><td>楽天市場</td><td class="n">${rOrders}</td></tr>`);
+  if (amazon)  mallRows.push(`<tr><td>Amazon</td><td class="n">${aOrders}</td><td class="n cpn">${ship.clickpostAmazon}</td></tr>`);
+  if (rakuten) mallRows.push(`<tr><td>楽天市場</td><td class="n">${rOrders}</td><td class="n cpn">${ship.clickpostRakuten}</td></tr>`);
   // モール別内訳の合計・明細の合計は全注文数（申告数＋発行しない＋クリックポスト）。
-  // 申告数の表には「発行しない」「クリックポスト」の行を足さない。
+  // 申告数の表のクリックポストの行は合計に含めない（別枠）。「発行しない」の行は足さない。
   const allOrders = ship.total + ship.none + ship.clickpost;
   const detailSummary = `合計 ${allOrders}注文`
     + (bothMalls ? `（Amazon ${aOrders} ／ 楽天市場 ${rOrders}）` : '');
   const shipNote = '※送り状をセラーセントラルで別発行する注文も、その配送方法の区分で数えています。'
     + (ship.unknown ? `／配送方法を判定できない ${ship.unknown}注文は「宅急便」に含めています。` : '')
-    + (ship.none ? `／「発行しない」${ship.none}注文はヤマト申告数に含めていません。` : '')
-    + (ship.clickpost ? `／クリックポスト ${ship.clickpost}注文はヤマト申告数に含めていません（郵便ポストへ投函）。` : '');
+    + (ship.none ? `／「発行しない」${ship.none}注文はヤマト申告数に含めていません。` : '');
 
   // 2表は帳票冒頭ではなく商品別合計の末尾（最後の mall-end の直後）に出す。
   // 倉庫はピッキングを終えてから集荷を申告するため、作業の順番と並びを一致させる。
@@ -1499,19 +1512,20 @@ function renderCombinedPickingHTML(amazon, rakuten, seq) {
         <caption>ヤマト集荷依頼 申告数</caption>
         <thead><tr><th>配送方法</th><th class="n">個数</th></tr></thead>
         <tbody>
-          <tr><td>ネコポス</td><td class="n">${ship.nekopos}</td></tr>
-          <tr><td>宅急便コンパクト</td><td class="n">${ship.compact}</td></tr>
           <tr><td>宅急便</td><td class="n">${ship.takkyubin}</td></tr>
+          <tr><td>宅急便コンパクト</td><td class="n">${ship.compact}</td></tr>
+          <tr><td>ネコポス</td><td class="n">${ship.nekopos}</td></tr>
           <tr class="grand"><th>合計</th><td class="n">${ship.total}</td></tr>
+          <tr class="cp-row"><td>クリックポスト<br>（郵便ポスト投函）</td><td class="n">${ship.clickpost}</td></tr>
         </tbody>
       </table>
 
       <table class="sum-table sum-mall">
         <caption>モール別内訳</caption>
-        <thead><tr><th>モール</th><th class="n">出荷数<br>（注文数）</th></tr></thead>
+        <thead><tr><th>モール</th><th class="n">出荷数<br>（注文数）</th><th class="n cpn">うち<br>クリックポスト</th></tr></thead>
         <tbody>
           ${mallRows.join('\n          ')}
-          <tr class="grand"><th>合計</th><td class="n">${allOrders}</td></tr>
+          <tr class="grand"><th>合計</th><td class="n">${allOrders}</td><td class="n cpn">${ship.clickpost}</td></tr>
         </tbody>
       </table>
     </div>
@@ -1635,7 +1649,7 @@ function renderCombinedPickingHTML(amazon, rakuten, seq) {
   /* 同じ行に収めるぶん下線は短くする（記入幅としては十分。字は小さくしない） */
   .head-row .staff-line { width:50mm; }
 
-  /* 冒頭の2表を横並びにする。左＝ヤマト集荷依頼の申告数（3区分）／右＝モール別内訳 */
+  /* 冒頭の2表を横並びにする。左＝ヤマト集荷依頼の申告数（3区分＋クリックポストの別枠）／右＝モール別内訳 */
   .summary-row { display:flex; gap:8mm; align-items:flex-start; margin:0 0 3mm; }
   .sum-table { border:2pt solid #333; border-collapse:collapse; }
   .sum-table caption { caption-side:top; text-align:left; font-size:11pt; font-weight:bold;
@@ -1649,8 +1663,10 @@ function renderCombinedPickingHTML(amazon, rakuten, seq) {
      「（注文」「数）」に割れて3行になるため。あわせて左右パディングを詰め、
      26mm 幅のまま2行に収める（表幅・2表を並べた行幅は不変。字は小さくしない）。 */
   .sum-table th.n { white-space:nowrap; padding-left:1.5mm; padding-right:1.5mm; }
-  .sum-yamato { width:110mm; }
-  .sum-mall   { width:72mm; }
+  .sum-yamato { width:80mm; }
+  .sum-mall   { width:88mm; }
+  .sum-table td.n.cpn { width:36mm; }
+  .sum-table tr.cp-row td { border-top:2.5pt double #333; }
   .ship-note { font-size:9.5pt; color:#555; margin:0 0 6mm; }
 
   .mp-badge { display:inline-block; margin-left:3mm; padding:0 1.5mm;
@@ -2053,6 +2069,7 @@ document.getElementById('save-settings-btn').addEventListener('click', () => {
 //              引用符なし・CRLF・最終行の後にも CRLF・CP932。値に , " 改行を含むときだけ "…" で囲む
 // 文字数はすべての文字を1字と数える（全角換算ではない。クリックポストが半角を何字と数えるかが
 // 未確認のため、どちらの仕様でも上限を超えない安全側に倒す）。
+// 内容品は G番号（帳票と同じ採番）＋商品名。複数商品は G番号の列（cpContentText）。
 // ============================================================
 const CLICKPOST_HEADER_TEXT = 'お届け先郵便番号,お届け先氏名,お届け先敬称,お届け先住所1行目,お届け先住所2行目,お届け先住所3行目,お届け先住所4行目,内容品';
 const CLICKPOST_HEADER = CLICKPOST_HEADER_TEXT.split(',');
@@ -2068,6 +2085,19 @@ const cpChunk = (s, n) => { const a = [...s], out = []; for (let i = 0; i < a.le
 // CP932 で表せるか：toSjisUint8 で書いた値を SJIS として読み戻し、元と一致するか（? に化けたラベルを出さないため）
 function cpRoundTrips(v) {
   return Encoding.convert(toSjisUint8(v), { to: 'UNICODE', from: 'SJIS', type: 'string' }) === v;
+}
+
+// 内容品の文字列。gNums＝注文の明細行の G番号（帳票と同じ値）、name＝商品名（CP932 に無い文字を除いたもの）。
+function cpContentText(gNums, name) {
+  const gs = [...new Set(gNums)];                       // 同じ G番号は1回（出てきた順）
+  if (gs.length === 1) return cpSlice(`${gs[0]} ${name}`, CLICKPOST_CONTENT_CHARS);   // 1商品：G番号＋半角空白＋商品名
+  const all = gs.join('/');                             // 複数商品：半角スラッシュ区切り
+  if (cpCharLength(all) <= CLICKPOST_CONTENT_CHARS) return all;
+  for (let k = gs.length - 1; k >= 1; k--) {            // 収まる分の G番号＋「 他」（G番号を途中で切らない）
+    const c = gs.slice(0, k).join('/') + ' 他';
+    if (cpCharLength(c) <= CLICKPOST_CONTENT_CHARS) return c;
+  }
+  return '';
 }
 
 // クリックポストの対象1件（s1ConvertRun の cpRecs の要素）→ クリックポスト用CSVの1行（A〜H 列）。
@@ -2109,11 +2139,20 @@ function buildClickpostRow(cpRec) {
   const bad = [[CLICKPOST_HEADER[1], name], ...lines.map((v, i) => [CLICKPOST_HEADER[3 + i], v])]
     .find(([, v]) => !cpRoundTrips(v));
   if (bad) return { ok: false, reason: `CP932に無い文字（${bad[0]}）` };
-  // 内容品：CP932 に無い文字を除いてから15字で切る（切り詰めは仕様のため警告しない）
-  const kept = [...content].filter(ch => cpRoundTrips(ch)).join('');
-  if (kept !== content) warnings.push(`内容品から CP932 に無い文字を除きました（元：${content}）`);
-  const contentOut = cpSlice(kept, CLICKPOST_CONTENT_CHARS);
-  if (!contentOut) return { ok: false, reason: '内容品が空' };
+  // 内容品：G番号（帳票と同じ値）。G番号が1種類の注文は商品名を添える
+  const gNums = Array.isArray(cpRec.gNums) ? cpRec.gNums : [];
+  if (!gNums.length || gNums.some(g => !g)) return { ok: false, reason: 'G番号が無い' };
+  const single = new Set(gNums).size === 1;
+  let kept = '';
+  if (single) {
+    // 商品名は CP932 に無い文字を除いてから使う（15字の切り詰めは仕様のため警告しない）。
+    // 複数商品の注文は商品名を使わないため、除去も警告もしない
+    kept = [...content].filter(ch => cpRoundTrips(ch)).join('');
+    if (kept !== content) warnings.push(`内容品から CP932 に無い文字を除きました（元：${content}）`);
+    if (!kept) return { ok: false, reason: '内容品が空' };
+  }
+  const contentOut = cpContentText(gNums, single ? kept : '');
+  if (!contentOut || cpCharLength(contentOut) > CLICKPOST_CONTENT_CHARS || !cpRoundTrips(contentOut)) return { ok: false, reason: '内容品を組めない' };
   return { ok: true, cells: [postal, name, '様', ...lines, contentOut], warnings };
 }
 
@@ -3769,8 +3808,10 @@ async function s1ConvertRun(auth) {
   // クリックポストの対象（Amazon → 楽天の順。Amazon は統一ソート順、楽天は rData.orders の順）
   const cpRecs = [
     ...sortedAmazon.filter(r => r.cp).map(r => ({ orderId: r.orderId, mall: 'amazon', storeIndex: r.storeIndex,
-      storeName: (stores[r.storeIndex] || {}).name || '', src: r })),
-    ...rakutenCp.map(o => ({ orderId: o.orderNumber, mall: 'rakuten', storeIndex: null, storeName: '楽天市場', src: o })),
+      storeName: (stores[r.storeIndex] || {}).name || '', src: r,
+      gNums: r.picking.lines.map(l => (amazonPickSrc ? amazonPickSrc.skuNumMap.get(l.sku) : '') || '') })),
+    ...rakutenCp.map(o => ({ orderId: o.orderNumber, mall: 'rakuten', storeIndex: null, storeName: '楽天市場', src: o,
+      gNums: o.lines.map(l => l.num || '') })),
   ];
 
   // B2行が1本も無い場合はヘッダだけのCSVを保存しない（全件がマケプレ配送のときに起きる）。
