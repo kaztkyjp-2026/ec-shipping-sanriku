@@ -17,7 +17,7 @@
   <link rel="icon" type="image/png" id="app-icon">
   <script>document.getElementById('app-icon').href = ASSET_BASE + 'assets/icon.png';</script>
   <script src="https://accounts.google.com/gsi/client" async></script>
-  <meta name="description" content="Amazon FBM（自己発送）と楽天市場の出荷業務を支援するブラウザツール。ヤマトB2クラウド取込CSV・ピッキングリスト・Amazon出荷通知TXT・楽天市場発送完了報告CSVを生成します。入力データは外部に送信されません。">
+  <meta name="description" content="Amazon FBM（自己発送）と楽天市場の出荷業務を支援するブラウザツール。ヤマトB2クラウド取込CSV・クリックポスト用CSV・ピッキングリスト・Amazon出荷通知TXT・楽天市場発送完了報告CSVを生成します。処理はブラウザ内で行い、Google にログインしているときは入力・出力ファイルの控えを利用者自身の Google ドライブ（EC出荷記録）に保存します。">
   <script src="https://cdn.jsdelivr.net/npm/encoding-japanese@2/encoding.min.js"></script>
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
@@ -373,7 +373,7 @@
     <div class="app-logo">Amazon FBM ＋ 楽天市場 出荷オペレーション</div>
     <div class="app-title">EC出荷オペレーションツール</div>
     <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-top:10px;">
-      <div class="security-badge">🔒 データはブラウザ内で処理。入力・出力ファイルをご自身の Google ドライブ（EC出荷記録）にだけ保存します。</div>
+      <div class="security-badge">🔒 データはブラウザ内で処理。入力・出力ファイルを、Google にログインしているときだけ、ご自身の Google ドライブ（EC出荷記録）に保存します（STEP 2 で作る出荷通知TXT・発送完了報告CSVは保存しません）。</div>
       <a id="manual-link" target="_blank" style="font-size:13px;font-weight:700;color:#fff;background:#e77a1a;border-radius:8px;padding:5px 14px;text-decoration:none;letter-spacing:0.03em;">📖 使い方マニュアル</a>
       <script>document.getElementById('manual-link').href = ASSET_BASE + 'manual.html';</script>
     </div>
@@ -409,14 +409,16 @@
   <div class="tab-content" id="tab-settings">
     <div class="settings-intro">
       ヤマトB2クラウドに登録している<strong>依頼主（発送元）情報</strong>を入力してください。<br>
-      設定はこのブラウザに保存されます。複数店舗の追加・削除が可能です。
+      設定はこのブラウザに保存されます。Google にログインしているときは、Drive（EC出荷記録/00_ツール設定）にも控えを保存します。<br>
+      このブラウザの設定が空のときは、画面上部の「Drive の控えから設定を戻す」で Drive の控えから戻せます。複数店舗の追加・削除が可能です。
     </div>
     <div class="section-label">店舗情報</div>
     <div id="settings-cards"></div>
     <button class="btn-add-store" id="add-store-btn">＋ 店舗を追加</button>
     <div class="section-label" style="margin-top:18px;">楽天市場（B2依頼主・1店舗）</div>
     <div class="info-box" style="margin-bottom:10px;">
-      楽天市場分のB2クラウド取込CSVの<strong>ご依頼主</strong>に使われます。上のAmazon店舗設定とは独立です。
+      楽天市場分のB2クラウド取込CSVの<strong>ご依頼主</strong>に使われます。上のAmazon店舗設定とは独立です。<br>
+      注文者と送付先が異なる注文（RMSの送付先一致フラグが0）は、ご依頼主欄に注文者を入れます。請求先顧客コード・運賃管理番号は常にこの設定の値を使います。
     </div>
     <div id="rakuten-settings-card"></div>
     <button class="btn-primary btn-green" id="save-settings-btn">保存してSTEP 1へ</button>
@@ -427,7 +429,9 @@
   <div class="tab-content" id="tab-step1">
     <p style="font-size:13px;color:#666;margin-bottom:20px;line-height:1.6;">
       Amazonの未出荷注文レポートと楽天市場の通常購入データCSVを<br>
-      ヤマトB2クラウド取込用CSV（1ファイル）に変換します。どちらか一方だけでも変換できます。
+      ヤマトB2クラウド取込用CSV（1ファイル）に変換します。どちらか一方だけでも変換できます。<br>
+      クリックポストを選んだ注文があれば、クリックポスト用CSVも出力します。変換後にピッキングリスト・梱包発送明細を印刷できます。<br>
+      出力の前に、直近7日の Drive の記録と照合し、発行済み・出力済みの注文を除外します。
     </p>
     <div class="settings-row">
       <div class="field">
@@ -435,8 +439,8 @@
         <input type="date" id="s1-shipDate">
       </div>
       <div class="field">
-        <label>送り状種類</label>
-        <select id="s1-invoiceType">
+        <label>送り状種類（ネコポス固定・廃止予定）</label>
+        <select id="s1-invoiceType" disabled>
           <option value="A" selected>ネコポス</option>
           <option value="0">宅急便</option>
           <option value="8">宅急便コンパクト</option>
@@ -465,7 +469,7 @@
       <div class="dropzone drop-red" id="r-ship-dropzone" style="margin-bottom:14px;">
         <div class="dropzone-icon">🚚</div>
         <div class="dropzone-text" id="r-ship-dropzone-text">発送完了報告用DLデータをドロップ<br>またはクリックして選択</div>
-        <div class="dropzone-hint">RMSのデータダウンロード画面で、出力テンプレートを「発送完了報告用」に切り替えて取得してください<br>お荷物伝票番号が入っている注文（発送完了報告済み）は除外します。B2で発行しただけの注文は、Drive の記録との照合（A）で除外します</div>
+        <div class="dropzone-hint">RMSのデータダウンロード画面で、出力テンプレートを「発送完了報告用」に切り替えて取得してください<br>お荷物伝票番号が入っている注文（発送完了報告済み）は除外します。B2で発行しただけの注文は、直近7日の Drive の記録との照合（A）で除外します</div>
       </div>
       <input type="file" id="r-ship-fileInput" accept=".csv" style="display:none">
       <div class="results" id="r-results"></div>
@@ -479,7 +483,10 @@
     <hr class="divider">
     <div class="section-label">出力ファイル</div>
     <div class="info-box">
-      ファイル名: <strong>b2cloud_YYYYMMDD_HHMMSS.csv</strong>（Amazon全店舗＋楽天市場 統合・1ファイル、Amazon分→楽天市場分の順）<br>
+      B2用CSV: <strong>b2cloud_{出荷予定日YYYYMMDD}_HHMMSS.csv</strong>（Amazon全店舗＋楽天市場 統合・1ファイル、Amazon分→楽天市場分の順。照合なしで出力したときは末尾に _照合なし）<br>
+      クリックポスト用CSV: <strong>clickpost_{出荷予定日YYYYMMDD}_HHMMSS.csv</strong>（クリックポストの注文があるときだけ。40件ごとに _1・_2… に分けます。照合なしで出力したときは末尾に _照合なし）<br>
+      B2の対象が0件でクリックポストだけのときは、b2cloud_… は出力しません。<br>
+      出力の前に Drive の記録（直近7日）と照合します。出力後は Drive の EC出荷記録/{作業日}/02_B2用CSV・06_クリックポスト に控えを保存します。<br>
       ブラウザのダウンロードとして直接保存されます（フォルダ選択なし）。
     </div>
     <div class="section-label" style="margin-top:14px;">依頼主情報（設定中）</div>
@@ -501,14 +508,15 @@
     </div>
     <div class="info-box">
       楽天市場分を出力するには、<strong>STEP 1 で通常購入データCSVを読み込んでおく必要があります</strong>
-      （発送完了報告に必要な<strong>送付先ID</strong>をそこから取得するため）。<br>
-      RMSの発送完了報告用テンプレートCSVは不要です。
+      （発送完了報告に必要な<strong>送付先ID</strong>をそこから取得するため）。STEP 1 の読み込みは、この画面を開いている間だけ有効です（ページを再読み込みすると消えます）。<br>
+      RMSの発送完了報告用テンプレートCSVは、STEP 2 では不要です。<br>
+      出荷通知ファイルを作る前に、読み込んだ発行済データを Drive（EC出荷記録/{作業日}/03_発行済データ）に保存します（クリックポストの伝票番号は 06_クリックポスト）。保存できないときは出荷通知ファイルを作りません。
     </div>
     <div class="section-label">発行済みデータCSV（複数ファイル対応）</div>
     <div class="dropzone drop-blue" id="s2-dropzone" style="margin-bottom:20px;">
       <div class="dropzone-icon">📄</div>
       <div class="dropzone-text" id="s2-dropzone-text">発行済みデータCSVをドロップ<br>またはクリックして選択</div>
-      <div class="dropzone-hint">複数ファイル同時選択可 ／ yyyymmddHHMMSS_発行済テ_ータ.csv</div>
+      <div class="dropzone-hint">複数ファイル同時選択可 ／ yyyymmddHHMMSS_発行済テ_ータ.csv ／ GoQ のクリックポスト［レポート出力］CSV も入れられます</div>
     </div>
     <input type="file" id="s2-fileInput" accept=".csv,.txt" multiple style="display:none">
     <div id="s2-cp"></div>
@@ -520,8 +528,8 @@
     <hr class="divider">
     <div class="section-label">出力ファイル</div>
     <div class="info-box">
-      Amazon: <strong>{店舗名}_amazon_shipment_confirm_YYYYMMDD_HHMMSS.txt</strong>（店舗ごとに1ファイル）<br>
-      楽天市場: <strong>rakuten_shipping_report_YYYYMMDD_HHMMSS.csv</strong>（1ファイル）<br>
+      Amazon: <strong>{店舗名}_amazon_shipment_confirm_{出荷予定日YYYYMMDD}_HHMMSS.txt</strong>（読み込んだ発行済データのファイルごと・店舗ごとに1ファイル。同じ名前になるときは末尾に _2・_3…）<br>
+      楽天市場: <strong>rakuten_shipping_report_{作成日YYYYMMDD}_HHMMSS.csv</strong>（1ファイル）<br>
       ブラウザのダウンロードとして直接保存されます（フォルダ選択なし）。<br>
       ※複数ファイル時にブラウザが「複数ファイルのダウンロード許可」を求めた場合は許可してください。
     </div>
@@ -535,8 +543,8 @@
   <!-- ============ Footer ============ -->
   <div class="footer">
     <div class="contact-links">
-      要望・不具合報告：
-      <a href="https://github.com/kaztkyjp-2026/ec-shipping-sanriku/issues" target="_blank">GitHub Issues（公開掲示板）</a>
+      商品画像の登録先：
+      <a href="https://github.com/kaztkyjp-2026/ec-shipping-sanriku/edit/main/sku-images.json" target="_blank">sku-images.json を編集（GitHub）</a>
       ｜
       <a href="https://docs.google.com/forms/d/e/1FAIpQLSdeymUyCmegcPe6v2r4eOmVLpl-8I2j2rjXoO_uYbWxo1DYMQ/viewform" target="_blank">お問い合わせフォーム</a>
     </div>
@@ -549,7 +557,7 @@
         <p><strong>無保証</strong>：本ツールは現状有姿（as-is）で提供されます。変換結果の正確性・完全性・特定目的への適合性について、いかなる保証も行いません。</p>
         <p><strong>免責</strong>：本ツールの使用または使用不能によって生じた損害（データの損失、業務上の損失、その他直接・間接を問わず）について、作成者は一切の責任を負いません。</p>
         <p><strong>利用規約への準拠</strong>：Amazon・ヤマトビジネスメンバーズその他各サービスの利用規約への適合は利用者自身が確認・判断してください。本ツールの利用が各サービスの規約に適合するかについて、作成者は保証しません。</p>
-        <p><strong>データの取り扱い</strong>：本ツールはすべての処理をブラウザ内で完結します。入力されたデータが外部サーバーに送信されることはありませんが、利用者自身の環境・端末上でのデータ管理は利用者の責任において行ってください。</p>
+        <p><strong>データの取り扱い</strong>：本ツールの処理はブラウザ内で行います。Google にログインしているときは、入力ファイル・B2用CSV・発行済データ・クリックポスト関連ファイル・店舗設定の控えを利用者自身の Google ドライブ（EC出荷記録）に保存し、重複発行の照合（店舗設定の控えは設定を戻すとき）に読み出します。作成者のサーバーへは送信しません。利用者自身の環境・端末および Google ドライブ上でのデータ管理は利用者の責任において行ってください。</p>
         <p><strong>変更・廃止</strong>：本ツールの内容・仕様・公開の継続については予告なく変更・終了することがあります。</p>
       </div>
     </details>
@@ -1909,7 +1917,7 @@ function addStoreCard(store) {
       </div>
       <div class="field">
         <label>請求先顧客コード</label>
-        <input type="text" data-field="customerCode" value="${esc(s.customerCode)}" placeholder="例：0123456789012">
+        <input type="text" data-field="customerCode" value="${esc(s.customerCode)}" placeholder="例：012345678901">
       </div>
       <div class="field">
         <label>運賃管理番号</label>
@@ -2215,7 +2223,7 @@ async function s1ClickpostOutput(cpRecs, dateStr, hms, opts = {}) {
 
   // 06 に保存（cp_csv＝ダウンロードしたバイト列そのもの／cp_out＝出力記録）。変換ボタンのハンドラは完了まで待つ（02 と同じ）
   essBusyShow('s1-busy', '06_クリックポスト に保存中…');
-  const failText = '⚠ 06の保存に失敗：明日の照合に使えません';
+  const failText = '⚠ 06の保存に失敗：以後の照合に使えません';
   const st = opts.stamp || essWorkStamp();
   const saves = files.map(f => essSaveAndReport('s1', 'cp_csv', '', f.bytes, f.name,
     { stamp: st, nomatch: !!opts.nomatch, cpPart: f.part, key: `cp_csv:${f.name}`, failText }));
@@ -3108,8 +3116,8 @@ function essRenderExportedList(container, list, include) {
   const head = document.createElement('div');
   head.className = 'result-item error';
   const excludedN = list.filter(x => !include.has(x.id)).length;
-  head.textContent = `⛔ 出力済み・発行記録なし（直近${ESS_WINDOW_DAYS}日にB2用CSVへ出力済みで、発行済データに伝票番号がない）：${list.length}件`
-    + ` — うち ${excludedN}件 をB2取込CSVから除外しました。B2で未発行のまま残っている場合だけ、チェックして作り直してください`;
+  head.textContent = `⛔ 出力済み・発行記録なし（直近${ESS_WINDOW_DAYS}日にB2用CSVまたはクリックポスト用CSVへ出力済みで、伝票番号の記録がない）：${list.length}件`
+    + ` — うち ${excludedN}件 を今回の出力（B2取込CSV・クリックポスト用CSV）から除外しました。B2・クリックポストで未発行のまま残っている場合だけ、チェックして作り直してください`;
   const sec = document.createElement('div');
   sec.style.marginTop = '8px';
   sec.innerHTML = `
@@ -3200,7 +3208,7 @@ async function essB2Output(rows, dateStr, onExclude, cpRecs = []) {
         updateS1ConvertLabel();
         essSaveAndReport('s1', 'b2csv', '', bytes, filename, {
           stamp: st, nomatch: true, key: `b2csv:${filename}`,
-          failText: '⚠ 02の保存に失敗：明日の照合に使えません' });
+          failText: '⚠ 02の保存に失敗：以後の照合に使えません' });
       } else {
         // B2 の行が0件：ヘッダだけのB2用CSVはダウンロードせず、02 にも保存しない
         s1Results.appendChild(essB2NoneItem('B2用CSV：出力する注文なし（クリックポストのみ）'));
@@ -3219,12 +3227,12 @@ async function essB2Output(rows, dateStr, onExclude, cpRecs = []) {
   const nExported = col.exported.filter(x => !include.has(x.id)).length;
 
   renderRakutenWarningSection(s1Results, 's1-ess-issued',
-    `🟡 発行済み（直近${ESS_WINDOW_DAYS}日の発行済データに伝票番号あり）のためB2取込CSVから除外：${nIssued}件 — B2では発行しないでください。出荷通知だけ送ってください`,
+    `🟡 発行済み（直近${ESS_WINDOW_DAYS}日の発行済データまたはクリックポストの伝票番号の記録あり）のため今回の出力（B2取込CSV・クリックポスト用CSV）から除外：${nIssued}件 — B2・クリックポストでは発行しないでください。出荷通知だけ送ってください`,
     ['注文番号', '店舗', '前回出力した日時', '伝票番号'],
     col.issued.map(x => [x.id, x.store, x.lastOut, x.trackings.join(' ／ ')]), 'warn');
   essRenderExportedList(s1Results, col.exported, include);
   renderRakutenWarningSection(s1Results, 's1-ess-ref',
-    `8日以上前にB2へ出力済み（照合期間外）：${col.ref.length}件 — 除外していません（照合期間${ESS_WINDOW_DAYS}日の確認用）`,
+    `7〜13日前に B2用CSV／クリックポスト用CSV へ出力済み（照合期間外）：${col.ref.length}件 — 除外していません（照合期間${ESS_WINDOW_DAYS}日の確認用）`,
     ['注文番号', '店舗', '前回出力した日時'],
     col.ref.map(x => [x.id, x.store, x.lastOut]), 'warn');
 
@@ -3264,7 +3272,7 @@ async function essB2Output(rows, dateStr, onExclude, cpRecs = []) {
     essBusyShow('s1-busy', '02_B2用CSV に保存中…');
     b2Save = essSaveAndReport('s1', 'b2csv', '', bytes, filename, {
       stamp: work, key: `b2csv:${filename}`,
-      failText: '⚠ 02の保存に失敗：明日の照合に使えません',
+      failText: '⚠ 02の保存に失敗：以後の照合に使えません',
       onDone: r => {
         if (!ok.isConnected) return;
         ok.textContent = r.ok ? `${head} → 02_B2用CSV に保存` : `${head}（02_B2用CSV への保存に失敗。上の赤い帯を確認してください）`;
@@ -3419,7 +3427,7 @@ function renderStep1Sections() {
   updateS1ConvertLabel();   // Amazonバッファのリセットをラベルへ反映（楽天市場の読込は維持される）
 
   if (stores.length === 0) {
-    s1Sections.innerHTML = '<div class="info-box">店舗が設定されていません。<strong>設定タブ</strong>から店舗情報を登録してください。</div>';
+    s1Sections.innerHTML = '<div class="info-box">店舗が設定されていません。<strong>依頼主設定タブ</strong>から店舗情報を登録してください。</div>';
     return;
   }
 
@@ -3446,7 +3454,7 @@ function renderStep1Sections() {
     dz.className = 'dropzone';
     dz.innerHTML = `<div class="dropzone-icon">📦</div>
       <div class="dropzone-text">ここにファイルをドロップ<br>またはクリックして選択</div>
-      <div class="dropzone-hint">Amazon未出荷注文レポート（.txt / .tsv）</div>`;
+      <div class="dropzone-hint">Amazon未出荷注文レポート（タブ区切り .txt / .tsv）</div>`;
 
     const fi = document.createElement('input');
     fi.type='file'; fi.accept='.txt,.tsv,.csv'; fi.style.display='none';
@@ -3569,7 +3577,7 @@ function updateS1ConvertLabel() {
     s1Convert.textContent = 'B2取込CSVを作る';
     addNote(s1RakutenParsed
       ? '⛔ 楽天市場の「発送完了報告用DLデータ（6列）」が未読込です。'
-        + '送り状発行済みの注文を除外できないため変換できません（②のドロップ欄に読み込んでください）'
+        + '発送完了報告済み（RMSにお荷物伝票番号あり）の注文を除外できないため変換できません（②のドロップ欄に読み込んでください）'
       : '⛔ 楽天市場の「通常購入データCSV」が未読込です。'
         + '楽天分の注文内容を取得できないため変換できません（①のドロップ欄に読み込んでください）', 'error');
     return;
@@ -3585,7 +3593,7 @@ function updateS1ConvertLabel() {
     const { active } = splitRakutenShipped(s1RakutenParsed.groups, s1RakutenShipped);
     parts.push(`楽天市場 ${active.length}件`);
   }
-  s1Convert.textContent = `${parts.join(' ＋ ')} の B2取込CSVを作る（1ファイル）`;
+  s1Convert.textContent = 'B2取込CSVを作る';
 
   if (!hasAmazon || !hasRakuten) {
     addNote(hasRakuten
@@ -3820,7 +3828,7 @@ async function s1ConvertRun(auth) {
   if (!amazonRows.length && !rakutenB2Rows.length && !cpRecs.length) {
     const el = document.createElement('div');
     el.className = 'result-item error'; el.style.marginTop = '6px';
-    el.textContent = '⚠ B2 CSVに出力する注文がありません（すべて送り状を別発行する注文です）。'
+    el.textContent = '⚠ B2 CSVに出力する注文がありません（別発行・発行しない・配送方法不明の注文だけ、または楽天市場の依頼主が未設定など。上の表示を確認してください）。'
       + 'ピッキングリスト・梱包発送明細は印刷できます';
     s1Results.appendChild(el);
     return;
@@ -3987,8 +3995,8 @@ function s2RenderCp() {
         #s2-cp .cp-match { font-size:12px; color:#555; }
       </style>
       <div class="section-label">クリックポストの伝票番号（${s1CpOutput.rows.length}件：${esc(s1CpOutput.fileNames.join('・'))}）</div>
-      <div class="info-box">GoQ の［レポート出力］で落とした CSV を上のドロップ欄に入れると、宛先と内容品が一致したときに伝票番号が入ります。
-        入らなかったときは、ラベルを見て12桁の伝票番号を入力してください。</div>
+      <div class="info-box">GoQ の［レポート出力］で落とした CSV を上のドロップ欄に入れると、レポートの全行とこの一覧の全行が宛先・内容品で1対1に一致したときだけ、伝票番号がまとめて入ります（1行でも合わなければ1件も入りません）。
+        この一覧は、同じ画面で STEP 1 のクリックポスト用CSVを出力したときに出ます。入らなかったときは、ラベルを見て12桁の伝票番号を入力してください。</div>
       <table class="cp-table">
         <thead><tr><th>行</th><th>店舗</th><th>注文番号</th><th>氏名</th><th>郵便番号</th><th>伝票番号</th><th>照合</th></tr></thead>
         <tbody>${rowsHtml}</tbody>
@@ -4008,7 +4016,7 @@ function s2RenderCp() {
   }
   if (s2CpMismatch && s2CpMismatch.length) {
     renderRakutenWarningSection(el, 's2-cp-mismatch',
-      `⛔ GoQ のレポートと照合できなかった行：${s2CpMismatch.length}件 — 伝票番号を手で入力してください`,
+      `⛔ GoQ のレポートと照合できなかった行：${s2CpMismatch.length}件 — 1行でも合わないため伝票番号は1件も入れていません。ラベルを見て手で入力してください`,
       ['側', '注文番号／追跡番号', '氏名', '理由'], s2CpMismatch, 'error');
   }
   updateS2ConvertEnabled();
@@ -4023,7 +4031,7 @@ function s2SaveCpTrk(key, name, bytes, cpSrc) {
   Object.assign(st, { name, bytes, cpSrc });
   s2CpTrkSaves.set(key, st);
   const p = essSaveAndReport('s2', 'cp_trk', '', bytes, name, { key: `cp_trk:${key}`, cpSrc,
-    failText: '⚠ 06の保存に失敗：明日の照合に使えません', onDone: r => { st.r = r; } });
+    failText: '⚠ 06の保存に失敗：以後の照合に使えません', onDone: r => { st.r = r; } });
   st.promise = p;
   const clear = () => { if (st.promise === p) st.promise = null; };
   p.then(clear, clear);
@@ -4166,7 +4174,7 @@ async function s2ConvertRun(auth) {
           `⛔ 03_発行済データを Drive に保存できませんでした：${f.error}（${f.name}）。出荷通知ファイルはまだ作っていません。`
           + '保存せずに進むと、次回の照合で「出力済み・発行記録なし」になります。'));
       }
-      s2Convert.textContent = 'ログインして再試行';
+      s2Convert.textContent = '保存を再試行';
       return;
     }
     s2Convert.textContent = '出荷通知ファイルを作る';
@@ -4208,7 +4216,7 @@ async function s2ConvertRun(auth) {
           `⛔ 06_クリックポストを Drive に保存できませんでした：${f.error}（${f.name}）。出荷通知ファイルはまだ作っていません。`
           + '保存せずに進むと、次回の照合でクリックポストの注文が「出力済み・発行記録なし」になります。'));
       }
-      s2Convert.textContent = 'ログインして再試行';
+      s2Convert.textContent = '保存を再試行';
       return;
     }
     s2Convert.textContent = '出荷通知ファイルを作る';
@@ -5398,14 +5406,14 @@ function renderRakutenResults(parsed) {
   const okItem = document.createElement('div');
   okItem.className = 'result-item success';
   okItem.textContent = `✓ 楽天市場：${active.length}注文 ／ ${lineCount}明細を読み込みました`
-    + (shipped.length ? `（送り状発行済み ${shipped.length}注文を除外）` : '')
+    + (shipped.length ? `（発送完了報告済み ${shipped.length}注文を除外。RMSにお荷物伝票番号あり）` : '')
     + (data.scheduled.length ? `（うち予定 ${data.scheduled.length}注文は本日のピッキング対象外）` : '');
   rResults.appendChild(okItem);
 
   // 警告（0件のブロックは表示されない）。除外・遅延＝最優先のためリスト最上部。
   // 送り状発行済みの除外は事故ではなく正常な動作のため 'warn'（黄）で出す。
   renderRakutenWarningSection(rResults, 'r-warn-shipped',
-    `⚠ 送り状発行済みのため除外（既に出荷済みです）: ${shipped.length}件`,
+    `⚠ 発送完了報告済み（RMSにお荷物伝票番号あり）のため除外（既に出荷済みです）: ${shipped.length}件`,
     ['注文番号', '発送指示日時', '商品名'],
     shipped.map(g => [g.orderNumber, g.shipInstructedAt || '（空）', firstName(g)]), 'warn');
 
@@ -5439,7 +5447,7 @@ function renderRakutenResults(parsed) {
     ['注文番号', '内容', '商品名'],
     parsed.needsCheck.map(x => [x.orderNumber, x.memo, x.productName]), 'warn');
   renderRakutenWarningSection(rResults, 'r-warn-unknown',
-    `⚠ 未知の配送方法（除外はしていません）: ${parsed.unknownMethods.length}件`,
+    `⚠ 未知の配送方法（ピッキングには含めます。B2取込CSVからは除外されます）: ${parsed.unknownMethods.length}件`,
     ['注文番号', '配送方法', '商品名'],
     parsed.unknownMethods.map(x => [x.orderNumber, x.method, x.productName]), 'warn');
   // 予定分（お届け日が本日+4日以降）＝本日のピッキング対象・B2 CSV対象に含めない
