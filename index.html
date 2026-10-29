@@ -248,6 +248,9 @@
     @keyframes busy-rotate { to { transform:rotate(360deg); } }
 
     .results { display: flex; flex-direction: column; gap: 8px; }
+    /* 中身のある .results が続くとき（Drive 保存の帯 #s1-drive-band → 変換結果 #s1-results、STEP2 も同じ）は
+       箱の間も通知の間と同じ 8px 空ける（箱の間が0で、上下の緑の通知が密着していた） */
+    .results:not(:empty) + .results:not(:empty) { margin-top: 8px; }
     .result-item { display: none; border-radius: 8px; padding: 12px 16px; font-size: 13px; }
     .result-item.success { display: block; background: #f0fdf4; border: 1px solid #86efac; color: #166534; font-weight: 600; }
     .result-item.error   { display: block; background: #fef2f2; border: 1px solid #fca5a5; color: #991b1b; }
@@ -484,7 +487,7 @@
     <div class="section-label">出力ファイル</div>
     <div class="info-box">
       B2用CSV: <strong>b2cloud_{出荷予定日YYYYMMDD}_HHMMSS.csv</strong>（Amazon全店舗＋楽天市場 統合・1ファイル、Amazon分→楽天市場分の順。照合なしで出力したときは末尾に _照合なし）<br>
-      クリックポスト用CSV: <strong>clickpost_{出荷予定日YYYYMMDD}_HHMMSS.csv</strong>（クリックポストの注文があるときだけ。40件ごとに _1・_2… に分けます。照合なしで出力したときは末尾に _照合なし）<br>
+      クリックポスト用CSV: <strong>clickpost_{出荷予定日YYYYMMDD}_HHMMSS.csv</strong>（クリックポストの注文があるときだけ。40行ごとに _1・_2… に分けます（N個口の注文は同じ行を N 行出します）。照合なしで出力したときは末尾に _照合なし）<br>
       B2の対象が0件でクリックポストだけのときは、b2cloud_… は出力しません。<br>
       出力の前に Drive の記録（直近7日）と照合します。出力後は Drive の EC出荷記録/{作業日}/02_B2用CSV・06_クリックポスト に控えを保存します。<br>
       ブラウザのダウンロードとして直接保存されます（フォルダ選択なし）。
@@ -807,6 +810,34 @@ let amazonShipListOpen = null;
 // 前回描画した時点（とプルダウン操作）で「開いて確認が要る」（確定値が宅急便・別発行）だった注文番号。
 // 組み直しで新たに当たる注文が出たら、閉じていても開く（見落とすとB2から落ちるため）。
 let amazonShipAutoSeen = new Set();
+
+// 個口数（複数個口）。注文単位の選択（order-id → 2〜PARCEL_MAX）。1個口の注文はキーを持たない。
+// 発送方法の選択（amazonShipChoice）と同じ扱いで保持する（読み直しで残る注文は保持・消えた注文は捨てる・
+// 依頼主設定の保存で全部捨てる）。N個口の注文は B2用CSV／クリックポスト用CSV に同じ行を N 行出す
+// （Kaz は B2 クラウド上で同じ行を複製して2個口にしていた。伝票番号以外の全列が同一）。
+const PARCEL_MAX = 10;
+const amazonParcelChoice = new Map();
+// 注文の個口数。「発行しない」は送り状を出さないため数えない（1 を返す。内訳の個口数は「—」）。
+// 「発行しない」から他の方法に戻したときは、前に選んでいた個口数に戻る（選択は消さない）。
+function amazonParcelCount(o) {
+  if (!o || amazonResolvedMethod(o) === AMAZON_NONE) return 1;
+  return amazonParcelChoice.get(o.orderId) || 1;
+}
+// 1行を n 行に複製する（B2用CSVの行。2行目以降は別の配列にする＝後から1行だけ書き換えても他に波及しない）
+function parcelRows(row, n) {
+  return Array.from({ length: Math.max(1, n || 1) }, (_, i) => (i ? row.slice() : row));
+}
+// 一覧の個口数プルダウンの選択肢（1〜PARCEL_MAX）
+function parcelOptionsHtml(cur) {
+  let h = '';
+  for (let n = 1; n <= PARCEL_MAX; n++) h += `<option value="${n}"${n === cur ? ' selected' : ''}>${n}</option>`;
+  return h;
+}
+// 一覧の見出しに足す「／2個口以上 n件（計 m口）」。counts は対象注文の個口数の配列
+function parcelHeadText(counts) {
+  const multi = counts.filter(n => n >= 2);
+  return multi.length ? `／2個口以上 ${multi.length}件（計 ${multi.reduce((a, n) => a + n, 0)}口）` : '';
+}
 
 // 注文の確定発送方法（B2 CSV・印刷・画面表示の共通ロジック）。
 // 引数は parseAmazonTsvGroups の group／buildOrderRecords のレコード／
@@ -1244,31 +1275,40 @@ function amazonStoreDisplayNames(names) {
 // 合計（注文数）＝小計＋クリックポスト＋発行しない＝梱包・発送明細の「合計 N注文」。
 // 戻り値 { amazon, rakuten, all }。各 { nekopos, compact, takkyubin, unknown, clickpost, none, yamato, orders }
 //   yamato … 小計（ヤマト集荷依頼）／ orders … 合計（注文数）／ unknown … takkyubin のうち楽天の不明の件数
+// 個口数（parcels）も同じ区分で持つ（全モール合算で表の「個口数」の列に出す）。ヤマトへは種類ごと（宅急便・
+// 宅急便コンパクト・ネコポス）に個口数で申告する（Kaz 確定 2026-10-29）。「発行しない」は個口数を数えない。
+//   parcels … { nekopos, compact, takkyubin, clickpost, yamato, orders }
+//             yamato＝宅急便＋コンパクト＋ネコポス／orders＝yamato＋クリックポスト（発行しないを含まない）
 function buildShipMethodSummary(amazon, rakuten) {
-  const zero = () => ({ nekopos: 0, compact: 0, takkyubin: 0, unknown: 0, clickpost: 0, none: 0, yamato: 0, orders: 0 });
+  const zero = () => ({ nekopos: 0, compact: 0, takkyubin: 0, unknown: 0, clickpost: 0, none: 0, yamato: 0, orders: 0,
+    parcels: { nekopos: 0, compact: 0, takkyubin: 0, clickpost: 0, yamato: 0, orders: 0 } });
   const a = zero(), r = zero();
+  const add = (x, k, n) => { x[k]++; if (k !== 'none') x.parcels[k] += n; };
   for (const o of ((amazon && amazon.single) || [])) {
-    const m = amazonResolvedMethod(o);
-    if (m === AMAZON_COMPACT)         a.compact++;
-    else if (m === AMAZON_TAKKYUBIN)  a.takkyubin++;
-    else if (m === AMAZON_NONE)       a.none++;
-    else if (m === AMAZON_CLICKPOST)  a.clickpost++;
-    else                              a.nekopos++;
+    const m = amazonResolvedMethod(o), n = amazonParcelCount(o);
+    if (m === AMAZON_COMPACT)         add(a, 'compact', n);
+    else if (m === AMAZON_TAKKYUBIN)  add(a, 'takkyubin', n);
+    else if (m === AMAZON_NONE)       add(a, 'none', n);
+    else if (m === AMAZON_CLICKPOST)  add(a, 'clickpost', n);
+    else                              add(a, 'nekopos', n);
   }
   for (const o of ((rakuten && rakuten.orders) || [])) {
-    const m = rakutenResolvedMethod(o);
-    if (m === RAKUTEN_NEKOPOS)        r.nekopos++;
-    else if (m === RAKUTEN_COMPACT)   r.compact++;
-    else if (m === RAKUTEN_TAKKYUBIN) r.takkyubin++;
-    else if (m === RAKUTEN_NONE)      r.none++;
-    else if (m === RAKUTEN_CLICKPOST) r.clickpost++;
-    else { r.takkyubin++; r.unknown++; }   // 判定不能は宅急便へ寄せる（合計を全注文数に一致させる）
+    const m = rakutenResolvedMethod(o), n = rakutenParcelCount(o);
+    if (m === RAKUTEN_NEKOPOS)        add(r, 'nekopos', n);
+    else if (m === RAKUTEN_COMPACT)   add(r, 'compact', n);
+    else if (m === RAKUTEN_TAKKYUBIN) add(r, 'takkyubin', n);
+    else if (m === RAKUTEN_NONE)      add(r, 'none', n);
+    else if (m === RAKUTEN_CLICKPOST) add(r, 'clickpost', n);
+    else { add(r, 'takkyubin', n); r.unknown++; }   // 判定不能は宅急便へ寄せる（合計を全注文数に一致させる）
   }
   const all = zero();
   for (const x of [a, r]) {
     x.yamato = x.nekopos + x.compact + x.takkyubin;
     x.orders = x.yamato + x.clickpost + x.none;
-    for (const k of Object.keys(all)) all[k] += x[k];
+    x.parcels.yamato = x.parcels.nekopos + x.parcels.compact + x.parcels.takkyubin;
+    x.parcels.orders = x.parcels.yamato + x.parcels.clickpost;
+    for (const k of Object.keys(all)) if (k !== 'parcels') all[k] += x[k];
+    for (const k of Object.keys(all.parcels)) all.parcels[k] += x.parcels[k];
   }
   return { amazon: a, rakuten: r, all };
 }
@@ -1312,10 +1352,20 @@ function buildMultiGroups(amazon, rakuten) {
 }
 
 // 統合ピッキング帳票の印刷用HTML。
-//   amazon  … { total, single, multiCount, storeNames } ／ 未読込なら null
-//   rakuten … { total, orders, multiCount, storeName }  ／ 未読込なら null
-// 片方が null のときは、そのモールのセクションを丸ごと出力しない。
-function renderCombinedPickingHTML(amazon, rakuten, seq) {
+//   amazon  … { total, single, multiCount, storeNames } ／ 注文が無い・未読込なら null でもよい
+//   rakuten … { total, orders, multiCount, storeName }  ／ 同上
+//   load    … 読込状態 { amazon: { loaded:[店舗名…], missing:[店舗名…] }, rakuten: 'complete'|'none' }（s1ConvertRun が作る）。
+//             省略時はデータの有無で読込済みとみなす。
+// 帳票には常に Amazon と楽天市場の両方を出す（Kaz 確定 2026-10-29）。読込済みで0件なら「注文：0件」、
+// 未読込なら「未読込」の黒帯と終わりの線だけを出す（表は出さない）。配送方法別内訳も常に両モールの列を出す。
+function renderCombinedPickingHTML(amazon, rakuten, seq, load) {
+  const aLoaded = load ? load.amazon.loaded.length > 0 : !!amazon;
+  const rLoaded = load ? load.rakuten === 'complete' : !!rakuten;
+  // 読込済みでデータが無い（変換できる注文が0件・照合で全部除外）ときは空のデータとして扱う
+  if (!amazon && aLoaded) amazon = { total: [], single: [], multiCount: 0, storeNames: load.amazon.loaded.join('／') };
+  if (!rakuten && rLoaded) rakuten = { total: [], orders: [], multiCount: 0, storeName: RAKUTEN_STORE_CODES.join('／') };
+  if (!aLoaded) amazon = null;
+  if (!rLoaded) rakuten = null;
   // 行番号・識別子（画面の一覧と同じ結果を渡されたらそれを使う）
   seq = seq || buildMultiGroups(amazon, rakuten);
   const seqByOrder = new Map(seq.rows.map(r => [r.mall + '\u001e' + r.orderId, r]));
@@ -1335,55 +1385,106 @@ function renderCombinedPickingHTML(amazon, rakuten, seq) {
   // マケプレ配送（宅急便・別発行）の印。商品別合計・梱包発送明細の2帳票で同一のHTML／CSSを使い、
   // 現場が同じものだと即座に分かるようにする（文言・体裁を分岐させないこと）。
   const MP_BADGE = `<span class="mp-badge">⚠ 送り状は別発行（マケプレ配送）</span>`;
-  // 宅急便コンパクト（B2発行）の印。楽天の rakutenShipBadges と同じ見た目（.mp-badge）・文言。
-  const AMAZON_COMPACT_BADGE = `<span class="mp-badge">⚠ ${AMAZON_COMPACT}</span>`;
   // 発行しない（B2で送り状を出さない）の印。楽天の「発行しない」と同じ文言・見た目。
   const NO_LABEL_BADGE = `<span class="mp-badge">⚠ 送り状なし</span>`;
   // クリックポスト（B2で送り状を出さず、クリックポストのラベルを貼る）の印。楽天の rakutenShipBadges と同じ文言・見た目。
   const CLICKPOST_BADGE = `<span class="mp-badge">⚠ クリックポスト</span>`;
+  // 配送方法の表記（Amazon・楽天で同じ見た目。Kaz 確定 2026-10-29）：
+  //   ネコポス＝黒枠・白地（.m-tag）／宅急便コンパクト＝黄緑地（.ship-compact）／宅急便＝深緑地・白文字（.ship-takkyubin）
+  //   クリックポスト・発行しない＝赤（.mp-badge）。Amazon の宅急便（別発行）は深緑＋赤の「送り状は別発行」の2つ
+  // 黄緑・深緑は白黒印刷でも濃淡で区別できる色（灰色換算 黄緑≒210・深緑≒72）。
+  const NEKOPOS_TAG   = `<span class="m-tag ship-nekopos">ネコポス</span>`;
+  const COMPACT_TAG   = `<span class="ship-tag ship-compact">宅急便コンパクト</span>`;
+  const TAKKYUBIN_TAG = `<span class="ship-tag ship-takkyubin">宅急便</span>`;
+  // 梱包・発送明細（全注文に出す）
   const amazonMethodBadge = m =>
-    m === AMAZON_COMPACT ? AMAZON_COMPACT_BADGE : m === AMAZON_TAKKYUBIN ? MP_BADGE
-      : m === AMAZON_NONE ? NO_LABEL_BADGE : m === AMAZON_CLICKPOST ? CLICKPOST_BADGE : '';
+    m === AMAZON_COMPACT ? COMPACT_TAG : m === AMAZON_TAKKYUBIN ? TAKKYUBIN_TAG + MP_BADGE
+      : m === AMAZON_NONE ? NO_LABEL_BADGE : m === AMAZON_CLICKPOST ? CLICKPOST_BADGE : NEKOPOS_TAG;
+  // 商品別集計のネコポスは今どおり印なし（大多数がネコポスで、全行に付けると印が意味を失うため）
+  const amazonSkuBadge = m => m === AMAZON_NEKOPOS ? '' : amazonMethodBadge(m);
+  // 2個口以上の注文の印（梱包・発送明細の注文番号の横）。配送方法の表記・複数商品の札（.multi-tag）と見分けられる二重線の丸札
+  const parcelTag = n => n >= 2 ? `<span class="parcel-tag">${n}個口</span>` : '';
 
   // 商品別合計の列幅。colgroup で明示指定し、商品名の幅を確保する。
-  // 画像12% ／ G番号11% ／ ピッキング合計13% ／ 出荷数（注文数）13% ／ 商品名 残り51%。
+  // 画像12% ／ G番号11% ／ ピッキング合計13% ／ 出荷個口数（注文数）13% ／ 商品名 残り51%。
   // Amazon・楽天の2表で必ず同一の列幅にする（現場が同じ表として読めるようにするため）。
   const TOTAL_COLGROUP = `<colgroup><col class="c-thumb"><col class="c-num"><col class="c-qty"><col class="c-cnt"><col class="c-name"></colgroup>`;
 
-  // 商品別合計のヘッダ。「ピッキング合計」「出荷数（注文数）」は2行に折り返す
+  // 商品別合計のヘッダ。「ピッキング合計」「出荷個口数（注文数）」は2行に折り返す
   // （<br> で明示。line-height:1.25 で高さを抑える。文字は小さくしない）。
   const totalHead = nameLabel =>
-    `<thead><tr><th class="thumb-cell">画像</th><th class="num">G番号</th><th class="qty">ピッキング<br>合計</th><th class="cnt">出荷数<br>（注文数）</th><th class="name">${nameLabel}</th></tr></thead>`;
+    `<thead><tr><th class="thumb-cell">画像</th><th class="num">G番号</th><th class="qty">ピッキング<br>合計</th><th class="cnt">出荷個口数<br>（注文数）</th><th class="name">${nameLabel}</th></tr></thead>`;
 
-  // ピッキング合計 ≠ 出荷数（注文数）の行は、ピッキング合計セルのみ黒地・白抜きにする。
+  // ピッキング合計 ≠ 出荷個口数 の行は、ピッキング合計セルのみ黒地・白抜きにする（以前は「≠ 注文数」）。
   // 判定は表示側の単純比較だけで行い、集計データ（total / orders）は一切変更しない。
   // 集約行（複数商品注文）は数量が「—」なので、そもそもこのヘルパーを通さない＝対象外。
-  const qtyCellCls = (totalQty, orderCount) =>
-    (totalQty !== orderCount) ? 'qty qty-mismatch' : 'qty';
+  const qtyCellCls = (totalQty, parcels) =>
+    (totalQty !== parcels) ? 'qty qty-mismatch' : 'qty';
+  // 出荷個口数（注文数）のセルの中身。主の数字＝行に属する注文の個口数の合計（「発行しない」は 1）、
+  // 括弧の注文数は同じ行に小さな字で添える（例「3（2）」）
+  const cntInner = (parcels, orders) =>
+    `<span class="cnt-main">${esc(parcels)}</span><span class="cnt-sub">（${esc(orders)}）</span>`;
+  // 個口数の集計。行に属する注文の集合は今の注文数（orderCount）と同じ＝単一商品注文（明細1行）だけ。
+  //   Amazon … sku ごと（amazonSkuMethods と同じ取り方）／楽天 … クラスタキーごと
+  // 照合で除外した後の作り直しでも、渡された（残った）注文だけで数える
+  const amazonSkuParcels = new Map();   // sku → 個口数の合計
+  for (const o of (amazon ? (amazon.single || []) : [])) {
+    if ((o.lines || []).length !== 1) continue;
+    const k = o.lines[0].sku;
+    amazonSkuParcels.set(k, (amazonSkuParcels.get(k) || 0) + amazonParcelCount(o));
+  }
+  const rakutenKeyParcels = new Map();  // クラスタキー → 個口数の合計
+  for (const o of (rakuten ? (rakuten.orders || []) : [])) {
+    if ((o.lines || []).length !== 1) continue;
+    const k = (o.lines[0].sku || '') + '\u001f' + (o.lines[0].itemMgmtNo || '');
+    rakutenKeyParcels.set(k, (rakutenKeyParcels.get(k) || 0) + rakutenParcelCount(o));
+  }
+  // 複数商品注文の識別子（複-01…）→ 個口数の合計。buildMultiGroups の結果（seq）は変えずに描画側で数える
+  const multiParcels = new Map();
+  {
+    const aById = new Map(((amazon && amazon.single) || []).map(o => [o.orderId, o]));
+    const rById = new Map(((rakuten && rakuten.orders) || []).map(o => [o.orderNumber, o]));
+    for (const r of seq.rows) {
+      if (!r.multi) continue;
+      const n = r.mall === 'amazon' ? amazonParcelCount(aById.get(r.orderId)) : rakutenParcelCount(rById.get(r.orderId));
+      multiParcels.set(r.multi, (multiParcels.get(r.multi) || 0) + n);
+    }
+  }
 
   // 複数商品注文の行。中身が同じ注文を識別子（複-01…）ごとに1行にまとめる（buildMultiGroups）。
   // Amazon・楽天市場で同じ列順・同じ体裁にする（モールで分岐させないこと）。
-  // 画像欄に識別子（.multi-id。16pt 太字）、出荷数（注文数）にその識別子の注文数、
+  // 画像欄に識別子（.multi-id。16pt 太字）、出荷個口数（注文数）にその識別子の注文の個口数の合計（注文数）、
   // 商品名欄に中身（G番号×数量 ＋ … の後に各商品名を短く）。数量は「—」のため
   // qtyCellCls（黒地反転＝数量不一致の印）は通さない。配送方法・SKU重複バッジも出さない。
   const shortName = s => { const t = String(s == null ? '' : s); return t.length > 20 ? t.slice(0, 20) + '…' : t; };
   const multiGroupRows = groups => (groups || []).map(g =>
-    `<tr><td class="thumb-cell"><span class="multi-id">${esc(g.id)}</span></td><td class="num">—</td><td class="qty">—</td><td class="cnt">${g.count}</td><td class="name">${esc(g.lines.map(l => `${l.num}×${l.quantity}`).join(' ＋ '))}　${esc(g.lines.map(l => shortName(l.name)).join(' ／ '))}</td></tr>`
+    `<tr><td class="thumb-cell"><span class="multi-id">${esc(g.id)}</span></td><td class="num">—</td><td class="qty">—</td><td class="cnt">${cntInner(multiParcels.get(g.id) || g.count, g.count)}</td><td class="name">${esc(g.lines.map(l => `${l.num}×${l.quantity}`).join(' ＋ '))}　${esc(g.lines.map(l => shortName(l.name)).join(' ／ '))}</td></tr>`
   ).join('');
-  // 梱包・発送明細の見出しの先頭の行番号と、複数商品注文の識別子の札
-  const detailNo = (mall, id) => { const r = seqByOrder.get(mall + '\u001e' + id); return r ? `<span class="row-no">${esc(r.no)}</span>` : ''; };
+  // 梱包・発送明細の見出しの先頭の行番号（全角括弧で括る。例「（001）」）と、複数商品注文の識別子の札
+  const detailNo = (mall, id) => { const r = seqByOrder.get(mall + '\u001e' + id); return r ? `<span class="row-no">（${esc(r.no)}）</span>` : ''; };
   const detailMulti = (mall, id) => { const r = seqByOrder.get(mall + '\u001e' + id); return r && r.multi ? `<span class="multi-tag">${esc(r.multi)}</span>` : ''; };
 
   const aOrders = amazon ? (amazon.single || []).length : 0;
   const rOrders = rakuten ? (rakuten.orders || []).length : 0;
 
-  // 黒帯の見出し：{種別}（{モール} {店舗名}） 注文：{N}件。店舗名が空なら（{モール}）だけ
+  // 黒帯の見出し：{種別}（{モール} {店舗名}） 注文：{N}件。店舗名が空なら（{モール}）だけ。未読込（n が null）なら「… 未読込」
   const mallHead = (kind, mall, names, n) => {
     const s = String(names || '').trim();
-    return `${kind}（${mall}${s ? ' ' + esc(s) : ''}） 注文：${n}件`;
+    return `${kind}（${mall}${s ? ' ' + esc(s) : ''}） ${n == null ? '未読込' : `注文：${n}件`}`;
   };
   const band = text => `<div class="mall-band">${text}</div>`;
-  const mallEnd = (mall, n) => `<div class="mall-end">── ${mall}分 ここまで（${n}注文） ──</div>`;
+  const mallEnd = (mall, n) => `<div class="mall-end">── ${mall}分 ここまで（${n == null ? '未読込' : `${n}注文`}） ──</div>`;
+  // Amazon の黒帯の店舗名。全店舗読込済みなら今どおり。一部だけなら「まいど萬福堂のみ・健康プラス研究所未読込」の形、
+  // 全店舗未読込なら設定してある店舗名（黒帯は「… 未読込」）
+  const aDisp = names => amazonStoreDisplayNames((names || []).join('／'));
+  const amazonBandNames = (!load || !load.amazon.missing.length) ? amazonStoreDisplayNames(amazon ? amazon.storeNames : '')
+    : !aLoaded ? aDisp(load.amazon.missing)
+    : `${aDisp(load.amazon.loaded)}のみ・${aDisp(load.amazon.missing)}未読込`;
+  const rakutenBandName = rakutenStoreDisplayName(rakuten ? rakuten.storeName : RAKUTEN_STORE_CODES.join('／'));
+  // 0件・未読込のモールは黒帯と終わりの線だけ（表は出さない）
+  const emptySection = (kind, mall, names, n) => `
+  ${band(mallHead(kind, mall, names, n))}
+  ${mallEnd(mall, n)}`;
 
   // Amazon：SKU → その SKU を含む単一商品注文の確定発送方法の集合（ネコポス以外のみ）。
   // 商品別集計の行に印を出すために使う。
@@ -1404,21 +1505,23 @@ function renderCombinedPickingHTML(amazon, rakuten, seq) {
   const amazonSkuBadges = sku => {
     const s = amazonSkuMethods.get(sku);
     if (!s) return '';
-    return [AMAZON_COMPACT, AMAZON_CLICKPOST, AMAZON_TAKKYUBIN, AMAZON_NONE].filter(m => s.has(m)).map(amazonMethodBadge).join('');
+    return [AMAZON_COMPACT, AMAZON_CLICKPOST, AMAZON_TAKKYUBIN, AMAZON_NONE].filter(m => s.has(m)).map(amazonSkuBadge).join('');
   };
 
   // ---- 商品別合計（A4縦・1段） ----
   // 複数商品注文は商品クラスタに含めず1行に集約する（Amazon側の従来仕様）。
-  const amazonTotalSection = !amazon ? '' : (() => {
+  const amazonTotalSection = !amazon ? emptySection('商品別集計', 'Amazon', amazonBandNames, null)
+    : !aOrders ? emptySection('商品別集計', 'Amazon', amazonBandNames, 0) : (() => {
     const rows = (amazon.total || []).map(t => {
       const skuTag = (t.sku && t.sku !== t.name) ? ` <span class="sku">(${esc(t.sku)})</span>` : '';
       // バッジは商品名セル内・SKU表記の直後に置く。行末（注文数の後ろ）だと商品名が長いときに
       // 折り返しでバッジが商品から離れ、どの商品の話か分からなくなるため。
-      return `<tr><td class="thumb-cell">${thumbInner(t.sku)}</td><td class="num">${esc(t.num)}</td><td class="${qtyCellCls(t.totalQty, t.orderCount)}">${esc(t.totalQty)}</td><td class="cnt">${esc(t.orderCount)}</td><td class="name">${esc(t.name)}${skuTag}${amazonSkuBadges(t.sku)}</td></tr>`;
+      const parcels = amazonSkuParcels.has(t.sku) ? amazonSkuParcels.get(t.sku) : t.orderCount;
+      return `<tr><td class="thumb-cell">${thumbInner(t.sku)}</td><td class="num">${esc(t.num)}</td><td class="${qtyCellCls(t.totalQty, parcels)}">${esc(t.totalQty)}</td><td class="cnt">${cntInner(parcels, t.orderCount)}</td><td class="name">${esc(t.name)}${skuTag}${amazonSkuBadges(t.sku)}</td></tr>`;
     }).join('');
     const multiRow = multiGroupRows(seq.amazonGroups);
     return `
-  ${band(mallHead('商品別集計', 'Amazon', amazonStoreDisplayNames(amazon.storeNames), aOrders))}
+  ${band(mallHead('商品別集計', 'Amazon', amazonBandNames, aOrders))}
   <table class="total">
     ${TOTAL_COLGROUP}
     ${totalHead('商品名（SKU）')}
@@ -1450,86 +1553,90 @@ function renderCombinedPickingHTML(amazon, rakuten, seq) {
       rakutenSkuMethods.get(k).add(m);
     }
   }
-  // ネコポス以外（宅急便コンパクト／宅急便）のみバッジ化する。
-  // 楽天注文の大多数がネコポスであり、全行に付けると赤が意味を失うため。
-  // 判定できない配送方法（'（不明）'等）はバッジを付けない（B2除外の警告で担保済み）。
-  // 混在時は両方を並べる（順序固定：コンパクト→宅急便）。件数内訳は持たない。
+  // ネコポス以外のみ印を付ける（楽天注文の大多数がネコポスであり、全行に付けると印が意味を失うため）。
+  // 色分けは梱包・発送明細と同じ（コンパクト＝黄緑／宅急便＝深緑／クリックポスト・発行しない＝赤）。
+  // 判定できない配送方法（'（不明）'等）は印を付けない（B2除外の警告で担保済み）。
+  // 混在時は並べる（順序固定：コンパクト→クリックポスト→宅急便→発行しない）。件数内訳は持たない。
   const RAKUTEN_BADGE_ORDER = [RAKUTEN_COMPACT, RAKUTEN_CLICKPOST, RAKUTEN_TAKKYUBIN, RAKUTEN_NONE];
+  const rakutenMethodBadge = m =>
+    m === RAKUTEN_NEKOPOS ? NEKOPOS_TAG : m === RAKUTEN_COMPACT ? COMPACT_TAG : m === RAKUTEN_TAKKYUBIN ? TAKKYUBIN_TAG
+      : m === RAKUTEN_NONE ? NO_LABEL_BADGE : m === RAKUTEN_CLICKPOST ? CLICKPOST_BADGE : `<span class="m-tag">${esc(m)}</span>`;
   const rakutenShipBadges = (clusterKey) => {
     const s = rakutenSkuMethods.get(clusterKey);
     if (!s) return '';
-    return RAKUTEN_BADGE_ORDER.filter(m => s.has(m))
-      .map(m => m === RAKUTEN_NONE ? NO_LABEL_BADGE : `<span class="mp-badge">⚠ ${esc(m)}</span>`).join('');
+    return RAKUTEN_BADGE_ORDER.filter(m => s.has(m)).map(rakutenMethodBadge).join('');
   };
   // 同一SKU管理番号が別商品に使い回されている行の警告（buildRakutenPickingData の dupWarning）。
   // 同じSKUの行が複数並ぶため、どちらを取るかを倉庫側が現物で判断する必要がある。
   const RAKUTEN_DUP_BADGE = `<span class="mp-badge">⚠ SKU重複あり</span>`;
-  const rakutenTotalSection = !rakuten ? '' : `
-  ${band(mallHead('商品別集計', '楽天市場', rakutenStoreDisplayName(rakuten.storeName), rOrders))}
+  const rakutenTotalSection = !rakuten ? emptySection('商品別集計', '楽天市場', rakutenBandName, null)
+    : !rOrders ? emptySection('商品別集計', '楽天市場', rakutenBandName, 0) : `
+  ${band(mallHead('商品別集計', '楽天市場', rakutenBandName, rOrders))}
   <table class="total">
     ${TOTAL_COLGROUP}
     ${totalHead('商品名（SKU管理番号）')}
-    <tbody>${(rakuten.total || []).map(t =>
-      `<tr><td class="thumb-cell">${thumbInner(t.sku)}</td><td class="num">${esc(t.num)}</td><td class="${qtyCellCls(t.totalQty, t.orderCount)}">${esc(t.totalQty)}</td><td class="cnt">${esc(t.orderCount)}</td><td class="name">${rakutenNameCell(t.name, t.skuInfo, t.sku)}${t.dupWarning ? RAKUTEN_DUP_BADGE : ''}${rakutenShipBadges(t.clusterKey)}</td></tr>`
-    ).join('')}${multiGroupRows(seq.rakutenGroups)}</tbody>
+    <tbody>${(rakuten.total || []).map(t => {
+      const parcels = rakutenKeyParcels.has(t.clusterKey) ? rakutenKeyParcels.get(t.clusterKey) : t.orderCount;
+      return `<tr><td class="thumb-cell">${thumbInner(t.sku)}</td><td class="num">${esc(t.num)}</td><td class="${qtyCellCls(t.totalQty, parcels)}">${esc(t.totalQty)}</td><td class="cnt">${cntInner(parcels, t.orderCount)}</td><td class="name">${rakutenNameCell(t.name, t.skuInfo, t.sku)}${t.dupWarning ? RAKUTEN_DUP_BADGE : ''}${rakutenShipBadges(t.clusterKey)}</td></tr>`;
+    }).join('')}${multiGroupRows(seq.rakutenGroups)}</tbody>
   </table>
   ${mallEnd('楽天市場', rOrders)}`;
 
   // ---- 梱包・発送明細（A4横・2段組み） ----
   const detailHead = `<thead><tr><th class="thumb-cell">画像</th><th class="num">G番号</th><th class="qty">数量</th><th class="name">商品名</th></tr></thead>`;
 
-  const amazonDetailSection = !amazon ? '' : `
-  ${band(mallHead('梱包・発送明細', 'Amazon', amazonStoreDisplayNames(amazon.storeNames), aOrders))}
+  const amazonDetailSection = !amazon ? emptySection('梱包・発送明細', 'Amazon', amazonBandNames, null)
+    : !aOrders ? emptySection('梱包・発送明細', 'Amazon', amazonBandNames, 0) : `
+  ${band(mallHead('梱包・発送明細', 'Amazon', amazonBandNames, aOrders))}
   <div class="detail-cols">${(amazon.single || []).map(o => {
     const rows = o.lines.map(l =>
       `<tr><td class="thumb-cell">${thumbInner(l.sku)}</td><td class="num">${esc(l.num)}</td><td class="qty">${esc(l.quantity)}</td><td class="name">${esc(l.name)}</td></tr>`
     ).join('');
-    // 宅急便・別発行はB2の送り状が出ない。宅急便コンパクトは荷姿が違う。
-    // 倉庫の担当者が気づけるよう注文番号と同じ行に印を出す。
+    // 全注文の注文番号の横に配送方法の表記を出す（楽天と同じ。以前は Amazon だけネコポス以外の赤の印のみ）。
+    // 2個口以上の注文は「N個口」の印も出す。
     // ※ G番号は分けない（商品別合計との突合が壊れるため。冒頭の再発防止コメント参照）。
     return `<section class="order">
-      <h2>${detailNo('amazon', o.orderId)}${esc(o.orderId)}${amazonMethodBadge(amazonResolvedMethod(o))}${detailMulti('amazon', o.orderId)}</h2>
+      <h2>${detailNo('amazon', o.orderId)}${esc(o.orderId)}${amazonMethodBadge(amazonResolvedMethod(o))}${parcelTag(amazonParcelCount(o))}${detailMulti('amazon', o.orderId)}</h2>
       <table>${detailHead}<tbody>${rows}</tbody></table>
     </section>`;
   }).join('')}</div>
   ${mallEnd('Amazon', aOrders)}`;
 
-  const rakutenDetailSection = !rakuten ? '' : `
-  ${band(mallHead('梱包・発送明細', '楽天市場', rakutenStoreDisplayName(rakuten.storeName), rOrders))}
+  const rakutenDetailSection = !rakuten ? emptySection('梱包・発送明細', '楽天市場', rakutenBandName, null)
+    : !rOrders ? emptySection('梱包・発送明細', '楽天市場', rakutenBandName, 0) : `
+  ${band(mallHead('梱包・発送明細', '楽天市場', rakutenBandName, rOrders))}
   <div class="detail-cols">${(rakuten.orders || []).map(o => {
     const rows = o.lines.map(l =>
       `<tr><td class="thumb-cell">${thumbInner(l.sku)}</td><td class="num">${esc(l.num)}</td><td class="qty">${esc(l.quantity)}</td><td class="name">${esc(l.name)}${l.skuInfo ? ` <span class="skuinfo">${esc(l.skuInfo)}</span>` : ''}</td></tr>`
     ).join('');
-    // 配送方法はプルダウン選択を反映した確定値（rakutenResolvedMethod）を印字する。
-    // 発行しない・クリックポストのときは、配送方法タグの代わりに Amazon と同じ赤の印
-    // （「送り状なし」「クリックポスト」）を出す。
+    // 配送方法はプルダウン選択を反映した確定値（rakutenResolvedMethod）を Amazon と同じ表記で印字する。
+    // 5択のどれでもない（不明）ときは今までどおり黒枠に生の配送方法。2個口以上は「N個口」の印も出す。
     const rm = rakutenResolvedMethod(o);
     return `<section class="order">
-      <h2>${detailNo('rakuten', o.orderNumber)}${esc(o.orderNumber)}${rm === RAKUTEN_NONE ? NO_LABEL_BADGE : rm === RAKUTEN_CLICKPOST ? CLICKPOST_BADGE : `<span class="m-tag">${esc(rm)}</span>`}${detailMulti('rakuten', o.orderNumber)}</h2>
+      <h2>${detailNo('rakuten', o.orderNumber)}${esc(o.orderNumber)}${rakutenMethodBadge(rm)}${parcelTag(rakutenParcelCount(o))}${detailMulti('rakuten', o.orderNumber)}</h2>
       <table>${detailHead}<tbody>${rows}</tbody></table>
     </section>`;
   }).join('')}</div>
   ${mallEnd('楽天市場', rOrders)}`;
 
   // ---- 配送方法別内訳（1表）----
-  // 以前の2表（ヤマト集荷依頼 申告数／モール別内訳）を1表にまとめた。列は読み込んだモール＋計。
+  // 以前の2表（ヤマト集荷依頼 申告数／モール別内訳）を1表にまとめた。列は Amazon・楽天市場・合計・個口数（常に両モール）。
   const ship = buildShipMethodSummary(amazon, rakuten);
-  const bothMalls = !!(amazon && rakuten);
-  // 片方のモールだけ読み込んだ日は、そのモールの列と「計」の列だけ出す
-  const shipCols = [];
-  if (amazon)  shipCols.push(['Amazon', ship.amazon]);
-  if (rakuten) shipCols.push(['楽天市場', ship.rakuten]);
-  shipCols.push(['計', ship.all]);
+  // 未読込のモールの列は見出しに「（未読込）」を添え、数値は「—」。合計・個口数は読込済みの分だけ（未読込のデータは空）
+  const shipCols = [['Amazon', ship.amazon, aLoaded], ['楽天市場', ship.rakuten, rLoaded], ['合計', ship.all, true]];
   // 合計（注文数）＝梱包・発送明細の「合計 N注文」。同じ値（ship.all.orders）から組む＝ずれない
   const allOrders = ship.all.orders;
   const detailSummary = `合計 ${allOrders}注文`
-    + (bothMalls ? `（Amazon ${aOrders} ／ 楽天市場 ${rOrders}）` : '');
-  // 「発行しない」の注記は表に行ができたので出さない
-  const shipNote = '※送り状をセラーセントラルで別発行する注文も、その配送方法の区分で数えています。'
+    + `（Amazon ${aLoaded ? aOrders : '未読込'} ／ 楽天市場 ${rLoaded ? rOrders : '未読込'}）`;
+  // ヤマトへの申告は配送方法の種類ごとに個口数で行う（Kaz 確定 2026-10-29）。実際の数を埋め込む
+  const sp = ship.all.parcels;
+  const shipNote = `※ヤマトへの集荷依頼は、配送方法の種類ごとに「個口数」の数で申告してください（宅急便 ${sp.takkyubin}口・宅急便コンパクト ${sp.compact}口・ネコポス ${sp.nekopos}口）。`
+    + '／送り状をセラーセントラルで別発行する注文も、その配送方法の区分で数えています。'
     + (ship.all.unknown ? `／配送方法を判定できない ${ship.all.unknown}注文は「宅急便」に含めています。` : '');
-  // 行：[見出しセル, キー, tr の class]。小計・合計は太字・網掛け（.grand）
+  // 行：[見出しセル, キー, tr の class]。小計・合計は太字・網掛け（.grand）。
+  // 右端の個口数（td.pc）は「発行しない」の行だけ「—」（送り状を出さないため数えない）
   const shipRow = (label, key, cls, th) => `<tr${cls ? ` class="${cls}"` : ''}>${th ? `<th>${label}</th>` : `<td>${label}</td>`}${
-    shipCols.map(([, x]) => `<td class="n">${x[key]}</td>`).join('')}</tr>`;
+    shipCols.map(([, x, ld]) => `<td class="n">${ld ? x[key] : '—'}</td>`).join('')}<td class="n pc">${key === 'none' ? '—' : sp[key]}</td></tr>`;
 
   // 表は帳票冒頭ではなく商品別合計の末尾（最後の mall-end の直後）に出す。
   // 倉庫はピッキングを終えてから集荷を申告するため、作業の順番と並びを一致させる。
@@ -1540,7 +1647,7 @@ function renderCombinedPickingHTML(amazon, rakuten, seq) {
     <div class="ship-sum">
       <table class="sum-table sum-ship">
         <caption>配送方法別内訳</caption>
-        <thead><tr><th>配送方法</th>${shipCols.map(([h]) => `<th class="n">${h}</th>`).join('')}</tr></thead>
+        <thead><tr><th>配送方法</th>${shipCols.map(([h, , ld]) => `<th class="n">${h}${ld ? '' : '<br>（未読込）'}</th>`).join('')}<th class="n pc">個口数</th></tr></thead>
         <tbody>
           ${shipRow('宅急便', 'takkyubin')}
           ${shipRow('宅急便コンパクト', 'compact')}
@@ -1556,12 +1663,17 @@ function renderCombinedPickingHTML(amazon, rakuten, seq) {
 
   // 商品別合計は「モールの黒帯の前」で必ず改頁する。モールごとに .pg-unit を分け、
   // CSS の .pg-unit + .pg-unit { break-before:page } に改頁を任せる（2つ目以降だけが改頁）。
+  // ただし 0件・未読込のモールの区間（黒帯と終わりの線だけ）は改頁の理由にしない＝前のユニットに続けて置く
+  // （紙を増やさない）。注文のあるモールが2つ続くときだけ、2つ目の黒帯の前で改頁する。
   // 梱包・発送明細は2段組みの流し込みで、モールごとに割ると段が虫食いになるため1ユニットにまとめる。
-  const totalUnits = [amazonTotalSection, rakutenTotalSection].filter(Boolean);
-
-  // 表の挿入先は「最後の totalUnit」＝楽天市場があればその mall-end の直後、
-  // 無ければ Amazon の mall-end の直後。商品別合計が空のときだけ先頭ユニットに残す。
-  const tailIdx = totalUnits.length - 1;   // -1 なら商品別合計なし
+  const totalUnits = [];   // [{ html, has }]（has＝注文のある区間を含む）
+  for (const [html, has] of [[amazonTotalSection, aOrders > 0], [rakutenTotalSection, rOrders > 0]]) {
+    const cur = totalUnits[totalUnits.length - 1];
+    if (!cur || (has && cur.has)) totalUnits.push({ html, has });
+    else { cur.html += html; cur.has = cur.has || has; }
+  }
+  // 表の挿入先は「最後の totalUnit」の末尾（最後の mall-end の直後）
+  const tailIdx = totalUnits.length - 1;
 
   return `<!DOCTYPE html>
 <html lang="ja"><head><meta charset="UTF-8">
@@ -1641,6 +1753,10 @@ function renderCombinedPickingHTML(amazon, rakuten, seq) {
      font-size は変更しない。 */
   .total th.qty, .total td.qty,
   .total th.cnt, .total td.cnt { padding-left:1.5mm; padding-right:1.5mm; }
+  /* 出荷個口数（注文数）：主の数字（個口数の合計）は隣のピッキング合計と同じ 16pt 太字、括弧の注文数は 11pt・標準の太さ。
+     同じ行に並べる（td.cnt は nowrap）。列幅 13%（23.4mm）に収まる */
+  .total td.cnt .cnt-main { font-size:16pt; font-weight:bold; }
+  .total td.cnt .cnt-sub  { font-size:11pt; font-weight:normal; }
 
   /* 集約行（複数商品注文）の画像欄に出す「複」。画像の代わりの1文字なので大きく出す。
      太字・黒文字・白地（黒地反転は .qty-mismatch＝数量不一致の印と紛れるため使わない）。
@@ -1654,7 +1770,7 @@ function renderCombinedPickingHTML(amazon, rakuten, seq) {
                background:#333; color:#fff; font-size:10.5pt; font-weight:bold; white-space:nowrap;
                -webkit-print-color-adjust:exact; print-color-adjust:exact; }
 
-  /* 数量不一致（ピッキング合計 ≠ 出荷数（注文数））の印。ピッキング合計セルのみ黒地・白抜き。
+  /* 数量不一致（ピッキング合計 ≠ 出荷個口数）の印。ピッキング合計セルのみ黒地・白抜き。
      濃度は .mall-band と同じ #333 に揃える（純黒 #000 は使わない）。
      白黒レーザーで確実に出るよう print-color-adjust:exact を付ける（.mall-band と同手法）。
      文字サイズは .total td.qty の 16pt のまま変更しない。 */
@@ -1688,10 +1804,13 @@ function renderCombinedPickingHTML(amazon, rakuten, seq) {
      26mm 幅のまま2行に収める（字は小さくしない）。 */
   .sum-table th.n { white-space:nowrap; padding-left:1.5mm; padding-right:1.5mm; }
   /* 幅は中身なり（見出し列＋数値列26mm×列数）。全幅（100%）に伸ばすと数字が見出しから離れて読みにくい。
-     3列（Amazon・楽天市場・計）でも約135mm＝A4縦の本文幅180mmに収まる。 */
+     4列（Amazon・楽天市場・合計・個口数）でも約160mm＝A4縦の本文幅180mmに収まる。 */
   .sum-ship { width:auto; margin:0 0 3mm; }
   /* クリックポストの行の上を二重線にして、小計（ヤマト集荷依頼）までと区切る */
   .sum-table tr.cp-row td { border-top:2.5pt double #333; }
+  /* 個口数の列（右端）を太線で囲む：右・上・下は外枠（2pt）のまま、左の縦線を外枠と同じ 2pt solid にする。
+     ヤマトへ申告するのはこの列の数（Kaz 確定 2026-10-29：太線で囲むのは「合計」ではなく「個口数」） */
+  .sum-table th.pc, .sum-table td.pc { border-left:2pt solid #333; }
   .ship-note { font-size:9.5pt; color:#555; margin:0 0 6mm; }
 
   .mp-badge { display:inline-block; margin-left:3mm; padding:0 1.5mm;
@@ -1699,9 +1818,19 @@ function renderCombinedPickingHTML(amazon, rakuten, seq) {
               background:#fef2f2; color:#991b1b;
               font-size:9.5pt; font-weight:bold; white-space:nowrap;
               -webkit-print-color-adjust:exact; print-color-adjust:exact; }
-  /* 楽天の配送方法タグ。文字サイズは現行の 10.5pt を維持する（帳票の字を小さくしない） */
+  /* 配送方法の表記（ネコポス＝黒枠・白地／楽天の不明＝黒枠に生の配送方法）。文字サイズは 10.5pt を維持する（帳票の字を小さくしない） */
   .m-tag { display:inline-block; margin-left:3mm; padding:0 1.5mm; border:1pt solid #333;
            font-size:10.5pt; font-weight:normal; white-space:nowrap; }
+  /* 宅急便コンパクト＝黄緑地・濃い文字／宅急便＝深緑地・白文字。白黒印刷でも濃淡で区別できる色
+     （灰色換算 0.299R+0.587G+0.114B：黄緑 #bef264≒210・深緑 #166534≒72）。色を必ず刷るため exact を付ける */
+  .ship-tag { display:inline-block; margin-left:3mm; padding:0 1.5mm; border:1pt solid #333;
+              font-size:10.5pt; font-weight:bold; white-space:nowrap;
+              -webkit-print-color-adjust:exact; print-color-adjust:exact; }
+  .ship-compact   { background:#bef264; color:#1a2e05; }
+  .ship-takkyubin { background:#166534; color:#fff; border-color:#14532d; }
+  /* 2個口以上の注文の印（N個口）。配送方法の表記（四角）・複数商品の札 .multi-tag（濃い灰色地）と見分けられる二重線の丸札 */
+  .parcel-tag { display:inline-block; margin-left:3mm; padding:0 2.5mm; border:2.5pt double #000; border-radius:999px;
+                background:#fff; color:#000; font-size:11pt; font-weight:bold; white-space:nowrap; }
 
   /* ---- モール境界：黒地白文字の全幅帯＋区間終端の太罫線 ---- */
   /* break-after:avoid ＝ 帯だけがページ末尾に取り残されないようにする */
@@ -1747,9 +1876,9 @@ function renderCombinedPickingHTML(amazon, rakuten, seq) {
         <div class="staff-field">担当者：<span class="staff-line"></span></div>
       </div>
     </div>
-${totalUnits[0] || ''}${tailIdx <= 0 ? summaryBlock : ''}
+${totalUnits[0].html}${tailIdx <= 0 ? summaryBlock : ''}
   </div>
-${totalUnits.slice(1).map((s, i) => `  <div class="pg-unit">${s}${i + 1 === tailIdx ? summaryBlock : ''}
+${totalUnits.slice(1).map((u, i) => `  <div class="pg-unit">${u.html}${i + 1 === tailIdx ? summaryBlock : ''}
   </div>`).join('\n')}
 </section>
 
@@ -1773,9 +1902,14 @@ ${amazonDetailSection}${rakutenDetailSection}
 // #s1-pane-rakuten）の外側にあり、どちらのタブを選んでいても常に見える唯一の領域だから。
 // Amazon分・楽天市場分のピッキングデータが両方そろうのは変換処理の中だけであるため、
 // 生成もそのタイミングで行う。
-function renderCombinedPickingButton(amazon, rakuten) {
+// load＝読込状態（renderCombinedPickingHTML と同じ）。少なくとも1モールが読込済みなら、注文0件でも出す（ラベルは「（0注文）」）。
+function renderCombinedPickingButton(amazon, rakuten, load) {
   const old = document.getElementById('picking-print-wrap');
-  if (!amazon && !rakuten) { if (old) old.remove(); return; }
+  const aLoaded = load ? load.amazon.loaded.length > 0 : !!amazon;
+  const rLoaded = load ? load.rakuten === 'complete' : !!rakuten;
+  if (!aLoaded && !rLoaded) { if (old) old.remove(); return; }
+  if (!aLoaded) amazon = null;
+  if (!rLoaded) rakuten = null;
 
   const wrap = document.createElement('div');
   wrap.id = 'picking-print-wrap';
@@ -1791,7 +1925,7 @@ function renderCombinedPickingButton(amazon, rakuten) {
   const seq = buildMultiGroups(amazon, rakuten);
   btn.addEventListener('click', () => {
     const dateNum = ((document.getElementById('s1-shipDate') || {}).value || '').replace(/-/g, '');
-    printHtmlDocument(renderCombinedPickingHTML(amazon, rakuten, seq),
+    printHtmlDocument(renderCombinedPickingHTML(amazon, rakuten, seq, load),
                       'ピッキングリスト' + (dateNum ? '_' + dateNum : ''));
   });
   wrap.appendChild(btn);
@@ -1819,6 +1953,7 @@ async function pickingCopyText(text) {
 
 // 画面の「明細の注文番号」一覧（開閉式）。PDF の保存のしかたで文字を選べなくなることがあるため、
 // 注文番号は画面からコピーできるようにする。行番号・識別子は帳票と同じ buildMultiGroups の結果。
+// 行番号の列は帳票と同じく全角括弧で括る（例「（001）」）。見出しの範囲表示と［注文番号を全件コピー］は数字だけのまま。
 // 注文番号以外の個人情報（氏名・住所等）は出さない。
 function renderPickingOrderList(seq, rakuten) {
   const stores = loadStores();
@@ -1843,7 +1978,7 @@ function renderPickingOrderList(seq, rakuten) {
     <table class="pol-table">
       <thead><tr><th>行番号</th><th>モール・店舗</th><th>注文番号</th><th>複</th><th></th></tr></thead>
       <tbody>${seq.rows.map((r, i) => `<tr>
-        <td class="pol-no">${esc(r.no)}</td><td>${esc(mallStore(r))}</td><td class="pol-oid">${esc(r.orderId)}</td>
+        <td class="pol-no">（${esc(r.no)}）</td><td>${esc(mallStore(r))}</td><td class="pol-oid">${esc(r.orderId)}</td>
         <td class="pol-multi">${esc(r.multi)}</td>
         <td><button type="button" class="btn-aux pol-copy" data-i="${i}">コピー</button></td></tr>`).join('')}</tbody>
     </table>`;
@@ -2213,24 +2348,36 @@ async function s1ClickpostOutput(cpRecs, dateStr, hms, opts = {}) {
     ['注文番号', '店舗', '内容'], warns, 'warn');
   if (!ok.length) return null;
 
+  // N個口の注文は同じ行を N 行出す。40行ごとの分割は行数で数え、同じ注文の行はファイルをまたがせない
+  // （1注文の行が丸ごと次のファイルへ移る。1注文で40行を超えることは無い＝個口数は最大 PARCEL_MAX）
   const chunks = [];
-  for (let i = 0; i < ok.length; i += CLICKPOST_MAX_ROWS) chunks.push(ok.slice(i, i + CLICKPOST_MAX_ROWS));
+  let cur = [];
+  for (const x of ok) {
+    const n = Math.max(1, x.rec.parcels || 1);
+    if (cur.length && cur.length + n > CLICKPOST_MAX_ROWS) { chunks.push(cur); cur = []; }
+    for (let i = 0; i < n; i++) cur.push(x);
+  }
+  if (cur.length) chunks.push(cur);
   const files = chunks.map((c, i) => {
     const part = chunks.length > 1 ? i + 1 : null;
     const name = `clickpost_${dateStr}_${hms}${part ? '_' + part : ''}${opts.nomatch ? '_照合なし' : ''}.csv`;
-    return { name, part, count: c.length, bytes: clickpostCsvBytes([CLICKPOST_HEADER, ...c.map(x => x.r.cells)]) };
+    return { name, part, count: c.length, orders: new Set(c.map(x => x.rec.orderId)).size,
+             bytes: clickpostCsvBytes([CLICKPOST_HEADER, ...c.map(x => x.r.cells)]) };
   });
+  const okRows = chunks.flat();
   for (const f of files) {
     await new Promise(r => setTimeout(r, 150));   // 連続DLのブラウザ側取りこぼし防止（s2ConvertRun と同じ）
     downloadBlob(f.name, new Blob([f.bytes], { type: 'text/csv' }));
   }
   s1CpOutput = {
     shipDate: s1ShipDate.value,
-    rows: ok.map(x => ({ orderId: x.rec.orderId, mall: x.rec.mall, storeIndex: x.rec.storeIndex, storeName: x.rec.storeName,
-                         cells: x.r.cells, key: clickpostKeyOfCells(x.r.cells) })),
+    // 行ごと（N個口なら N 行）に持つ＝STEP2 の伝票番号欄が個口ごとに1つ出る
+    rows: okRows.map(x => ({ orderId: x.rec.orderId, mall: x.rec.mall, storeIndex: x.rec.storeIndex, storeName: x.rec.storeName,
+                             cells: x.r.cells, key: clickpostKeyOfCells(x.r.cells) })),
     fileNames: files.map(f => f.name),
   };
-  const done = essResultItem('success', `✓ ${files.map(f => `${f.name}（${f.count}件）`).join('・')}を出力`
+  // 件数は注文数。個口で行数が増えるときは行数も併記する（B2用CSV の essB2CountText と同じ書式）
+  const done = essResultItem('success', `✓ ${files.map(f => `${f.name}（${f.orders}件${f.count !== f.orders ? `・${f.count}行` : ''}）`).join('・')}を出力`
     + ' — GoQ の拡張で取り込み、決済・印字のあと［レポート出力］の CSV を STEP2 に落としてください（ラベルの有効期限は支払いの翌日から7日）');
   done.id = 's1-cp-done';
   s1Results.appendChild(done);
@@ -3068,17 +3215,16 @@ async function essCollate(rows, workDate, cpRecs = []) {
 }
 
 // ピッキング帳票の対象を照合結果にそろえる。採番（A-NNN／R-NNN）はB2記事欄と同じ値のまま残し、
-// 商品別合計・複数商品注文の件数だけを残った注文で数え直す。対象が0件なら null（印刷ボタンを出さない）。
+// 商品別合計・複数商品注文の件数だけを残った注文で数え直す。対象が0件なら空のデータ（読込済み・0件として帳票に出す）。
+// 元のデータが無い（そのモールの注文が初めから無い）ときは null（読込状態は renderCombinedPickingButton の load で判断する）。
 function essPickingAmazonExcluding(src, exclude) {
   if (!src) return null;
   const recs = src.records.filter(r => !exclude.has(r.picking.orderId));
-  if (!recs.length) return null;
   return { ...buildPickingItems(recs, src.skuNumMap), storeNames: src.storeNames };
 }
 function essPickingRakutenExcluding(rk, exclude) {
   if (!rk) return null;
   const orders = rk.orders.filter(o => !exclude.has(o.orderNumber));
-  if (!orders.length) return null;
   // buildRakutenPickingData と同じ数え方：商品別集計は単一商品注文だけ、複数商品注文は件数のみ
   const key = l => (l.sku || '') + '\u001f' + (l.itemMgmtNo || '');
   const sums = new Map();
@@ -3187,6 +3333,12 @@ function essB2NoneItem(text) {
   return el;
 }
 
+// 出力したCSVの件数表示：注文数（同じ注文番号の行は1件）。個口で行数が増えるときは行数も併記する（例「17件・21行」）
+function essB2CountText(rows) {
+  const orders = new Set(rows.map(r => r[0])).size;
+  return `${orders}件` + (rows.length !== orders ? `・${rows.length}行` : '');
+}
+
 // STEP1 の出力（照合 → ダウンロード → 02 に保存）。rows は Amazon分→楽天分の順のB2行。
 // cpRecs はクリックポストの対象（B2用CSVのダウンロードの直後にクリックポスト用CSVを出す）。
 // B2 の行が0件でクリックポストがあるときは、B2用CSVのダウンロードと 02 の保存を行わない。
@@ -3218,7 +3370,7 @@ async function essB2Output(rows, dateStr, onExclude, cpRecs = []) {
         const filename = `b2cloud_${dateStr}_${hms}_照合なし.csv`;
         const bytes = essB2Bytes(rows);
         downloadBlob(filename, new Blob([bytes], { type: 'text/csv' }));
-        const ok = essResultItem('success', `✓ ${filename}（${rows.length}件）を出力（照合なし）`);
+        const ok = essResultItem('success', `✓ ${filename}（${essB2CountText(rows)}）を出力（照合なし）`);
         ok.id = 's1-ess-done';
         s1Results.appendChild(ok);
         s1OutputDone = true;
@@ -3270,7 +3422,7 @@ async function essB2Output(rows, dateStr, onExclude, cpRecs = []) {
   } else {
     const filename = `b2cloud_${dateStr}_${hms}.csv`;
     const bytes = essB2Bytes(outRows);
-    const head = `✓ ${filename}（${outRows.length}件）を出力（照合で除外 ${nIssued + nExported}件：発行済み ${nIssued}／発行記録なし ${nExported}）`;
+    const head = `✓ ${filename}（${essB2CountText(outRows)}）を出力（照合で除外 ${nIssued + nExported}件：発行済み ${nIssued}／発行記録なし ${nExported}）`;
     let ok;
     try {
       essBusyShow('s1-busy', 'B2取込CSVを作成中…');
@@ -3436,6 +3588,8 @@ function renderStep1Sections() {
   if (s1ExtraReset) s1ExtraReset.innerHTML = '';
   // 店舗設定の保存で Amazon の読込済みファイルはすべて捨てる（読み込み直しが要る）ため、選択もここで全部捨てる。
   amazonShipChoice.clear();
+  // 個口数も同じ（楽天の個口数は rakutenShipChoice と同じく消さない。楽天の読込と一覧は残るため）
+  amazonParcelChoice.clear();
   amazonShipListOpen = null;      // 一覧の開閉も初回描画の自動判定に戻す
   amazonShipAutoSeen = new Set();
   s1ShipChoiceStale = false;
@@ -3669,6 +3823,8 @@ async function s1ConvertRun(auth) {
       if (recs.length === 0) throw new Error('変換できるデータがありません');
       // 宅急便・別発行と発行しない・クリックポストはB2行を持たない（ピッキング・梱包には含める）ため件数を分けて数える
       const b2Count = recs.filter(r => r.b2Row).length;
+      // B2用CSVの行数（個口数の分だけ同じ行を出す）。件数は注文数のまま、行数が増えるときだけ併記する
+      const b2Lines = recs.filter(r => r.b2Row).reduce((a, r) => a + amazonParcelCount(r), 0);
       const noneCount = recs.filter(r => !r.b2Row && amazonResolvedMethod(r) === AMAZON_NONE).length;
       const cpCount = recs.filter(r => r.cp).length;
       const mpCount = recs.length - b2Count - noneCount - cpCount;
@@ -3676,11 +3832,11 @@ async function s1ConvertRun(auth) {
       loadedStoreNames.push(store.name);
       item.className = 'result-item success';
       // 0件の区分は出さない
-      const parts = [[b2Count, `B2 CSV ${b2Count}件`], [mpCount, `別発行 ${mpCount}件`], [noneCount, `発行しない ${noneCount}件`],
-                     [cpCount, `クリックポスト ${cpCount}件`]]
+      const parts = [[b2Count, `B2 CSV ${b2Count}件${b2Lines !== b2Count ? `・${b2Lines}行` : ''}`], [mpCount, `別発行 ${mpCount}件`],
+                     [noneCount, `発行しない ${noneCount}件`], [cpCount, `クリックポスト ${cpCount}件`]]
         .filter(([n]) => n).map(([, t]) => t);
       item.textContent = `✓ ${store.name}：${recs.length}件`
-        + ((mpCount || noneCount || cpCount) ? `（${parts.join('／')}）` : '');
+        + ((mpCount || noneCount || cpCount || b2Lines !== b2Count) ? `（${parts.join('／')}）` : '');
     } catch(e) {
       item.className = 'result-item error';
       item.textContent = `⚠ ${store.name}：${e.message}`;
@@ -3734,9 +3890,13 @@ async function s1ConvertRun(auth) {
       const usable = rData.orders.filter(o => rakutenInvoiceCode(o) !== '' && !isNone(o) && !isCp(o));
       const noCode = rData.orders.filter(o => rakutenInvoiceCode(o) === '' && !isNone(o) && !isCp(o));
       const addrIssues = [];   // 住所欄・建物名欄の上限超過（出力は止めず警告のみ）
-      rakutenB2Rows = usable.map(o => buildRakutenB2Row(o, shipDate, sender, addrIssues));
+      // N個口の注文は同じ行を N 行出す（行は1回だけ組む＝住所の警告も1注文1回）
+      rakutenB2Rows = usable.flatMap(o => parcelRows(buildRakutenB2Row(o, shipDate, sender, addrIssues), rakutenParcelCount(o)));
       item.className = 'result-item success';
-      item.textContent = `✓ 楽天市場：${rakutenB2Rows.length}件（依頼主: ${sender.name}）`;
+      // 件数は注文数。個口で行数が増えるときは B2用CSV の行数も併記する
+      item.textContent = `✓ 楽天市場：${usable.length}件`
+        + (rakutenB2Rows.length !== usable.length ? `（B2 CSV ${rakutenB2Rows.length}行）` : '')
+        + `（依頼主: ${sender.name}）`;
       s1Results.appendChild(item);
       renderRakutenWarningSection(s1Results, 's1-rk-scheduled',
         `📅 楽天市場：お届け日指定が先（本日+4日以降）のためB2から除外（予定分）: ${rData.scheduled.length}件`,
@@ -3801,9 +3961,21 @@ async function s1ConvertRun(auth) {
     }
   }
 
+  // ピッキング帳票の読込状態（読み方 (d)）：Amazon は店舗ごとにファイルがあれば読込済み（変換0件・エラーでも）、
+  // 楽天は 'complete' なら読込済み。0件・未読込のモールも帳票に出す（Kaz 確定 2026-10-29）
+  const pickLoad = {
+    amazon: { loaded: stores.filter(st => s1Buffers[st.name]).map(st => st.name),
+              missing: stores.filter(st => !s1Buffers[st.name]).map(st => st.name) },
+    rakuten: s1RakutenInputState(),
+  };
+
   // ピッキング帳票はB2 CSVが1本も出ない日でも必要なため、楽天分のピッキングが
   // 作れている限りここでは止めない（依頼主未設定でB2生成が落ちた場合など）。
-  if (!allRecords.length && !rakutenB2Rows.length && !rakutenPicking) return;
+  // 読込済みのモールが0件だけの日も、印刷ボタン（0注文）は出してから返す
+  if (!allRecords.length && !rakutenB2Rows.length && !rakutenPicking) {
+    renderCombinedPickingButton(null, null, pickLoad);
+    return;
+  }
 
   // ---- Amazon分（従来処理そのまま・出力行は不変） ----
   let amazonRows = [];
@@ -3818,7 +3990,8 @@ async function s1ConvertRun(auth) {
     // B2記事欄（記事列=index32）のみを (A-NNN×q) 形式へ上書き。他の列・値・行順は一切不変。
     // b2Row を持たないマケプレ配送レコードは飛ばす（B2 CSVにも出力しない）。
     for (const r of sorted) { if (r.b2Row) r.b2Row[32] = buildKijiForRecord(r, skuNumMap); }
-    amazonRows = sorted.filter(r => r.b2Row).map(r => r.b2Row);
+    // N個口の注文は、記事欄を入れた後の行を N 行続けて出す（発行枚数・個数口表示フラグ・複数口くくりキーは触らない）
+    amazonRows = sorted.filter(r => r.b2Row).flatMap(r => parcelRows(r.b2Row, amazonParcelCount(r)));
 
     // PICKING: no-PII のピッキングデータ（total）を生成
     const enriched = enrichPickingItems(sorted);
@@ -3830,17 +4003,18 @@ async function s1ConvertRun(auth) {
     renderImageRegisterSection(pickingData);
   }
 
-  // ピッキング帳票の印刷ボタン（Amazon＋楽天市場で1つ）。片方しか読み込んでいない日は
-  // そのモールのセクションだけが出る。B2 CSVの保存可否とは独立に常に出す。
-  renderCombinedPickingButton(amazonPicking, rakutenPicking);
+  // ピッキング帳票の印刷ボタン（Amazon＋楽天市場で1つ）。帳票には常に両モールを出す（0件・未読込も）。
+  // B2 CSVの保存可否とは独立に常に出す。
+  renderCombinedPickingButton(amazonPicking, rakutenPicking, pickLoad);
 
   // クリックポストの対象（Amazon → 楽天の順。Amazon は統一ソート順、楽天は rData.orders の順）
   const cpRecs = [
+    // parcels＝個口数（クリックポスト用CSVに同じ行を出す本数）。照合（essCollate）は注文単位のまま
     ...sortedAmazon.filter(r => r.cp).map(r => ({ orderId: r.orderId, mall: 'amazon', storeIndex: r.storeIndex,
-      storeName: (stores[r.storeIndex] || {}).name || '', src: r,
+      storeName: (stores[r.storeIndex] || {}).name || '', src: r, parcels: amazonParcelCount(r),
       gNums: r.picking.lines.map(l => (amazonPickSrc ? amazonPickSrc.skuNumMap.get(l.sku) : '') || '') })),
     ...rakutenCp.map(o => ({ orderId: o.orderNumber, mall: 'rakuten', storeIndex: null, storeName: '楽天市場', src: o,
-      gNums: o.lines.map(l => l.num || '') })),
+      parcels: rakutenParcelCount(o), gNums: o.lines.map(l => l.num || '') })),
   ];
 
   // B2行が1本も無い場合はヘッダだけのCSVを保存しない（全件がマケプレ配送のときに起きる）。
@@ -3859,7 +4033,7 @@ async function s1ConvertRun(auth) {
   // ダウンロードの前に、直近7日の Drive の記録（02・03）と照合する（A）。
   // 照合で除外した注文は、ピッキングリスト＋梱包・発送明細の対象からも外す（照合なしで出力のときは全件のまま）。
   await essB2Output([...amazonRows, ...rakutenB2Rows], dateStr, exclude => renderCombinedPickingButton(
-    essPickingAmazonExcluding(amazonPickSrc, exclude), essPickingRakutenExcluding(rakutenPicking, exclude)), cpRecs);
+    essPickingAmazonExcluding(amazonPickSrc, exclude), essPickingRakutenExcluding(rakutenPicking, exclude), pickLoad), cpRecs);
 }
 
 // ============================================================
@@ -3936,8 +4110,8 @@ function s2CpReportRows(buffer) {
 const s2CpDigits = v => String(v == null ? '' : v).replace(/[^0-9]/g, '');
 
 // 読み込み済みのレポートの全行と s1CpOutput.rows の全行が、照合キーで1対1に一致したときだけ全行の伝票番号を入れる。
-// 件数が違う・合わない行がある・同じキーが片側に2行以上ある・追跡番号が12桁の数字でない行がある、のどれかなら
-// 1件も入れない（前に自動で入れた番号も消す）。行の順番は照合に使わない。
+// 件数が違う・合わない行がある・同じキーが片側に2行以上ある（複数個口＝同じ注文の行で両側の行数が同じ、を除く）・
+// 追跡番号が12桁の数字でない行がある、のどれかなら1件も入れない（前に自動で入れた番号も消す）。行の順番は照合に使わない。
 function s2CpApplyReports() {
   s2CpMismatch = null;
   if (!s2CpReports.length) return;
@@ -3946,16 +4120,21 @@ function s2CpApplyReports() {
   const tool = (s1CpOutput && s1CpOutput.rows) || [];
   const count = (arr) => { const m = new Map(); for (const x of arr) m.set(x.key, (m.get(x.key) || 0) + 1); return m; };
   const repCount = count(rep), toolCount = count(tool);
+  // 複数個口：同じキーの行がツール側に2行以上あっても、全部同じ注文番号で、レポート側の同じキーの行数と一致するなら通す
+  // （N個口の注文はクリックポスト用CSVに同じ行を N 行出すため）。それ以外の重複は今までどおり1件も入れない
+  const toolIds = new Map();
+  for (const r of tool) { if (!toolIds.has(r.key)) toolIds.set(r.key, new Set()); toolIds.get(r.key).add(r.orderId); }
+  const parcelOk = k => toolCount.get(k) > 1 && toolIds.get(k).size === 1 && repCount.get(k) === toolCount.get(k);
   const bad = [];
   for (const r of tool) {
-    if (toolCount.get(r.key) > 1)      bad.push(['ツール', r.orderId, r.cells[1], '同じ宛先・内容品の行がツール側に2行以上']);
+    if (toolCount.get(r.key) > 1 && !parcelOk(r.key)) bad.push(['ツール', r.orderId, r.cells[1], '同じ宛先・内容品の行がツール側に2行以上']);
     else if (!repCount.has(r.key))     bad.push(['ツール', r.orderId, r.cells[1], 'レポートに一致する行がない']);
-    else if (repCount.get(r.key) > 1)  bad.push(['ツール', r.orderId, r.cells[1], 'レポートに一致する行が2行以上']);
+    else if (repCount.get(r.key) > 1 && !parcelOk(r.key)) bad.push(['ツール', r.orderId, r.cells[1], 'レポートに一致する行が2行以上']);
   }
   for (const x of rep) {
     if (!/^\d{12}$/.test(x.tracking)) bad.push(['レポート', x.tracking, x.name, '追跡番号が12桁の数字でない']);
     else if (!toolCount.has(x.key))   bad.push(['レポート', x.tracking, x.name, 'ツールが出力した行に一致する行がない']);
-    else if (repCount.get(x.key) > 1) bad.push(['レポート', x.tracking, x.name, '同じ行がレポートに2行以上']);
+    else if (repCount.get(x.key) > 1 && !parcelOk(x.key)) bad.push(['レポート', x.tracking, x.name, '同じ行がレポートに2行以上']);
   }
   if (!tool.length && rep.length) bad.push(['—', '', '', 'このページで STEP1 のクリックポスト用CSV を出力していないため照合できません']);
   if (bad.length || rep.length !== tool.length) {
@@ -3963,9 +4142,11 @@ function s2CpApplyReports() {
     for (const r of tool) if (r.trackingSrc === 'report') { r.tracking = ''; r.trackingSrc = null; r.report = null; }
     return;
   }
-  const byKey = new Map(rep.map(x => [x.key, x]));
+  // 同じキーのレポートの行は、その注文の行へ順に入れる（1個口ならキーごとに1行）
+  const byKey = new Map();
+  for (const x of rep) { if (!byKey.has(x.key)) byKey.set(x.key, []); byKey.get(x.key).push(x); }
   for (const r of tool) {
-    const x = byKey.get(r.key);
+    const x = byKey.get(r.key).shift();
     r.tracking = x.tracking; r.trackingSrc = 'report'; r.report = x;
   }
 }
@@ -4015,8 +4196,9 @@ function s2RenderCp() {
         #s2-cp .cp-trk.cp-bad { border:2px solid #dc2626; background:#fef2f2; }
         #s2-cp .cp-match { font-size:12px; color:#555; }
       </style>
-      <div class="section-label">クリックポストの伝票番号（${s1CpOutput.rows.length}件：${esc(s1CpOutput.fileNames.join('・'))}）</div>
+      <div class="section-label">クリックポストの伝票番号（${new Set(s1CpOutput.rows.map(r => r.orderId)).size}件・${s1CpOutput.rows.length}行：${esc(s1CpOutput.fileNames.join('・'))}）</div>
       <div class="info-box">GoQ の［レポート出力］で落とした CSV を上のドロップ欄に入れると、レポートの全行とこの一覧の全行が宛先・内容品で1対1に一致したときだけ、伝票番号がまとめて入ります（1行でも合わなければ1件も入りません）。
+        同じ注文の行が複数ある（N個口）ときは、宛先・内容品が同じ行がレポートにも同じ数だけあれば、その注文の行へ上から順に入ります。
         この一覧は、同じ画面で STEP 1 のクリックポスト用CSVを出力したときに出ます。入らなかったときは、ラベルを見て12桁の伝票番号を入力してください。</div>
       <table class="cp-table">
         <thead><tr><th>行</th><th>店舗</th><th>注文番号</th><th>氏名</th><th>郵便番号</th><th>伝票番号</th><th>照合</th></tr></thead>
@@ -4080,8 +4262,7 @@ function updateS2ConvertEnabled() {
   s2Convert.disabled = s2Busy || !(s2Files.length > 0 || s2CpHasTracking());
 }
 
-// 伝票が2枚以上ある注文（B2で同じ注文の送り状が2枚以上発行された）を、出荷通知を出す前に知らせる。
-// B2用CSVは1注文1行しか作らない（buildOrderRecords・楽天の groups はどちらも注文番号で1つにまとめる）ため、
+// 伝票が2枚以上ある注文（個口数を2以上にした注文、またはB2で同じ注文の送り状が2枚以上発行された）を、出荷通知を出す前に知らせる。
 // 発行済データだけで判定する：お客様管理番号ごとに、正規化した伝票番号が2つ以上あるもの。
 // 同じ伝票番号の行が重なるだけ（同じファイルを2回読み込んだ等）は出さない。止めずに知らせるだけ。
 function s2DuplicateTrackings() {
@@ -4146,9 +4327,9 @@ function s2RenderDupBand() {
     if (bold) d.style.fontWeight = '700';
     item.appendChild(d);
   };
-  line(`🔴 伝票が2枚以上ある注文：${dups.length}件（B2用CSV では1注文1行のため、B2で2枚以上発行されています）`, true);
+  line(`🔴 伝票が2枚以上ある注文：${dups.length}件（個口数を2以上にした注文、またはB2で2枚以上発行された注文）`, true);
   for (const x of dups) line(`${x.orderId}（${x.store}）　伝票 ${x.trackings.join(' ＋ ')}`);
-  line('意図した2個口ならそのままで構いません（個口数の事前設定ができるまでは、2個口もここに出ます）。'
+  line('STEP1 で個口数を選んだ複数個口ならそのままで構いません。'
     + '二重印刷・再発行なら、荷物が二重に出ていないか確認してください。');
   band.appendChild(item);
 }
@@ -4273,10 +4454,21 @@ async function s2ConvertRun(auth) {
 
   // ---- クリックポスト：伝票番号が12桁の行を出荷通知に合流させる ----
   if (cpAll.length) {
-    const blank = cpAll.filter(r => !s2CpDigits(r.tracking));
+    // 複数個口の注文は同じ注文番号の行をまとめて判定する（行ごとに判定すると、2個口のうち1行だけ入れたとき
+    // 楽天は1本で自動報告され、同じ注文が未入力の一覧にも並んでしまう）。
+    //   全行未入力 … 未入力の一覧（1注文1行）
+    //   一部だけ入力 … Amazon は入力済みの先頭1本で通知（下の cpSeen）。楽天は自動報告せず複数個口の警告に回す（partial）
+    const cpByOrder = new Map();   // mall + 注文番号 → 行
+    for (const r of cpAll) {
+      const k = r.mall + '\u001e' + r.orderId;
+      if (!cpByOrder.has(k)) cpByOrder.set(k, []);
+      cpByOrder.get(k).push(r);
+    }
+    const cpOrderRows = r => cpByOrder.get(r.mall + '\u001e' + r.orderId);
+    const blank = [...cpByOrder.values()].filter(rs => rs.every(r => !s2CpDigits(r.tracking)));
     renderRakutenWarningSection(s2Results, 's2-cp-blank',
       `📮 クリックポスト：伝票番号が未入力のため出荷通知に出していない注文: ${blank.length}件`,
-      ['注文番号', '店舗'], blank.map(r => [r.orderId, r.storeName]), 'warn');
+      ['注文番号', '店舗', '個口数'], blank.map(rs => [rs[0].orderId, rs[0].storeName, rs.length]), 'warn');
     // 同じ注文番号が読み込み済みの 03 にもある＝二重発送の疑い。その注文のクリックポストの行は出さない
     const issuedIds = s2IssuedOrderIds();
     const filled = cpAll.filter(r => s2CpDigits(r.tracking).length === 12);
@@ -4288,7 +4480,12 @@ async function s2ConvertRun(auth) {
     const shipDate = s1CpOutput.shipDate;   // 'YYYY-MM-DD'（STEP1 の出荷日）
     // Amazon：店舗ごとに、今回の出荷通知ファイルの末尾へ足す（無ければ同じ命名で作る）
     const byStore = new Map();   // 店舗名 → 行
+    // 同じ注文のクリックポストの行（複数個口）は先頭1本だけ入れる（B2 経路の convertToShipmentNotify と同じ。
+    // フラットファイルは複数梱包を表現できず、有効番号1本でよい）
+    const cpSeen = new Set();
     for (const r of targets.filter(x => x.mall === 'amazon')) {
+      if (cpSeen.has(r.orderId)) continue;
+      cpSeen.add(r.orderId);
       const storeName = (loadStores()[r.storeIndex] || {}).name || r.storeName;
       if (!byStore.has(storeName)) byStore.set(storeName, []);
       const data = Array(19).fill('');
@@ -4311,10 +4508,14 @@ async function s2ConvertRun(auth) {
       s2Results.appendChild(item);
     }
     // 楽天：配送会社を日本郵便（1003）にして発送完了報告の入力行に加える
+    // 複数個口で一部の行だけ入力した注文は partial を付けて渡す（buildRakutenShippingReport が手動対応の警告に回す）
     const [cy, cm, cd] = shipDate.split('-');
     for (const r of targets.filter(x => x.mall === 'rakuten')) {
+      const rs = cpOrderRows(r);
+      const nFilled = rs.filter(x => s2CpDigits(x.tracking).length === 12).length;
       allRakuten.push({ orderNumber: r.orderId, trackingRaw: s2CpDigits(r.tracking),
-                        shipDateRaw: `${cy}/${parseInt(cm, 10)}/${parseInt(cd, 10)}`, carrier: RAKUTEN_CARRIER_JAPANPOST });
+                        shipDateRaw: `${cy}/${parseInt(cm, 10)}/${parseInt(cd, 10)}`, carrier: RAKUTEN_CARRIER_JAPANPOST,
+                        ...(nFilled < rs.length ? { partial: { parcels: rs.length, filled: nFilled } } : {}) });
     }
   }
   for (const f of outputFiles) {
@@ -4440,16 +4641,15 @@ function amazonShipMethodOrders() {
 function amazonPruneShipChoice() {
   const ids = new Set(amazonShipMethodOrders().map(r => r.orderId));
   for (const id of Array.from(amazonShipChoice.keys())) if (!ids.has(id)) amazonShipChoice.delete(id);
+  for (const id of Array.from(amazonParcelChoice.keys())) if (!ids.has(id)) amazonParcelChoice.delete(id);
   for (const id of Array.from(amazonShipAutoSeen)) if (!ids.has(id)) amazonShipAutoSeen.delete(id);
 }
 
 function renderAmazonShipMethodSection() {
   const container = document.getElementById('s1-amazon-extra') || s1Results;
+  // トグルは wrap の中（見出しの直下）にあるため、wrap ごと取り除けばよい
   const old = document.getElementById('amazon-ship-method-wrap');
   if (old) old.remove();
-  // トグルは補助表示バー側（wrap の外）に置くため別途取り除く
-  const oldToggle = document.getElementById('amazon-ship-method-toggle');
-  if (oldToggle) oldToggle.remove();
 
   const loaded = amazonShipMethodOrders();
   if (!loaded.length) return;
@@ -4464,17 +4664,19 @@ function renderAmazonShipMethodSection() {
 
   const head = document.createElement('div');
 
-  // 出力済みのまま発送方法を変えるとCSVと画面がずれる。押し直しを促す注記。
+  // 出力済みのまま発送方法・個口数を変えるとCSVと画面がずれる。押し直しを促す注記。
   const redo = document.createElement('div');
   redo.className = 'result-item';
   redo.style.cssText = 'display:none;background:#fffbeb;border:1px solid #fcd34d;'
     + 'color:#92400e;margin-top:6px;';
-  redo.textContent = '⚠ 発送方法を変更しました。変換し直してください';
+  redo.textContent = '⚠ 発送方法・個口数を変更しました。変換し直してください';
 
+  // 一覧の開閉ボタン。楽天（#r-ship-toggle）と同じく見出しの直下に置く（以前は補助表示バーにあり一覧から離れていた）
   const toggle = document.createElement('button');
   toggle.type = 'button';
   toggle.id = 'amazon-ship-method-toggle';
   toggle.className = 'btn-aux';
+  toggle.style.marginTop = '6px';
 
   const sec = document.createElement('div');
   sec.style.marginTop = '8px';
@@ -4504,6 +4706,8 @@ function renderAmazonShipMethodSection() {
       <td>${esc(r.productName)}</td>
       <td class="asm-shipcell"><select class="asm-ship" data-order="${esc(r.orderId)}">${
         optionsHtml(amazonResolvedMethod(r))}</select></td>
+      <td class="asm-shipcell"><select class="asm-parcel" data-order="${esc(r.orderId)}"${
+        amazonResolvedMethod(r) === AMAZON_NONE ? ' disabled' : ''}>${parcelOptionsHtml(amazonResolvedMethod(r) === AMAZON_NONE ? 1 : (amazonParcelChoice.get(r.orderId) || 1))}</select></td>
     </tr>`).join('');
 
   sec.innerHTML = `
@@ -4514,19 +4718,19 @@ function renderAmazonShipMethodSection() {
       #amazon-ship-method-wrap .asm-table th { background:#f4f4f4; }
       #amazon-ship-method-wrap .asm-oid { white-space:nowrap; color:#555; }
       #amazon-ship-method-wrap .asm-shipcell { white-space:nowrap; }
-      #amazon-ship-method-wrap .asm-ship { font-size:13px; padding:3px 6px; }
+      #amazon-ship-method-wrap .asm-ship, #amazon-ship-method-wrap .asm-parcel { font-size:13px; padding:3px 6px; }
     </style>
     <table class="asm-table">
-      <thead><tr><th>店舗</th><th>注文番号</th><th>商品名</th><th>発送方法</th></tr></thead>
+      <thead><tr><th>店舗</th><th>注文番号</th><th>商品名</th><th>発送方法</th><th>個口数</th></tr></thead>
       <tbody>${rowsHtml}</tbody>
     </table>`;
 
   wrap.appendChild(head);
+  wrap.appendChild(toggle);
   wrap.appendChild(redo);
   wrap.appendChild(sec);
   // Amazon入力に対する警告のため、Amazonペイン内に表示する
   container.appendChild(wrap);
-  auxBar(container).appendChild(toggle);   // トグルだけ補助表示バーへ移す
 
   // 見出しは現在の確定値で組む（件数の内訳。折りたたみ中も常に見える）
   const refreshHead = () => {
@@ -4539,6 +4743,7 @@ function renderAmazonShipMethodSection() {
     head.textContent = (separate ? '⚠ ' : '✓ ')
       + `発送方法：ネコポス ${n(AMAZON_NEKOPOS)}／宅急便コンパクト ${n(AMAZON_COMPACT)}／クリックポスト ${n(AMAZON_CLICKPOST)}`
       + `／宅急便（別発行） ${separate}／発行しない ${n(AMAZON_NONE)}`
+      + parcelHeadText(rows.filter(r => amazonResolvedMethod(r) !== AMAZON_NONE).map(amazonParcelCount))
       + (switched ? `／判定から変更 ${switched}件` : '')
       + '。いずれもピッキング・梱包の対象には含まれています。'
       + (separate ? '宅急便（別発行）はB2 CSVに出しません。セラーセントラルで配送ラベルを購入して発行してください' : '');
@@ -4555,6 +4760,12 @@ function renderAmazonShipMethodSection() {
       const tr = sel.closest('tr');
       const r = rows.find(x => x.orderId === id);
       if (tr && r) tr.style.background = rowBg(r);
+      // 「発行しない」の行は個口数を使えない（表示は 1。選んでいた個口数は内部に残し、他の方法に戻したら元の値を出す）
+      const pSel = tr && tr.querySelector('.asm-parcel');
+      if (pSel) {
+        pSel.disabled = sel.value === AMAZON_NONE;
+        pSel.value = String(pSel.disabled ? 1 : (amazonParcelChoice.get(id) || 1));
+      }
       // 変換後に変えたら「出力済み」を解除し、押し直せる状態に戻す
       if (s1OutputDone || s1ShipChoiceStale) {
         s1ShipChoiceStale = true;
@@ -4562,6 +4773,20 @@ function renderAmazonShipMethodSection() {
       }
       refreshHead();
       updateS1ConvertLabel();   // ボタンの件数表示（B2出力件数）を確定値で組み直す
+    });
+  });
+  // 個口数プルダウン：発送方法の変更と同じく、変換後に変えたら押し直しを促す
+  sec.querySelectorAll('.asm-parcel').forEach(sel => {
+    sel.addEventListener('change', () => {
+      const id = sel.getAttribute('data-order');
+      const n = parseInt(sel.value, 10) || 1;
+      if (n > 1) amazonParcelChoice.set(id, n); else amazonParcelChoice.delete(id);
+      if (s1OutputDone || s1ShipChoiceStale) {
+        s1ShipChoiceStale = true;
+        s1OutputDone = false;
+      }
+      refreshHead();
+      updateS1ConvertLabel();
     });
   });
 
@@ -5033,7 +5258,7 @@ function buildRakutenPickingData(groups, today) {
   };
   const clusters = new Map();        // 単一商品注文のクラスタ＝商品別集計に行として出る商品
   const multiClusters = new Map();   // 複数商品注文にしか出ない商品（集計行は出さないが採番は要る）
-  let multiCount = 0;                // 複数商品注文の件数＝集約行の「出荷数（注文数）」
+  let multiCount = 0;                // 複数商品注文の件数＝集約行の「出荷個口数（注文数）」の注文数
   for (const { g } of pickGroups) {
     if (rIsMulti(g)) { multiCount++; continue; }
     const seen = new Set();
@@ -5136,13 +5361,20 @@ function buildRakutenPickingData(groups, today) {
   }));
   // total        … 商品別集計に行として出る商品（単一商品注文のクラスタ）
   // multiTotal    … 複数商品注文にしか出ない商品（集計行には出さない。画面一覧・画像登録用）
-  // multiCount    … 複数商品注文の件数＝商品別集計の集約行に出す出荷数（注文数）
+  // multiCount    … 複数商品注文の件数＝商品別集計の集約行に出す注文数
   return { total, multiTotal, multiCount, orders, scheduled };
 }
 
 // 注文単位の配送方法の選択（注文番号→RAKUTEN_METHOD_OPTIONS の値）。
 // 未操作の注文（と「不明」を選び直した注文）はキーを持たない＝判定値がそのまま使われる。
 const rakutenShipChoice = new Map();
+// 個口数（注文番号 → 2〜PARCEL_MAX）。rakutenShipChoice と同じ扱いで保持する（依頼主設定の保存では消さない）。
+const rakutenParcelChoice = new Map();
+// 注文の個口数。「発行しない」は数えない（1 を返す）。Amazon の amazonParcelCount と同じ作り
+function rakutenParcelCount(o) {
+  if (!o || rakutenResolvedMethod(o) === RAKUTEN_NONE) return 1;
+  return rakutenParcelChoice.get(o.orderNumber) || 1;
+}
 // 「発送方法の確認・変更」一覧の開閉（true＝開／false＝閉／null＝まだ描画していない＝自動判定）。
 // どちらのファイルを読み直しても一覧を組み直す（rRefreshView）ため、手で開いた／閉じた状態をここに持つ。
 let rakutenShipListOpen = null;
@@ -5493,6 +5725,7 @@ function renderRakutenResults(parsed) {
   //   Amazon の amazonPruneShipChoice と同じ扱い。2026-10-28 Kaz 指摘：2店舗目の読み込みで1店舗目の選択が消えた）。
   const parsedIds = new Set(parsed.groups.map(g => g.orderNumber));
   for (const id of Array.from(rakutenShipChoice.keys())) if (!parsedIds.has(id)) rakutenShipChoice.delete(id);
+  for (const id of Array.from(rakutenParcelChoice.keys())) if (!parsedIds.has(id)) rakutenParcelChoice.delete(id);
   for (const id of Array.from(rakutenShipAutoSeen)) if (!parsedIds.has(id)) rakutenShipAutoSeen.delete(id);
 
   // 送り状発行済み（発送完了報告用DLデータに伝票番号あり）はピッキング・B2から除外する。
@@ -5630,7 +5863,10 @@ function renderRakutenResults(parsed) {
     // 注文種別バッジ：'1'（通常）以外に表示。'4'=定期、未知の値は生のまま表示（握りつぶさない）
     const badge = (o.orderType && o.orderType !== '1')
       ? `<span class="rp-badge">${esc(o.orderType === '4' ? '定期' : o.orderType)}</span>` : '';
-    return `<tr data-order="${esc(o.orderNumber)}" style="background:${rowBg(o)};"><td class="rp-oid">${esc(o.orderNumber)}${badge}</td><td>${alertLine}${dtWarn}${lines}</td><td class="rp-shipcell">${shipCell}</td></tr>`;
+    // 個口数（1〜10）。「発行しない」の行は使えない
+    const parcelCell = `<select class="rp-parcel" data-order="${esc(o.orderNumber)}"${cur === RAKUTEN_NONE ? ' disabled' : ''}>${
+      parcelOptionsHtml(cur === RAKUTEN_NONE ? 1 : (rakutenParcelChoice.get(o.orderNumber) || 1))}</select>`;
+    return `<tr data-order="${esc(o.orderNumber)}" style="background:${rowBg(o)};"><td class="rp-oid">${esc(o.orderNumber)}${badge}</td><td>${alertLine}${dtWarn}${lines}</td><td class="rp-shipcell">${shipCell}</td><td class="rp-shipcell">${parcelCell}</td></tr>`;
   }).join('');
 
   sec.innerHTML = `
@@ -5650,7 +5886,7 @@ function renderRakutenResults(parsed) {
       #r-picking-list .thumb { display:inline-block; width:36px; height:36px; object-fit:contain; vertical-align:middle; }
       #r-picking-list .thumb.no-img { display:inline-flex; align-items:center; justify-content:center;
         font-size:9px; color:#aaa; border:1px dashed #ccc; }
-      #r-picking-list .rp-ship { font-size:13px; padding:3px 6px; }
+      #r-picking-list .rp-ship, #r-picking-list .rp-parcel { font-size:13px; padding:3px 6px; }
       #r-picking-list .rp-unknown { font-weight:600; color:#991b1b; font-size:12px; padding-top:2px; }
       #r-picking-list .rp-alert-delayed { color:#b91c1c; font-weight:700; padding:2px 0; }
       #r-picking-list .rp-alert-last { color:#c2410c; font-weight:700; padding:2px 0; }
@@ -5669,10 +5905,10 @@ function renderRakutenResults(parsed) {
     <div id="r-ship-head" class="result-item"></div>
     <div id="r-ship-dtwarn" class="result-item" style="display:none;background:#fffbeb;border:1px solid #fcd34d;color:#92400e;margin-top:6px;"></div>
     <button type="button" id="r-ship-toggle" class="btn-aux" style="margin-top:6px;"></button>
-    <div id="r-ship-redo" class="result-item" style="display:none;background:#fffbeb;border:1px solid #fcd34d;color:#92400e;margin:8px 0;">⚠ 出力後に配送方法を変更しました。B2取込CSVを作り直してください</div>
+    <div id="r-ship-redo" class="result-item" style="display:none;background:#fffbeb;border:1px solid #fcd34d;color:#92400e;margin:8px 0;">⚠ 出力後に配送方法・個口数を変更しました。B2取込CSVを作り直してください</div>
     <div id="r-ship-list" style="margin-top:8px;">
       <table class="rp-table">
-        <thead><tr><th>注文番号</th><th>明細</th><th>配送方法</th></tr></thead>
+        <thead><tr><th>注文番号</th><th>明細</th><th>配送方法</th><th>個口数</th></tr></thead>
         <tbody>${orderRows}</tbody>
       </table>
     </div>`;
@@ -5691,6 +5927,7 @@ function renderRakutenResults(parsed) {
       + `発送方法：ネコポス ${n(RAKUTEN_NEKOPOS)}／宅急便コンパクト ${n(RAKUTEN_COMPACT)}／クリックポスト ${n(RAKUTEN_CLICKPOST)}`
       + `／宅急便 ${n(RAKUTEN_TAKKYUBIN)}／発行しない ${n(RAKUTEN_NONE)}`
       + (unknown ? `／不明 ${unknown}` : '')
+      + parcelHeadText(data.orders.filter(o => rakutenResolvedMethod(o) !== RAKUTEN_NONE).map(rakutenParcelCount))
       + (switched ? `／判定から変更 ${switched}件` : '')
       + (unknown ? '。不明の注文はB2から除外されます。発送方法を選んでください' : '');
     // 日時指定のあるネコポスの件数（黄。見出しの赤・開閉の基準には入れない）
@@ -5735,9 +5972,30 @@ function renderRakutenResults(parsed) {
         if (w) w.style.display = rakutenNekoposDateConflict(o) ? 'block' : 'none';
         // 手で「不明」に戻した注文は「見た」扱い（次の組み直しで勝手に開かない）
         if (rakutenIsUnknownMethod(o)) rakutenShipAutoSeen.add(id); else rakutenShipAutoSeen.delete(id);
+        // 「発行しない」の行は個口数を使えない（表示は 1。選んでいた個口数は内部に残し、他の方法に戻したら元の値を出す）
+        const pSel = tr.querySelector('.rp-parcel');
+        if (pSel) {
+          pSel.disabled = rakutenResolvedMethod(o) === RAKUTEN_NONE;
+          pSel.value = String(pSel.disabled ? 1 : (rakutenParcelChoice.get(id) || 1));
+        }
       }
       // 変換後に変えたら「出力済み」を解除し、押し直せる状態に戻す（Amazon 側と同じ）。
       // 元の値に戻しても注意は消さない（押し直すまで残る）
+      if (s1OutputDone || s1ShipChoiceStale) {
+        s1ShipChoiceStale = true;
+        s1OutputDone = false;
+      }
+      refreshShipHead();
+      rRenderShipRedo();
+      updateS1ConvertLabel();
+    });
+  });
+  // 個口数プルダウン：発送方法の変更と同じく、変換後に変えたら押し直しを促す
+  sec.querySelectorAll('.rp-parcel').forEach(sel => {
+    sel.addEventListener('change', () => {
+      const id = sel.getAttribute('data-order');
+      const n = parseInt(sel.value, 10) || 1;
+      if (n > 1) rakutenParcelChoice.set(id, n); else rakutenParcelChoice.delete(id);
       if (s1OutputDone || s1ShipChoiceStale) {
         s1ShipChoiceStale = true;
         s1OutputDone = false;
@@ -5778,10 +6036,10 @@ function rRefreshView() {
   const oldBtn = document.getElementById('picking-print-wrap');
   if (oldBtn) oldBtn.remove();
   if (s1RakutenParsed) renderRakutenResults(s1RakutenParsed);
-  else rakutenShipChoice.clear();   // 読み込めなかった＝残る注文が無いので選択も残さない
+  else { rakutenShipChoice.clear(); rakutenParcelChoice.clear(); }   // 読み込めなかった＝残る注文が無いので選択も残さない
 }
 
-// 楽天ペインの「出力後に配送方法を変更しました」の注意。s1ShipChoiceStale が真のときだけ出す
+// 楽天ペインの「出力後に配送方法・個口数を変更しました」の注意。s1ShipChoiceStale が真のときだけ出す
 // （変換ボタンのハンドラが偽に戻したら消える）。
 function rRenderShipRedo() {
   const el = document.getElementById('r-ship-redo');
@@ -5923,16 +6181,17 @@ function buildRakutenShippingReport(b2RakutenRows, rakutenGroups, today) {
     const tracking = r.carrier ? String(r.trackingRaw) : String(parseInt(String(r.trackingRaw).replace(/\.0+$/, ''), 10));
     if (!b2ByOrder.has(orderNumber)) {
       b2ByOrder.set(orderNumber, { trackings: new Set(), shipDateRaw: r.shipDateRaw,
-                                   shipDate: normalizeRakutenShipDate(r.shipDateRaw), carrier: r.carrier });
+                                   shipDate: normalizeRakutenShipDate(r.shipDateRaw), carrier: r.carrier, partial: null });
     }
     b2ByOrder.get(orderNumber).trackings.add(tracking);
+    if (r.partial) b2ByOrder.get(orderNumber).partial = r.partial;
   }
 
   // --- マッチング（実際にラベルを発行したB2側を起点にする） ---
   const outRows = [];
   const multiDest = [];          // 送付先IDが2件以上＝分割配送→手動対応（旧 duplicates の後継）
   const noDestId = [];           // 送付先IDが空→手動対応
-  const multiParcel = [];        // 同一注文番号に複数伝票（複数個口）→手動対応
+  const multiParcel = [];        // 同一注文番号に複数伝票（複数個口）・複数個口の一部だけ伝票番号あり（partial）→手動対応
   const invalidShipDate = [];    // 出荷予定日が正規化不能→手動対応（不正な発送日をRMSへ投入しない）
   const unmatched = [];          // B2側にあるがSTEP1の通常購入データに無い注文
   for (const [orderNumber, b2] of b2ByOrder) {
@@ -5941,8 +6200,9 @@ function buildRakutenShippingReport(b2RakutenRows, rakutenGroups, today) {
     const destIds = Array.from(g.destIds || []);
     if (destIds.length > 1) { multiDest.push({ orderNumber, destIds }); continue; }
     if (destIds.length === 0) { noDestId.push({ orderNumber }); continue; }
-    if (b2.trackings.size > 1) {
-      multiParcel.push({ orderNumber, trackings: Array.from(b2.trackings) });
+    // 複数個口（伝票2本以上）と、クリックポストの複数個口で一部の行だけ伝票番号を入れた注文（partial）は手動対応
+    if (b2.trackings.size > 1 || b2.partial) {
+      multiParcel.push({ orderNumber, trackings: Array.from(b2.trackings), partial: b2.partial });
       continue;
     }
     if (!b2.shipDate) {
@@ -5987,7 +6247,8 @@ function renderRakutenReportWarnings(container, rep) {
   renderRakutenWarningSection(container, 'rt-warn-multi',
     `⚠ 楽天市場：同一注文番号に複数伝票があります＝複数個口（自動処理から除外・手動対応してください）: ${rep.multiParcel.length}件`,
     ['注文番号', '伝票番号'],
-    rep.multiParcel.map(x => [x.orderNumber, x.trackings.join(' / ')]), 'error');
+    rep.multiParcel.map(x => [x.orderNumber, x.trackings.join(' / ')
+      + (x.partial ? `（一部未入力：${x.partial.parcels}個口のうち${x.partial.filled}本）` : '')]), 'error');
   renderRakutenWarningSection(container, 'rt-warn-baddate',
     `⚠ 楽天市場：出荷予定日が不正なため除外（手動対応してください）: ${rep.invalidShipDate.length}件`,
     ['注文番号', '出荷予定日の値'],
