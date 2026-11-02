@@ -3545,6 +3545,9 @@ let s1RakutenParsed = null;   // 読み込み時にパース済みの楽天市�
 // とは6列構成が同じだが向きが逆の別物。混同しないこと。
 let s1RakutenShipBuffer = null;
 let s1RakutenShipped = null;      // Map<注文番号, boolean>。null＝未読込
+// 同じDLデータの、伝票番号が空で発送明細IDが入っている行の Map<注文番号, 発送明細ID[]>（重複なし・出現順）。null＝未読込。
+// STEP2 の発送完了報告CSVで既存の発送明細IDを指定するのに使う（buildRakutenShippingReport）
+let s1RakutenShipDetailIds = null;
 let s1OutputDone = false;     // 現在の読込状態でB2 CSVを出力済みか（ボタンラベル「出力済み」表示用）
 // 出力後に発送方法プルダウンを動かした＝出したCSVと画面の選択がずれている状態。
 // 「変換し直してください」の注記を出し、変換し直すまで立てておく。
@@ -4467,7 +4470,7 @@ async function s2ConvertRun(auth) {
     // 複数個口の注文は同じ注文番号の行をまとめて判定する（行ごとに判定すると、2個口のうち1行だけ入れたとき
     // 楽天は1本で自動報告され、同じ注文が未入力の一覧にも並んでしまう）。
     //   全行未入力 … 未入力の一覧（1注文1行）
-    //   一部だけ入力 … Amazon は入力済みの先頭1本で通知（下の cpSeen）。楽天は自動報告せず複数個口の警告に回す（partial）
+    //   一部だけ入力 … Amazon は入力済みの先頭1本で通知（下の cpSeen）。楽天は全個口の登録が要るため自動報告せず警告に回す（partial）
     const cpByOrder = new Map();   // mall + 注文番号 → 行
     for (const r of cpAll) {
       const k = r.mall + '\u001e' + r.orderId;
@@ -4542,11 +4545,14 @@ async function s2ConvertRun(auth) {
         + 'STEP 1 で楽天市場のCSVを読み込んでください（Amazon分の出力は続行します）';
       s2Results.appendChild(need);
     } else {
-      const rep = buildRakutenShippingReport(allRakuten, s1RakutenParsed.groups, essToday());
+      const rep = buildRakutenShippingReport(allRakuten, s1RakutenParsed.groups, essToday(), s1RakutenShipDetailIds);
       const item = document.createElement('div');
       item.className = rep.matchedCount ? 'result-item success' : 'result-item error';
+      // 件数は注文数（Amazon と同じ）。複数個口で行数が増えるときは CSV の行数と複数個口の注文数を併記する
+      // （STEP1 の「N件（B2 CSV M行）」と同じ体裁。Amazon は先頭1本を通知・楽天は全伝票を登録＝モールの仕様差）
       item.textContent = rep.matchedCount
-        ? `✓ 楽天市場：${rep.matchedCount}件`
+        ? `✓ 楽天市場：${rep.orderCount}件`
+          + (rep.matchedCount !== rep.orderCount ? `（発送完了報告CSV ${rep.matchedCount}行・うち複数個口 ${rep.multiParcelCount}件）` : '')
         : '⚠ 楽天市場：出力対象が0件のため、ファイルは生成していません';
       s2Results.appendChild(item);
       renderRakutenReportWarnings(s2Results, rep);
@@ -5236,10 +5242,14 @@ function classifyRakutenOrder(order, today) {
 // ============================================================
 const RAKUTEN_SHIP_DL_HEADER = ['注文番号', '送付先ID', '発送明細ID', 'お荷物伝票番号', '配送会社', '発送日'];
 
-// 6列CSV → Map<注文番号, 伝票番号ありか>。
+// 6列CSV → { shippedMap: Map<注文番号, 伝票番号ありか>, detailIdsMap: Map<注文番号, 発送明細ID[]> }。
 // ヘッダーが6列と一致しない場合は例外を投げ、呼び出し側がエラー表示して処理を中断する。
 // 同一注文が複数行に分かれる場合（複数送付先・複数個口）は、1行でも伝票があれば
 // 「発行済み」とみなす（安全側：出荷済みの疑いがあるものはピッキングに出さない）。
+// detailIdsMap … 伝票番号が空で発送明細IDが入っている行だけを、注文番号ごとに集める（重複は1つ・出現順）。
+//   発送明細IDが既に発行されている注文は、発送完了報告でそのIDを指定しないと更新ではなく追加になり、
+//   不要なレコードが残る（RMSマニュアル 000038913 ※2・RMSコールセンター回答 2026-11-01）。
+//   shippedMap の意味と挙動はこれによって変えない。
 function parseRakutenShipDl(csvText) {
   const lines = splitCsvRecords(csvText).filter(l => l.trim());
   if (lines.length < 1) throw new Error('発送完了報告用DLデータではありません（データが空です）');
@@ -5256,14 +5266,21 @@ function parseRakutenShipDl(csvText) {
   const idx = {}; head.forEach((h, i) => { idx[h] = i; });
   const gc = (row, name) => { const i = idx[name]; return i != null ? (row[i] || '').trim() : ''; };
   const map = new Map();
+  const detailIdsMap = new Map();
   for (let i = 1; i < lines.length; i++) {
     const row = parseCsvLine(lines[i]);
     const orderNumber = gc(row, '注文番号');
     if (!orderNumber) continue;
     const hasTracking = gc(row, 'お荷物伝票番号') !== '';
     map.set(orderNumber, (map.get(orderNumber) || false) || hasTracking);
+    const detailId = gc(row, '発送明細ID');
+    if (!hasTracking && detailId) {
+      if (!detailIdsMap.has(orderNumber)) detailIdsMap.set(orderNumber, []);
+      const ids = detailIdsMap.get(orderNumber);
+      if (!ids.includes(detailId)) ids.push(detailId);
+    }
   }
-  return { shippedMap: map };
+  return { shippedMap: map, detailIdsMap };
 }
 
 // 期間不足を「発送日の最小値」で判定する独立警告は廃止した（2026-08-08）。
@@ -6149,12 +6166,13 @@ function rShipLoadFile(file) {
       s1RakutenShipBuffer = e.target.result;
       const dl = parseRakutenShipDl(decodeBuffer(s1RakutenShipBuffer));
       s1RakutenShipped = dl.shippedMap;
+      s1RakutenShipDetailIds = dl.detailIdsMap;
       essSaveAndReport('s1', 'in_rakuten_dl', '楽天', new Uint8Array(s1RakutenShipBuffer), file.name);
       rRefreshView();
       rShipDropzone.classList.add('has-file');
       rShipDzText.textContent = `✓ ${file.name}`;
     } catch(err) {
-      s1RakutenShipBuffer = null; s1RakutenShipped = null;
+      s1RakutenShipBuffer = null; s1RakutenShipped = null; s1RakutenShipDetailIds = null;
       rShipDropzone.classList.remove('has-file');
       rShipDzText.innerHTML = '発送完了報告用DLデータをドロップ<br>またはクリックして選択';
       rRefreshView();
@@ -6185,12 +6203,19 @@ rWireDropzone(rShipDropzone, rShipFileInput, rShipLoadFile);
 //   → 発送完了報告データCSV（Shift-JIS・6列固定・ヘッダー行付き）。
 // RMSの発送完了報告用テンプレートCSVは不要。通常購入データの「送付先ID」列が
 // テンプレートの送付先IDと一致することを実データ8件で突合確認済み。
-// 発送完了報告CSVは「1発送単位＝1行」構造。同一注文が複数行に分かれるケース
-// （複数送付先・複数個口）は自動処理せず警告表示に留める（Kaz確認済み運用）。
+// 発送完了報告CSVは「1発送単位＝1行」構造。
+// 複数個口（1注文・送付先ID1件に伝票2本以上）は、伝票ごとに1行を出して全伝票を登録する
+// （同じ注文番号・同じ送付先IDの行を伝票の数だけ作り、発送明細IDを空欄にすると行ごとに追加登録される。
+//  RMSマニュアル 000038913「複数個口の場合」・RMSコールセンター回答 2026-11-01）。
+// 発送明細IDが既に発行されている注文（DLデータで伝票番号が空・発送明細IDあり）は、そのIDを先頭行に入れ、
+// 残りの行は空欄にする（ID無指定だと更新ではなく追加になり、不要なレコードが残る）。
+// 自動処理せず警告表示に留めるのは、複数送付先・送付先ID空・発送明細IDが2件以上・伝票21本以上
+// （楽天の上限は送付先IDごとに20個）・一部の伝票番号が未入力（partial）の注文。
 // ============================================================
 const RAKUTEN_CARRIER_YAMATO = '1001';   // RMS配送会社コード：ヤマト運輸（B2 で発行した送り状）
 const RAKUTEN_CARRIER_JAPANPOST = '1003';   // RMS配送会社コード：日本郵便（クリックポスト）
 const RAKUTEN_REPORT_HEADER = ['注文番号', '送付先ID', '発送明細ID', 'お荷物伝票番号', '配送会社', '発送日'];
+const RAKUTEN_REPORT_MAX_PARCELS = 20;   // 1注文・送付先IDごとに登録できる伝票の上限（RMSマニュアル 000038913 ※1）
 
 // B2の出荷予定日（'2026/7/29' 等・月日ゼロ埋めなし）→ RMS発送完了報告が要求する
 // 'yyyy-mm-dd'（例 '2026-07-29'）へ正規化する。
@@ -6212,7 +6237,9 @@ function normalizeRakutenShipDate(dateRaw) {
 //                  [{ orderNumber, trackingRaw, shipDateRaw }]（値は生のまま）
 // rakutenGroups … STEP1で読み込んだ通常購入データの groups（s1RakutenParsed.groups）
 // today         … 出荷漏れ判定の基準日（buildRakutenPickingData と同じく引数化）
-function buildRakutenShippingReport(b2RakutenRows, rakutenGroups, today) {
+// detailIdsMap  … 発送完了報告用DLデータの Map<注文番号, 発送明細ID[]>（parseRakutenShipDl）。
+//                  未読込（null・省略）なら発送明細IDは全行空欄
+function buildRakutenShippingReport(b2RakutenRows, rakutenGroups, today, detailIdsMap) {
   // --- STEP1側（注文番号 → 送付先ID）。RMSテンプレートは不要で、通常購入データの
   //     「送付先ID」列がテンプレートの送付先IDと一致することを実データで確認済み。 ---
   const groupByOrder = new Map();
@@ -6238,7 +6265,10 @@ function buildRakutenShippingReport(b2RakutenRows, rakutenGroups, today) {
   const outRows = [];
   const multiDest = [];          // 送付先IDが2件以上＝分割配送→手動対応（旧 duplicates の後継）
   const noDestId = [];           // 送付先IDが空→手動対応
-  const multiParcel = [];        // 同一注文番号に複数伝票（複数個口）・複数個口の一部だけ伝票番号あり（partial）→手動対応
+  const multiParcel = [];        // 複数個口の一部だけ伝票番号あり（partial）→手動対応（楽天は全個口の登録を求める）
+  const tooManyParcels = [];     // 伝票が上限（20本）を超える→手動対応
+  const multiDetailId = [];      // DLデータに発送明細IDが2件以上ある→どのIDに入れるか決められないため手動対応
+  let multiParcelCount = 0;      // 自動出力した注文のうち複数個口（2行以上）の注文数
   const invalidShipDate = [];    // 出荷予定日が正規化不能→手動対応（不正な発送日をRMSへ投入しない）
   const unmatched = [];          // B2側にあるがSTEP1の通常購入データに無い注文
   for (const [orderNumber, b2] of b2ByOrder) {
@@ -6247,19 +6277,33 @@ function buildRakutenShippingReport(b2RakutenRows, rakutenGroups, today) {
     const destIds = Array.from(g.destIds || []);
     if (destIds.length > 1) { multiDest.push({ orderNumber, destIds }); continue; }
     if (destIds.length === 0) { noDestId.push({ orderNumber }); continue; }
-    // 複数個口（伝票2本以上）と、クリックポストの複数個口で一部の行だけ伝票番号を入れた注文（partial）は手動対応
-    if (b2.trackings.size > 1 || b2.partial) {
-      multiParcel.push({ orderNumber, trackings: Array.from(b2.trackings), partial: b2.partial });
+    const trackings = Array.from(b2.trackings);   // B2発行済データの行順（重複は1本）
+    // クリックポストの複数個口で一部の行だけ伝票番号を入れた注文（partial）は手動対応（全部入れてから作り直す）
+    if (b2.partial) {
+      multiParcel.push({ orderNumber, trackings, partial: b2.partial });
+      continue;
+    }
+    if (trackings.length > RAKUTEN_REPORT_MAX_PARCELS) {
+      tooManyParcels.push({ orderNumber, trackings });
+      continue;
+    }
+    const detailIds = (detailIdsMap && detailIdsMap.get(orderNumber)) || [];
+    if (detailIds.length > 1) {
+      multiDetailId.push({ orderNumber, detailIds, trackings });
       continue;
     }
     if (!b2.shipDate) {
       invalidShipDate.push({ orderNumber, shipDateRaw: b2.shipDateRaw });
       continue;
     }
-    // 発送明細IDは常に空欄。発送情報の登録時にRMSが採番する番号のため、新規報告では空が正しい
-    // （RMSマニュアル 000038913）。実データのテンプレートでも未報告の注文は全て空欄だった。
-    outRows.push([orderNumber, destIds[0], '',
-                  Array.from(b2.trackings)[0], b2.carrier || RAKUTEN_CARRIER_YAMATO, b2.shipDate]);
+    // 発送明細IDは、DLデータで既に発行済みのIDが1件あれば先頭行に入れ、残りは空欄（空欄の行は追加登録になる）。
+    // 無ければ全行空欄（発送情報の登録時にRMSが採番する番号のため、新規報告では空が正しい。RMSマニュアル 000038913）。
+    // 複数個口は伝票ごとに1行。注文番号・送付先ID・配送会社・発送日は全行同じ
+    trackings.forEach((tracking, i) => {
+      outRows.push([orderNumber, destIds[0], i === 0 && detailIds.length === 1 ? detailIds[0] : '',
+                    tracking, b2.carrier || RAKUTEN_CARRIER_YAMATO, b2.shipDate]);
+    });
+    if (trackings.length > 1) multiParcelCount++;
   }
 
   // STEP1がB2 CSVへ出したはずなのに伝票が無い注文＝出荷漏れ候補。
@@ -6276,7 +6320,9 @@ function buildRakutenShippingReport(b2RakutenRows, rakutenGroups, today) {
   // 6列固定・ヘッダー行付き。RMSからDLしたテンプレートの実測書式に合わせ、ヘッダー行・
   // データ行とも全フィールドをダブルクォートで囲む（空欄も ""。" は "" へ二重化＝toCsvLine）
   const csv = [RAKUTEN_REPORT_HEADER, ...outRows].map(toCsvLine).join('\r\n') + '\r\n';
-  return { csv, matchedCount: outRows.length, multiDest, noDestId, multiParcel,
+  // matchedCount … 出力した行数（0ならファイルを作らない）／orderCount … 出力した注文数
+  return { csv, matchedCount: outRows.length, orderCount: new Set(outRows.map(r => r[0])).size, multiParcelCount,
+           multiDest, noDestId, multiParcel, tooManyParcels, multiDetailId,
            invalidShipDate, unmatched, notShipped };
 }
 
@@ -6292,10 +6338,18 @@ function renderRakutenReportWarnings(container, rep) {
     ['注文番号'],
     rep.noDestId.map(x => [x.orderNumber]), 'error');
   renderRakutenWarningSection(container, 'rt-warn-multi',
-    `⚠ 楽天市場：同一注文番号に複数伝票があります＝複数個口（自動処理から除外・手動対応してください）: ${rep.multiParcel.length}件`,
+    `⚠ 楽天市場：複数個口の伝票番号が一部しか入っていません（自動処理から除外）。楽天は全個口の伝票番号の登録を求めるため、全部入れてから作り直してください: ${rep.multiParcel.length}件`,
     ['注文番号', '伝票番号'],
     rep.multiParcel.map(x => [x.orderNumber, x.trackings.join(' / ')
       + (x.partial ? `（一部未入力：${x.partial.parcels}個口のうち${x.partial.filled}本）` : '')]), 'error');
+  renderRakutenWarningSection(container, 'rt-warn-toomany',
+    `⚠ 楽天市場：伝票が${RAKUTEN_REPORT_MAX_PARCELS + 1}本以上あります（楽天の上限は1注文${RAKUTEN_REPORT_MAX_PARCELS}個まで。自動処理から除外・手動対応してください）: ${rep.tooManyParcels.length}件`,
+    ['注文番号', '伝票数', '伝票番号'],
+    rep.tooManyParcels.map(x => [x.orderNumber, `${x.trackings.length}本`, x.trackings.join(' / ')]), 'error');
+  renderRakutenWarningSection(container, 'rt-warn-detailid',
+    `⚠ 楽天市場：発送完了報告用DLデータに発送明細IDが2件以上ある注文（どのIDに入れるか決められないため自動処理から除外・手動対応してください）: ${rep.multiDetailId.length}件`,
+    ['注文番号', '発送明細ID', '伝票番号'],
+    rep.multiDetailId.map(x => [x.orderNumber, x.detailIds.join(' / '), x.trackings.join(' / ')]), 'error');
   renderRakutenWarningSection(container, 'rt-warn-baddate',
     `⚠ 楽天市場：出荷予定日が不正なため除外（手動対応してください）: ${rep.invalidShipDate.length}件`,
     ['注文番号', '出荷予定日の値'],
