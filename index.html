@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>EC出荷オペレーションツール - Amazon FBM / 楽天市場 / ヤフショ × ヤマトB2クラウド</title>
+  <title>EC出荷オペレーションツール - Amazon FBM / 楽天市場 / ヤフショ / メルカリ × ヤマトB2クラウド</title>
   <script>
   // ==== 定数（ルート・/preview/ 共通） ====
   // Google OAuth クライアントID（drive.file スコープのトークンモデル用。秘密情報ではない）。
@@ -17,7 +17,7 @@
   <link rel="icon" type="image/png" id="app-icon">
   <script>document.getElementById('app-icon').href = ASSET_BASE + 'assets/icon.png';</script>
   <script src="https://accounts.google.com/gsi/client" async></script>
-  <meta name="description" content="Amazon FBM（自己発送）・楽天市場・ヤフショ（Yahoo!ショッピング）の出荷業務を支援するブラウザツール。ヤマトB2クラウド取込CSV・クリックポスト用CSV・ピッキングリスト・Amazon出荷通知TXT・楽天市場発送完了報告CSV・ヤフショ注文処理実績アップロード用CSVを生成します。処理はブラウザ内で行い、Google にログインしているときは入力・出力ファイルの控えを利用者自身の Google ドライブ（EC出荷記録）に保存します。">
+  <meta name="description" content="Amazon FBM（自己発送）・楽天市場・ヤフショ（Yahoo!ショッピング）・メルカリShopsの出荷業務を支援するブラウザツール。ヤマトB2クラウド取込CSV・クリックポスト用CSV・ピッキングリスト・Amazon出荷通知TXT・楽天市場発送完了報告CSV・ヤフショ注文処理実績アップロード用CSV・メルカリShops一括発送通知用CSVを生成します。処理はブラウザ内で行い、Google にログインしているときは入力・出力ファイルの控えを利用者自身の Google ドライブ（EC出荷記録）に保存します。">
   <script src="https://cdn.jsdelivr.net/npm/encoding-japanese@2/encoding.min.js"></script>
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
@@ -137,6 +137,7 @@
     .mall-switch button.active.mall-amazon { color: #e77a1a; }
     .mall-switch button.active.mall-rakuten { color: #c0392b; }
     .mall-switch button.active.mall-yahoo { color: #7c3aed; }
+    .mall-switch button.active.mall-mercari { color: #0f766e; }
 
     .section-label {
       font-size: 11px;
@@ -204,6 +205,7 @@
     .dropzone.drop-blue:hover, .dropzone.drop-blue.drag-over { border-color: #2563eb; background: #eff6ff; }
     .dropzone.drop-red:hover, .dropzone.drop-red.drag-over { border-color: #c0392b; background: #fdf3f2; }
     .dropzone.drop-purple:hover, .dropzone.drop-purple.drag-over { border-color: #7c3aed; background: #f5f3ff; }
+    .dropzone.drop-teal:hover, .dropzone.drop-teal.drag-over { border-color: #0f766e; background: #f0fdfa; }
     .dropzone-icon { font-size: 22px; margin-bottom: 5px; }
     .dropzone-text { font-size: 13px; color: #555; line-height: 1.5; }
     .dropzone-hint { font-size: 11px; color: #aaa; margin-top: 3px; }
@@ -375,10 +377,10 @@
 <div class="container">
 
   <div class="app-header">
-    <div class="app-logo">Amazon FBM ＋ 楽天市場 ＋ ヤフショ 出荷オペレーション</div>
+    <div class="app-logo">Amazon FBM ＋ 楽天市場 ＋ ヤフショ ＋ メルカリ 出荷オペレーション</div>
     <div class="app-title">EC出荷オペレーションツール</div>
     <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-top:10px;">
-      <div class="security-badge">🔒 データはブラウザ内で処理。入力・出力ファイルを、Google にログインしているときだけ、ご自身の Google ドライブ（EC出荷記録）に保存します（STEP 2 で作る出荷通知TXT・発送完了報告CSV・ヤフショの注文処理実績アップロード用CSVは保存しません）。</div>
+      <div class="security-badge">🔒 データはブラウザ内で処理。入力・出力ファイルを、Google にログインしているときだけ、ご自身の Google ドライブ（EC出荷記録）に保存します（STEP 2 で作る出荷通知TXT・発送完了報告CSV・ヤフショの注文処理実績アップロード用CSV・メルカリの一括発送通知用CSVは保存しません）。</div>
       <a id="manual-link" target="_blank" style="font-size:13px;font-weight:700;color:#fff;background:#e77a1a;border-radius:8px;padding:5px 14px;text-decoration:none;letter-spacing:0.03em;">📖 使い方マニュアル</a>
       <script>document.getElementById('manual-link').href = ASSET_BASE + 'manual.html';</script>
     </div>
@@ -433,6 +435,12 @@
       <strong>ストアアカウント</strong>は注文番号の先頭（例 mampukudo-10000001 の mampukudo）です。STEP 2 で発行済データからヤフショの注文を見分けるのに使います。
     </div>
     <div id="yahoo-settings-card"></div>
+    <div class="section-label" style="margin-top:18px;">メルカリ（メルカリShops・B2依頼主・1店舗）</div>
+    <div class="info-box" style="margin-bottom:10px;">
+      メルカリ分のB2クラウド取込CSVの<strong>ご依頼主</strong>に使われます。Amazon・楽天市場・ヤフショの設定とは独立です（他のモールの設定で代わりに出すことはありません）。<br>
+      メルカリの注文データの請求先はお届け先の写しで注文者を表さないため、ご依頼主は<strong>常にこの設定</strong>（店舗名）です。請求先顧客コード・運賃管理番号も常にこの設定の値を使います。
+    </div>
+    <div id="mercari-settings-card"></div>
     <button class="btn-primary btn-green" id="save-settings-btn">保存してSTEP 1へ</button>
     <div id="settings-result"></div>
   </div>
@@ -440,7 +448,7 @@
   <!-- ============ STEP1 ============ -->
   <div class="tab-content" id="tab-step1">
     <p style="font-size:13px;color:#666;margin-bottom:20px;line-height:1.6;">
-      Amazonの未出荷注文レポート・楽天市場の通常購入データCSV・ヤフショの注文データ（注文情報・商品情報）を<br>
+      Amazonの未出荷注文レポート・楽天市場の通常購入データCSV・ヤフショの注文データ（注文情報・商品情報）・メルカリの注文データを<br>
       ヤマトB2クラウド取込用CSV（1ファイル）に変換します。どれか1つのモールだけでも変換できます。<br>
       クリックポストを選んだ注文があれば、クリックポスト用CSVも出力します。変換後にピッキングリスト・梱包発送明細を印刷できます。<br>
       出力の前に、直近7日の Drive の記録と照合し、発行済み・出力済みの注文を除外します。
@@ -463,6 +471,7 @@
       <button type="button" class="mall-amazon active" data-mall="amazon">Amazon</button>
       <button type="button" class="mall-rakuten" data-mall="rakuten">楽天市場</button>
       <button type="button" class="mall-yahoo" data-mall="yahoo">ヤフショ</button>
+      <button type="button" class="mall-mercari" data-mall="mercari">メルカリ</button>
     </div>
     <div id="s1-pane-amazon">
       <div class="section-label">Amazon未出荷レポート（店舗別）</div>
@@ -503,6 +512,20 @@
       <div class="results" id="y-results"></div>
       <div id="y-picking-area"></div>
     </div>
+    <div id="s1-pane-mercari" style="display:none;">
+      <div class="section-label">メルカリ 注文データ（1ファイル・必須）</div>
+      <div class="dropzone drop-teal" id="m-dropzone" style="margin-bottom:8px;">
+        <div class="dropzone-icon">🧺</div>
+        <div class="dropzone-text" id="m-dropzone-text">注文データCSVをドロップ<br>またはクリックして選択</div>
+        <div class="dropzone-hint">メルカリShops のショップ管理画面［注文］→［CSV一括機能］→［注文データのダウンロード］で、フォーマット「通常」・新旧フォーマット「まとめ買い対応版（新フォーマット）」・配送ステータス「発送前」を選び、作成履歴から落としたファイル</div>
+      </div>
+      <input type="file" id="m-fileInput" accept=".csv" style="display:none">
+      <div style="font-size:12px;line-height:1.7;margin-bottom:14px;">
+        <div id="m-file-order"></div>
+      </div>
+      <div class="results" id="m-results"></div>
+      <div id="m-picking-area"></div>
+    </div>
     <div id="s1-convert-note"></div>
     <button class="btn-primary btn-orange" id="s1-convertBtn" disabled>B2取込CSVを作る</button>
     <span id="s1-busy" class="busy" role="status" aria-live="polite"></span>
@@ -511,7 +534,7 @@
     <hr class="divider">
     <div class="section-label">出力ファイル</div>
     <div class="info-box">
-      B2用CSV: <strong>b2cloud_{出荷予定日YYYYMMDD}_HHMMSS.csv</strong>（Amazon全店舗＋楽天市場＋ヤフショ 統合・1ファイル、Amazon分→楽天市場分→ヤフショ分の順。照合なしで出力したときは末尾に _照合なし）<br>
+      B2用CSV: <strong>b2cloud_{出荷予定日YYYYMMDD}_HHMMSS.csv</strong>（Amazon全店舗＋楽天市場＋ヤフショ＋メルカリ 統合・1ファイル、Amazon分→楽天市場分→ヤフショ分→メルカリ分の順。照合なしで出力したときは末尾に _照合なし）<br>
       クリックポスト用CSV: <strong>clickpost_{出荷予定日YYYYMMDD}_HHMMSS.csv</strong>（クリックポストの注文があるときだけ。40行ごとに _1・_2… に分けます（N個口の注文は同じ行を N 行出します）。照合なしで出力したときは末尾に _照合なし）<br>
       B2の対象が0件でクリックポストだけのときは、b2cloud_… は出力しません。<br>
       出力の前に Drive の記録（直近7日）と照合します。出力後は Drive の EC出荷記録/{作業日}/02_B2用CSV・06_クリックポスト に控えを保存します。<br>
@@ -525,8 +548,8 @@
   <div class="tab-content" id="tab-step2">
     <p style="font-size:13px;color:#666;margin-bottom:16px;line-height:1.6;">
       ヤマトB2クラウドの「発行済みデータ」CSVを読み込み、<br>
-      Amazonの出荷通知ファイル（.txt）・楽天市場の発送完了報告データ（.csv）・ヤフショの注文処理実績アップロード用ファイル（.csv・2つ）を生成します。<br>
-      1つのファイルにAmazon分・楽天市場分・ヤフショ分が混在していても、注文番号の形式で自動的に振り分けます（ヤフショは依頼主設定のストアアカウントで見分けます）。
+      Amazonの出荷通知ファイル（.txt）・楽天市場の発送完了報告データ（.csv）・ヤフショの注文処理実績アップロード用ファイル（.csv・2つ）・メルカリの一括発送通知用ファイル（.csv）を生成します。<br>
+      1つのファイルにAmazon分・楽天市場分・ヤフショ分・メルカリ分が混在していても、注文番号の形式で自動的に振り分けます（ヤフショは依頼主設定のストアアカウントで、メルカリは注文番号「order_…」の形で見分けます）。
     </p>
     <div class="warning">
       ⚠️ <strong>取り違え注意</strong>：B2クラウドへの「取込用CSV」ではなく、ラベル発行後にエクスポートする
@@ -539,6 +562,7 @@
       （発送完了報告に必要な<strong>送付先ID</strong>をそこから取得するため）。STEP 1 の読み込みは、この画面を開いている間だけ有効です（ページを再読み込みすると消えます）。<br>
       RMSの発送完了報告用テンプレートCSVは、STEP 2 では不要です。<br>
       ヤフショ分は STEP 1 の読み込みが無くても出力できます（STEP 1 で読み込んでいれば、出荷漏れの可能性がある注文も知らせます）。<br>
+      メルカリ分を出力するには、<strong>STEP 1 でメルカリの注文データを読み込んでおく必要があります</strong>（一括発送通知用のファイルは、その注文データから今回発送した注文だけを残して作るため）。<br>
       出荷通知ファイルを作る前に、読み込んだ発行済データを Drive（EC出荷記録/{作業日}/03_発行済データ）に保存します（クリックポストの伝票番号は 06_クリックポスト）。保存できないときは出荷通知ファイルを作りません。
     </div>
     <div class="section-label">発行済みデータCSV（複数ファイル対応）</div>
@@ -560,6 +584,7 @@
       Amazon: <strong>{店舗名}_amazon_shipment_confirm_{出荷予定日YYYYMMDD}_HHMMSS.txt</strong>（読み込んだ発行済データのファイルごと・店舗ごとに1ファイル。同じ名前になるときは末尾に _2・_3…）<br>
       楽天市場: <strong>rakuten_shipping_report_{作成日YYYYMMDD}_HHMMSS.csv</strong>（1ファイル）<br>
       ヤフショ: <strong>yahoo_odstats_ship_{作成日YYYYMMDD}_HHMMSS.csv</strong>（①出荷完了）と <strong>yahoo_odstats_complete_{作成日YYYYMMDD}_HHMMSS.csv</strong>（②注文の完了）。ストアクリエイターPro の［注文管理］→［注文処理実績アップロード］で、①を上げて反映を確かめてから②を上げてください。<br>
+      メルカリ: <strong>mercari_bulk_ship_{作成日YYYYMMDD}_HHMMSS.csv</strong>（1ファイル）。ショップ管理画面の［注文］→［CSV一括機能］→［一括発送通知］で上げてください。<br>
       ブラウザのダウンロードとして直接保存されます（フォルダ選択なし）。<br>
       ※複数ファイル時にブラウザが「複数ファイルのダウンロード許可」を求めた場合は許可してください。
     </div>
@@ -644,6 +669,19 @@ function yahooOrderIdRe() {
   const acct = yahooStoreAccount();
   if (!acct) return null;
   return new RegExp('^' + acct.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '-(\\d+)$');
+}
+
+// メルカリ（メルカリShops）のB2依頼主設定（設定タブ「メルカリ」ブロック・1店舗固定）。楽天・ヤフショと同じ作りで、キーを分ける。
+// 項目は楽天の欄と同じ7項目。送り状のご依頼主は常にこの設定（請求先には切り替えない）。他のモールの設定へはフォールバックしない。
+const MERCARI_SENDER_KEY = 'mercari_sender_store';
+function loadMercariSender() {
+  try {
+    const d = JSON.parse(localStorage.getItem(MERCARI_SENDER_KEY));
+    return (d && typeof d === 'object' && !Array.isArray(d)) ? d : null;
+  } catch { return null; }
+}
+function saveMercariSender(sender) {
+  localStorage.setItem(MERCARI_SENDER_KEY, JSON.stringify(sender));
 }
 
 // ============================================================
@@ -1063,13 +1101,16 @@ function sortOrderRecords(records) {
 }
 // ==== ORDER PIPELINE — END ====
 
-// お客様管理番号（＝各モールの注文番号）の形式。STEP2はこの2本と、ヤフショの形（yahooOrderIdRe）でモールを振り分ける。
+// お客様管理番号（＝各モールの注文番号）の形式。STEP2はこの3本と、ヤフショの形（yahooOrderIdRe）でモールを振り分ける。
 // Amazon: 3-7-7桁 ／ 楽天市場: 店舗ID(433084)-受注日8桁-注文番号10桁 ／
-// ヤフショ: ストアアカウント（依頼主設定のヤフショ欄。例 mampukudo）-数字（例 mampukudo-10000001）
+// ヤフショ: ストアアカウント（依頼主設定のヤフショ欄。例 mampukudo）-数字（例 mampukudo-10000001） ／
+// メルカリ: order_＋英数字（実物は英数字21〜22文字。MERCARI_ORDER_ID_RE）。ご依頼主名には頼らない（Amazon の店舗の判定より前に振り分ける）
 // クリックポストの出荷通知の配送業者コード（carrier-code）。'Other' に替えたときは carrier-name に「日本郵便」を入れる
 const AMAZON_CARRIER_JAPANPOST = 'Japan Post';
 const AMAZON_ORDER_ID_RE  = /^\d{3}-\d{7}-\d{7}$/;
 const RAKUTEN_ORDER_ID_RE = /^433084-\d{8}-\d{10}$/;
+// メルカリの注文番号（order_id）の形。コードの処理と一緒にしか変わらない構造情報のため定数（設定値にしない）
+const MERCARI_ORDER_ID_RE = /^order_[A-Za-z0-9]+$/;
 
 function convertToShipmentNotify(csvText) {
   const stores = loadStores();
@@ -1092,7 +1133,8 @@ function convertToShipmentNotify(csvText) {
   const storeOrderMaps = new Map();
   const rakutenRows = [];         // 楽天市場の注文番号形式の行（発送完了報告CSV生成へ回す）
   const yahooRows = [];           // ヤフショの注文番号形式の行（注文処理実績アップロード用CSV生成へ回す）
-  const excludedOther = [];       // Amazon・楽天市場・ヤフショのいずれの形式でもない行
+  const mercariRows = [];         // メルカリの注文番号形式の行（一括発送通知用CSV生成へ回す）
+  const excludedOther = [];       // Amazon・楽天市場・ヤフショ・メルカリのいずれの形式でもない行
   const yahooRe = yahooOrderIdRe();   // ストアアカウントが未設定なら null（ヤフショとして振り分けない）
   let shipDateStr = '';
 
@@ -1113,6 +1155,9 @@ function convertToShipmentNotify(csvText) {
         rakutenRows.push({ orderNumber: orderId, trackingRaw, shipDateRaw: dateRaw });
       } else if (yahooRe && yahooRe.test(orderId)) {
         yahooRows.push({ orderNumber: orderId, trackingRaw, shipDateRaw: dateRaw });
+      } else if (MERCARI_ORDER_ID_RE.test(orderId)) {
+        // メルカリ：お客様管理番号の形だけで振り分ける（ご依頼主名は見ない＝Amazon の店舗の照合に混ざらない）
+        mercariRows.push({ orderNumber: orderId, trackingRaw, shipDateRaw: dateRaw });
       } else {
         excludedOther.push({ orderId, storeName, tracking: trackingRaw });
       }
@@ -1144,8 +1189,8 @@ function convertToShipmentNotify(csvText) {
     }
   }
 
-  // Amazon分が0件でも楽天分・ヤフショ分・除外分があれば処理は継続する（楽天・ヤフショのみのファイルを止めない）。
-  if (storeOrderMaps.size === 0 && rakutenRows.length === 0 && yahooRows.length === 0 && excludedOther.length === 0) {
+  // Amazon分が0件でも楽天分・ヤフショ分・メルカリ分・除外分があれば処理は継続する（楽天・ヤフショ・メルカリのみのファイルを止めない）。
+  if (storeOrderMaps.size === 0 && rakutenRows.length === 0 && yahooRows.length === 0 && mercariRows.length === 0 && excludedOther.length === 0) {
     throw new Error('有効なデータ行が見つかりません');
   }
 
@@ -1156,7 +1201,7 @@ function convertToShipmentNotify(csvText) {
     const dataRows = Array.from(orderMap.values());
     results.push({ store, storeKey, dataRows, shipDateStr, prefix });
   }
-  return { results, rakutenRows, yahooRows, excludedOther };
+  return { results, rakutenRows, yahooRows, mercariRows, excludedOther };
 }
 
 // ============================================================
@@ -1310,14 +1355,14 @@ function thumbInner(sku) {
 }
 
 // ============================================================
-// ピッキング帳票（Amazon＋楽天市場＋ヤフショ 統合・1文書1ボタン）
+// ピッキング帳票（Amazon＋楽天市場＋ヤフショ＋メルカリ 統合・1文書1ボタン）
 // 出力は2セクション：
 //   1) 商品別合計   … A4縦・1段（@page portraitPage）。棚を回る用。
 //   2) 梱包・発送明細 … A4横・2段組み（@page landscapePage）。詰め・照合用。
 // 用紙の向きと段組みを変えているのは、2つの帳票がよく似ていて現場が取り違えるため。
 // 表そのものはモール別に分けたまま（SKU体系が異なるため統合しない）。
-// G番号は Amazon=A-NNN／楽天市場=R-NNN／ヤフショ=Y-NNN で名前空間を分ける（採番ロジックは各モール側のまま。
-// ヤフショは楽天の採番（buildRakutenPickingData）を接頭辞 Y- で使う）。
+// G番号は Amazon=A-NNN／楽天市場=R-NNN／ヤフショ=Y-NNN／メルカリ=M-NNN で名前空間を分ける（採番ロジックは各モール側のまま。
+// ヤフショ・メルカリは楽天の採番（buildRakutenPickingData）を接頭辞 Y-・M- で使う）。
 // ============================================================
 
 // 楽天市場の店舗コード。梱包・発送明細と商品別合計の黒帯に出す表示名で、
@@ -1334,6 +1379,9 @@ function rakutenStoreDisplayName(codes) {
 // ヤフショの帳票の黒帯・一覧に出す店舗の表示名（屋号）。送り状に印字される依頼主名（loadYahooSender().name）とは別物。
 // 楽天の RAKUTEN_STORE_NAMES と同じ扱い（ストアアカウント mampukudo は設定値で、ここには持たない）。
 const YAHOO_STORE_NAME = 'まいど萬福堂';
+// メルカリの帳票の黒帯・一覧に出す店舗の表示名（ショップ名。2026-11-11 ショップ管理画面で確認）。
+// 送り状に印字されるご依頼主名（依頼主設定のメルカリ欄 loadMercariSender().name）とは別物（ヤフショの YAHOO_STORE_NAME と同じ作り）。
+const MERCARI_STORE_NAME = 'まいど萬福堂';
 // Amazon：店舗名（'／' 区切り）の各名前の末尾の「（Amazon）」を外す。名前の途中の「（Amazon）」は外さない
 function amazonStoreDisplayNames(names) {
   return String(names == null ? '' : names).replace(/（Amazon）(?=／|$)/g, '');
@@ -1358,11 +1406,12 @@ function amazonStoreDisplayNames(names) {
 // 宅急便コンパクト・ネコポス）に個口数で申告する（Kaz 確定 2026-10-29）。「送り状なし」「本日出荷しない」は個口数を数えない。
 //   parcels … { nekopos, compact, takkyubin, clickpost, yamato, orders }
 //             yamato＝宅急便＋コンパクト＋ネコポス／orders＝yamato＋クリックポスト（送り状なし・本日出荷しないを含まない）
-// ヤフショ（yahoo）は楽天と同じ数え方（確定値 yahooResolvedMethod。不明は宅急便へ寄せて unknown に数える）。戻り値に yahoo を足す。
-function buildShipMethodSummary(amazon, rakuten, yahoo) {
+// ヤフショ（yahoo）・メルカリ（mercari）は楽天と同じ数え方（確定値 yahooResolvedMethod／mercariResolvedMethod。
+// 不明は宅急便へ寄せて unknown に数える）。戻り値に yahoo・mercari を足す。
+function buildShipMethodSummary(amazon, rakuten, yahoo, mercari) {
   const zero = () => ({ nekopos: 0, compact: 0, takkyubin: 0, unknown: 0, clickpost: 0, none: 0, skip: 0, yamato: 0, orders: 0,
     parcels: { nekopos: 0, compact: 0, takkyubin: 0, clickpost: 0, yamato: 0, orders: 0 } });
-  const a = zero(), r = zero(), y = zero();
+  const a = zero(), r = zero(), y = zero(), mc = zero();
   const add = (x, k, n) => { x[k]++; if (k !== 'none' && k !== 'skip') x.parcels[k] += n; };
   for (const o of ((amazon && amazon.single) || [])) {
     const m = amazonResolvedMethod(o), n = amazonParcelCount(o);
@@ -1393,8 +1442,18 @@ function buildShipMethodSummary(amazon, rakuten, yahoo) {
     else if (m === YAHOO_CLICKPOST) add(y, 'clickpost', n);
     else { add(y, 'takkyubin', n); y.unknown++; }   // 楽天と同じ
   }
+  for (const o of ((mercari && mercari.orders) || [])) {
+    const m = mercariResolvedMethod(o), n = mercariParcelCount(o);
+    if (m === MERCARI_NEKOPOS)        add(mc, 'nekopos', n);
+    else if (m === MERCARI_COMPACT)   add(mc, 'compact', n);
+    else if (m === MERCARI_TAKKYUBIN) add(mc, 'takkyubin', n);
+    else if (m === MERCARI_NONE)      add(mc, 'none', n);
+    else if (m === MERCARI_SKIP)      add(mc, 'skip', n);
+    else if (m === MERCARI_CLICKPOST) add(mc, 'clickpost', n);
+    else { add(mc, 'takkyubin', n); mc.unknown++; }   // 楽天と同じ
+  }
   const all = zero();
-  for (const x of [a, r, y]) {
+  for (const x of [a, r, y, mc]) {
     x.yamato = x.nekopos + x.compact + x.takkyubin;
     x.orders = x.yamato + x.clickpost + x.none + x.skip;
     x.parcels.yamato = x.parcels.nekopos + x.parcels.compact + x.parcels.takkyubin;
@@ -1402,7 +1461,7 @@ function buildShipMethodSummary(amazon, rakuten, yahoo) {
     for (const k of Object.keys(all)) if (k !== 'parcels') all[k] += x[k];
     for (const k of Object.keys(all.parcels)) all.parcels[k] += x.parcels[k];
   }
-  return { amazon: a, rakuten: r, yahoo: y, all };
+  return { amazon: a, rakuten: r, yahoo: y, mercari: mc, all };
 }
 
 // 梱包・発送明細の行番号（001…）と、複数商品注文の識別子（複-01…）。
@@ -1414,15 +1473,18 @@ function buildShipMethodSummary(amazon, rakuten, yahoo) {
 //            商品キー：Amazon＝sku（G番号の採番と同じキー）／楽天＝sku＋U+001F＋商品管理番号（rakutenClusterKey と同じ）
 // ヤフショ（yahoo）は楽天の続き（並び Amazon→楽天→ヤフショ）。束ね方・商品キーは楽天と同じ（ヤフショの sku＝SubCode（空なら ItemId）、
 // itemMgmtNo＝ItemId）。ヤフショは楽天とは別に束ねる。
-// 戻り値 { rows:[{ no, mall:'amazon'|'rakuten'|'yahoo', storeIndex, orderId, multi }], amazonGroups, rakutenGroups, yahooGroups }
+// メルカリ（mercari）はヤフショの続き（並び Amazon→楽天→ヤフショ→メルカリ）。束ね方・商品キーは楽天と同じ（メルカリの sku＝variant_id、
+// itemMgmtNo は空）。メルカリは他のモールとは別に束ねる。
+// 戻り値 { rows:[{ no, mall:'amazon'|'rakuten'|'yahoo'|'mercari', storeIndex, orderId, multi }], amazonGroups, rakutenGroups, yahooGroups, mercariGroups }
 //   *Groups … [{ id, count, lines:[{num, quantity, name}] }]（番号順）
-function buildMultiGroups(amazon, rakuten, yahoo) {
+function buildMultiGroups(amazon, rakuten, yahoo, mercari) {
   const lineKeyA = l => l.sku || '';
   const lineKeyR = l => (l.sku || '') + '\u001f' + (l.itemMgmtNo || '');
   const items = [];
   for (const o of (amazon ? (amazon.single || []) : [])) items.push({ mall: 'amazon', storeIndex: o.storeIndex, orderId: o.orderId, lines: o.lines || [] });
   for (const o of (rakuten ? (rakuten.orders || []) : [])) items.push({ mall: 'rakuten', storeIndex: null, orderId: o.orderNumber, lines: o.lines || [] });
   for (const o of (yahoo ? (yahoo.orders || []) : [])) items.push({ mall: 'yahoo', storeIndex: null, orderId: o.orderNumber, lines: o.lines || [] });
+  for (const o of (mercari ? (mercari.orders || []) : [])) items.push({ mall: 'mercari', storeIndex: null, orderId: o.orderNumber, lines: o.lines || [] });
 
   const groups = [];          // 出てきた順
   const byKey = new Map();    // mall + 中身 → group
@@ -1444,30 +1506,34 @@ function buildMultiGroups(amazon, rakuten, yahoo) {
   const rows = items.map((it, i) => ({ no: String(i + 1).padStart(noWidth, '0'), mall: it.mall, storeIndex: it.storeIndex,
     orderId: it.orderId, multi: it.group ? it.group.id : '' }));
   return { rows, amazonGroups: groups.filter(g => g.mall === 'amazon'), rakutenGroups: groups.filter(g => g.mall === 'rakuten'),
-           yahooGroups: groups.filter(g => g.mall === 'yahoo') };
+           yahooGroups: groups.filter(g => g.mall === 'yahoo'), mercariGroups: groups.filter(g => g.mall === 'mercari') };
 }
 
 // 統合ピッキング帳票の印刷用HTML。
 //   amazon  … { total, single, multiCount, storeNames } ／ 注文が無い・未読込なら null でもよい
 //   rakuten … { total, orders, multiCount, storeName }  ／ 同上
-//   load    … 読込状態 { amazon: { loaded:[店舗名…], missing:[店舗名…] }, rakuten: 'complete'|'none', yahoo: 'complete'|'none' }
-//             （s1ConvertRun が作る）。省略時はデータの有無で読込済みとみなす。
+//   load    … 読込状態 { amazon: { loaded:[店舗名…], missing:[店舗名…] }, rakuten: 'complete'|'none', yahoo: 'complete'|'none',
+//             mercari: 'complete'|'none' }（s1ConvertRun が作る）。省略時はデータの有無で読込済みとみなす。
 //   yahoo   … { total, orders, multiCount, storeName }（楽天と同じ形）／ 同上。後から足した引数のため末尾に置く
-// 帳票には常に Amazon・楽天市場・ヤフショの3モールを出す（Kaz 確定 2026-10-29。ヤフショは 2026-11-10）。読込済みで0件なら「注文：0件」、
-// 未読込なら「未読込」の黒帯と終わりの線だけを出す（表は出さない）。配送方法別内訳も常に3モールの列を出す。
-function renderCombinedPickingHTML(amazon, rakuten, seq, load, yahoo) {
+//   mercari … { total, orders, multiCount, storeName }（楽天と同じ形）／ 同上。後から足した引数のため末尾に置く
+// 帳票には常に Amazon・楽天市場・ヤフショ・メルカリの4モールを出す（Kaz 確定 2026-10-29。ヤフショは 2026-11-10、メルカリは 2026-11-11）。
+// 読込済みで0件なら「注文：0件」、未読込なら「未読込」の黒帯と終わりの線だけを出す（表は出さない）。配送方法別内訳も常に4モールの列を出す。
+function renderCombinedPickingHTML(amazon, rakuten, seq, load, yahoo, mercari) {
   const aLoaded = load ? load.amazon.loaded.length > 0 : !!amazon;
   const rLoaded = load ? load.rakuten === 'complete' : !!rakuten;
   const yLoaded = load ? load.yahoo === 'complete' : !!yahoo;
+  const mLoaded = load ? load.mercari === 'complete' : !!mercari;
   // 読込済みでデータが無い（変換できる注文が0件・照合で全部除外）ときは空のデータとして扱う
   if (!amazon && aLoaded) amazon = { total: [], single: [], multiCount: 0, storeNames: load.amazon.loaded.join('／') };
   if (!rakuten && rLoaded) rakuten = { total: [], orders: [], multiCount: 0, storeName: RAKUTEN_STORE_CODES.join('／') };
   if (!yahoo && yLoaded) yahoo = { total: [], orders: [], multiCount: 0, storeName: YAHOO_STORE_NAME };
+  if (!mercari && mLoaded) mercari = { total: [], orders: [], multiCount: 0, storeName: MERCARI_STORE_NAME };
   if (!aLoaded) amazon = null;
   if (!rLoaded) rakuten = null;
   if (!yLoaded) yahoo = null;
+  if (!mLoaded) mercari = null;
   // 行番号・識別子（画面の一覧と同じ結果を渡されたらそれを使う）
-  seq = seq || buildMultiGroups(amazon, rakuten, yahoo);
+  seq = seq || buildMultiGroups(amazon, rakuten, yahoo, mercari);
   const seqByOrder = new Map(seq.rows.map(r => [r.mall + '\u001e' + r.orderId, r]));
   const esc = s => String(s == null ? '' : s)
     .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
@@ -1514,12 +1580,15 @@ function renderCombinedPickingHTML(amazon, rakuten, seq, load, yahoo) {
   const isSkipA = o => amazonResolvedMethod(o) === AMAZON_SKIP;
   const isSkipR = o => rakutenResolvedMethod(o) === RAKUTEN_SKIP;
   const isSkipY = o => yahooResolvedMethod(o) === YAHOO_SKIP;
+  const isSkipM = o => mercariResolvedMethod(o) === MERCARI_SKIP;
   const aPickOrders = amazon ? (amazon.single || []).filter(o => !isSkipA(o)) : [];
   const rPickOrders = rakuten ? (rakuten.orders || []).filter(o => !isSkipR(o)) : [];
   const yPickOrders = yahoo ? (yahoo.orders || []).filter(o => !isSkipY(o)) : [];
+  const mPickOrders = mercari ? (mercari.orders || []).filter(o => !isSkipM(o)) : [];
   const aSkip = amazon ? (amazon.single || []).length - aPickOrders.length : 0;
   const rSkip = rakuten ? (rakuten.orders || []).length - rPickOrders.length : 0;
   const ySkip = yahoo ? (yahoo.orders || []).length - yPickOrders.length : 0;
+  const mSkip = mercari ? (mercari.orders || []).length - mPickOrders.length : 0;
   // 商品別集計の行（単一商品注文のクラスタ）を残った注文で数え直す。並び・G番号は元の total のまま（B2記事欄と同じ値）。
   // その注文にしか無い商品は行ごと出さない。数え方は buildPickingItems／buildRakutenPickingData と同じ
   const pickSums = (orders, keyOf) => {
@@ -1545,6 +1614,10 @@ function renderCombinedPickingHTML(amazon, rakuten, seq, load, yahoo) {
   const yPickTotal = !ySkip ? ((yahoo && yahoo.total) || []) : (() => {
     const sums = pickSums(yPickOrders, l => (l.sku || '') + '\u001f' + (l.itemMgmtNo || ''));
     return (yahoo.total || []).filter(t => sums.has(t.clusterKey)).map(t => ({ ...t, ...sums.get(t.clusterKey) }));
+  })();
+  const mPickTotal = !mSkip ? ((mercari && mercari.total) || []) : (() => {
+    const sums = pickSums(mPickOrders, l => (l.sku || '') + '\u001f' + (l.itemMgmtNo || ''));
+    return (mercari.total || []).filter(t => sums.has(t.clusterKey)).map(t => ({ ...t, ...sums.get(t.clusterKey) }));
   })();
   // 表の直後に出す一文（赤）。0件なら出さない
   const skipNote = n => n ? `
@@ -1590,6 +1663,12 @@ function renderCombinedPickingHTML(amazon, rakuten, seq, load, yahoo) {
     const k = (o.lines[0].sku || '') + '\u001f' + (o.lines[0].itemMgmtNo || '');
     yahooKeyParcels.set(k, (yahooKeyParcels.get(k) || 0) + yahooParcelCount(o));
   }
+  const mercariKeyParcels = new Map();  // クラスタキー → 個口数の合計（楽天と同じ）
+  for (const o of mPickOrders) {
+    if ((o.lines || []).length !== 1) continue;
+    const k = (o.lines[0].sku || '') + '\u001f' + (o.lines[0].itemMgmtNo || '');
+    mercariKeyParcels.set(k, (mercariKeyParcels.get(k) || 0) + mercariParcelCount(o));
+  }
   // 複数商品注文の識別子（複-01…）→ 個口数の合計。buildMultiGroups の結果（seq）は変えずに描画側で数える。
   // 「本日出荷しない」の注文は商品別集計に載せないため数えない（multiOrders＝識別子ごとの残った注文数）
   const multiParcels = new Map();
@@ -1598,11 +1677,14 @@ function renderCombinedPickingHTML(amazon, rakuten, seq, load, yahoo) {
     const aById = new Map(((amazon && amazon.single) || []).map(o => [o.orderId, o]));
     const rById = new Map(((rakuten && rakuten.orders) || []).map(o => [o.orderNumber, o]));
     const yById = new Map(((yahoo && yahoo.orders) || []).map(o => [o.orderNumber, o]));
+    const mById = new Map(((mercari && mercari.orders) || []).map(o => [o.orderNumber, o]));
     for (const r of seq.rows) {
       if (!r.multi) continue;
-      const o = r.mall === 'amazon' ? aById.get(r.orderId) : r.mall === 'yahoo' ? yById.get(r.orderId) : rById.get(r.orderId);
-      if (o && (r.mall === 'amazon' ? isSkipA(o) : r.mall === 'yahoo' ? isSkipY(o) : isSkipR(o))) continue;
-      const n = r.mall === 'amazon' ? amazonParcelCount(o) : r.mall === 'yahoo' ? yahooParcelCount(o) : rakutenParcelCount(o);
+      const o = r.mall === 'amazon' ? aById.get(r.orderId) : r.mall === 'yahoo' ? yById.get(r.orderId)
+        : r.mall === 'mercari' ? mById.get(r.orderId) : rById.get(r.orderId);
+      if (o && (r.mall === 'amazon' ? isSkipA(o) : r.mall === 'yahoo' ? isSkipY(o) : r.mall === 'mercari' ? isSkipM(o) : isSkipR(o))) continue;
+      const n = r.mall === 'amazon' ? amazonParcelCount(o) : r.mall === 'yahoo' ? yahooParcelCount(o)
+        : r.mall === 'mercari' ? mercariParcelCount(o) : rakutenParcelCount(o);
       multiParcels.set(r.multi, (multiParcels.get(r.multi) || 0) + n);
       multiOrders.set(r.multi, (multiOrders.get(r.multi) || 0) + 1);
     }
@@ -1625,10 +1707,12 @@ function renderCombinedPickingHTML(amazon, rakuten, seq, load, yahoo) {
   const aOrders = amazon ? (amazon.single || []).length : 0;
   const rOrders = rakuten ? (rakuten.orders || []).length : 0;
   const yOrders = yahoo ? (yahoo.orders || []).length : 0;
+  const mOrders = mercari ? (mercari.orders || []).length : 0;
   // 商品別集計の見出し・終端線の注文数（本日出荷しないを除く）
   const aPick = aPickOrders.length;
   const rPick = rPickOrders.length;
   const yPick = yPickOrders.length;
+  const mPick = mPickOrders.length;
 
   // 黒帯の見出し：{種別}（{モール} {店舗名}） 注文：{N}件。店舗名が空なら（{モール}）だけ。未読込（n が null）なら「… 未読込」
   const mallHead = (kind, mall, names, n) => {
@@ -1645,6 +1729,7 @@ function renderCombinedPickingHTML(amazon, rakuten, seq, load, yahoo) {
     : `${aDisp(load.amazon.loaded)}のみ・${aDisp(load.amazon.missing)}未読込`;
   const rakutenBandName = rakutenStoreDisplayName(rakuten ? rakuten.storeName : RAKUTEN_STORE_CODES.join('／'));
   const yahooBandName = (yahoo && yahoo.storeName) || YAHOO_STORE_NAME;
+  const mercariBandName = (mercari && mercari.storeName) || MERCARI_STORE_NAME;
   // 0件・未読込のモールは黒帯と終わりの線だけ（表は出さない）。note＝黒帯と終わりの線の間に置く一文（本日出荷しないだけの日）
   const emptySection = (kind, mall, names, n, note = '') => `
   ${band(mallHead(kind, mall, names, n))}${note}
@@ -1776,6 +1861,35 @@ function renderCombinedPickingHTML(amazon, rakuten, seq, load, yahoo) {
   </table>${skipNote(ySkip)}
   ${mallEnd('ヤフショ', yPick)}`;
 
+  // メルカリ：楽天・ヤフショと同じ作り（商品キー＝クラスタキー（variant_id）、印の並び・色、複数商品注文の集約行）。
+  // 配送方法の値は楽天と同じ文字列（MERCARI_* ＝ RAKUTEN_*）のため、印は rakutenMethodBadge をそのまま使う。
+  const mercariSkuMethods = new Map();   // clusterKey → Set<配送方法>
+  for (const o of mPickOrders) {
+    const m = mercariResolvedMethod(o);
+    for (const l of o.lines) {
+      const k = rakutenClusterKey(l);
+      if (!mercariSkuMethods.has(k)) mercariSkuMethods.set(k, new Set());
+      mercariSkuMethods.get(k).add(m);
+    }
+  }
+  const mercariShipBadges = (clusterKey) => {
+    const s = mercariSkuMethods.get(clusterKey);
+    if (!s) return '';
+    return RAKUTEN_BADGE_ORDER.filter(m => s.has(m)).map(rakutenMethodBadge).join('');
+  };
+  const mercariTotalSection = !mercari ? emptySection('商品別集計', 'メルカリ', mercariBandName, null)
+    : !mPick ? emptySection('商品別集計', 'メルカリ', mercariBandName, 0, skipNote(mSkip)) : `
+  ${band(mallHead('商品別集計', 'メルカリ', mercariBandName, mPick))}
+  <table class="total">
+    ${TOTAL_COLGROUP}
+    ${totalHead('商品名（商品コード）')}
+    <tbody>${mPickTotal.map(t => {
+      const parcels = mercariKeyParcels.has(t.clusterKey) ? mercariKeyParcels.get(t.clusterKey) : t.orderCount;
+      return `<tr><td class="thumb-cell">${thumbInner(t.sku)}</td><td class="num">${esc(t.num)}</td><td class="${qtyCellCls(t.totalQty, parcels)}">${esc(t.totalQty)}</td><td class="cnt">${cntInner(parcels, t.orderCount)}</td><td class="name">${rakutenNameCell(t.name, t.skuInfo, t.sku)}${t.dupWarning ? RAKUTEN_DUP_BADGE : ''}${mercariShipBadges(t.clusterKey)}</td></tr>`;
+    }).join('')}${multiGroupRows(seq.mercariGroups)}</tbody>
+  </table>${skipNote(mSkip)}
+  ${mallEnd('メルカリ', mPick)}`;
+
   // ---- 梱包・発送明細（A4横・2段組み） ----
   const detailHead = `<thead><tr><th class="thumb-cell">画像</th><th class="num">G番号</th><th class="qty">数量</th><th class="name">商品名</th></tr></thead>`;
 
@@ -1830,15 +1944,33 @@ function renderCombinedPickingHTML(amazon, rakuten, seq, load, yahoo) {
   }).join('')}</div>
   ${mallEnd('ヤフショ', yOrders)}`;
 
+  // メルカリ：楽天・ヤフショと同じ作り
+  const mercariDetailSection = !mercari ? emptySection('梱包・発送明細', 'メルカリ', mercariBandName, null)
+    : !mOrders ? emptySection('梱包・発送明細', 'メルカリ', mercariBandName, 0) : `
+  ${band(mallHead('梱包・発送明細', 'メルカリ', mercariBandName, mOrders))}
+  <div class="detail-cols">${(mercari.orders || []).map(o => {
+    const rows = o.lines.map(l =>
+      `<tr><td class="thumb-cell">${thumbInner(l.sku)}</td><td class="num">${esc(l.num)}</td><td class="qty">${esc(l.quantity)}</td><td class="name">${esc(l.name)}${l.skuInfo ? ` <span class="skuinfo">${esc(l.skuInfo)}</span>` : ''}</td></tr>`
+    ).join('');
+    const mm = mercariResolvedMethod(o);
+    return `<section class="order">
+      <h2>${detailNo('mercari', o.orderNumber)}${esc(o.orderNumber)}${rakutenMethodBadge(mm)}${parcelTag(mercariParcelCount(o))}${detailMulti('mercari', o.orderNumber)}</h2>
+      <table>${detailHead}<tbody>${rows}</tbody></table>
+    </section>`;
+  }).join('')}</div>
+  ${mallEnd('メルカリ', mOrders)}`;
+
   // ---- 配送方法別内訳（1表）----
-  // 以前の2表（ヤマト集荷依頼 申告数／モール別内訳）を1表にまとめた。列は Amazon・楽天市場・ヤフショ・合計・個口数（常に3モール）。
-  const ship = buildShipMethodSummary(amazon, rakuten, yahoo);
+  // 以前の2表（ヤマト集荷依頼 申告数／モール別内訳）を1表にまとめた。列は Amazon・楽天市場・ヤフショ・メルカリ・合計・個口数（常に4モール）。
+  const ship = buildShipMethodSummary(amazon, rakuten, yahoo, mercari);
   // 未読込のモールの列は見出しに「（未読込）」を添え、数値は「—」。合計・個口数は読込済みの分だけ（未読込のデータは空）
-  const shipCols = [['Amazon', ship.amazon, aLoaded], ['楽天市場', ship.rakuten, rLoaded], ['ヤフショ', ship.yahoo, yLoaded], ['合計', ship.all, true]];
+  const shipCols = [['Amazon', ship.amazon, aLoaded], ['楽天市場', ship.rakuten, rLoaded], ['ヤフショ', ship.yahoo, yLoaded],
+    ['メルカリ', ship.mercari, mLoaded], ['合計', ship.all, true]];
   // 合計（注文数）＝梱包・発送明細の「合計 N注文」。同じ値（ship.all.orders）から組む＝ずれない
   const allOrders = ship.all.orders;
   const detailSummary = `合計 ${allOrders}注文`
-    + `（Amazon ${aLoaded ? aOrders : '未読込'} ／ 楽天市場 ${rLoaded ? rOrders : '未読込'} ／ ヤフショ ${yLoaded ? yOrders : '未読込'}）`;
+    + `（Amazon ${aLoaded ? aOrders : '未読込'} ／ 楽天市場 ${rLoaded ? rOrders : '未読込'} ／ ヤフショ ${yLoaded ? yOrders : '未読込'}`
+    + ` ／ メルカリ ${mLoaded ? mOrders : '未読込'}）`;
   // ヤマトへの申告は配送方法の種類ごとに個口数で行う（Kaz 確定 2026-10-29）。実際の数を埋め込む
   const sp = ship.all.parcels;
   const shipNote = `※ヤマトへの集荷依頼は、配送方法の種類ごとに「個口数」の数で申告してください（宅急便 ${sp.takkyubin}口・宅急便コンパクト ${sp.compact}口・ネコポス ${sp.nekopos}口）。`
@@ -1881,7 +2013,8 @@ function renderCombinedPickingHTML(amazon, rakuten, seq, load, yahoo) {
   // 規則はモール共通。梱包・発送明細のモールごとの扱いは変えない（2段組みの流し込み）。
   let totalHtml = '';
   let prevHas = false;
-  for (const [html, has] of [[amazonTotalSection, aPick > 0], [rakutenTotalSection, rPick > 0], [yahooTotalSection, yPick > 0]]) {
+  for (const [html, has] of [[amazonTotalSection, aPick > 0], [rakutenTotalSection, rPick > 0], [yahooTotalSection, yPick > 0],
+                             [mercariTotalSection, mPick > 0]]) {
     totalHtml += (has && prevHas) ? `\n  <div class="mall-keep">${html}\n  </div>` : html;
     prevHas = prevHas || has;
   }
@@ -2006,17 +2139,19 @@ function renderCombinedPickingHTML(amazon, rakuten, seq, load, yahoo) {
   .sum-table caption { caption-side:top; text-align:left; font-size:11pt; font-weight:bold;
                        padding:0 0 1.5mm; white-space:nowrap; }
   .sum-table th, .sum-table td { font-size:13pt; padding:2mm 3mm; border:1px solid #333; }
-  /* 数値列は 23mm（ヤフショの列を足して5列にしたため 26mm から詰めた。字の大きさは変えない） */
-  .sum-table td.n { text-align:right; width:23mm; font-size:18pt; font-weight:bold;
+  /* 数値列は 19mm（ヤフショの列を足して5列にしたため 26mm→23mm、メルカリの列を足して6列にしたため 23mm→19mm に詰めた。
+     字の大きさは変えない。見出しの字が入らない列（「楽天市場」「（未読込）」等）は見出しの幅まで広がる） */
+  .sum-table td.n { text-align:right; width:19mm; font-size:18pt; font-weight:bold;
                     font-variant-numeric:tabular-nums; }
   .sum-table tr.grand th, .sum-table tr.grand td { background:#f2f2f2; font-weight:bold;
                     -webkit-print-color-adjust:exact; print-color-adjust:exact; }
   /* 数値列のヘッダは <br> の位置だけで折る。nowrap が無いと「（注文数）」が
      「（注文」「数）」に割れて3行になるため。あわせて左右パディングを詰め、
      26mm 幅のまま2行に収める（字は小さくしない）。 */
-  .sum-table th.n { white-space:nowrap; padding-left:1.5mm; padding-right:1.5mm; }
-  /* 幅は中身なり（見出し列＋数値列23mm×列数）。全幅（100%）に伸ばすと数字が見出しから離れて読みにくい。
-     5列（Amazon・楽天市場・ヤフショ・合計・個口数）でも A4縦の本文幅180mmに収まる（試験で実寸を確認）。 */
+  .sum-table th.n { white-space:nowrap; padding-left:1mm; padding-right:1mm; }
+  /* 幅は中身なり（見出し列＋数値列19mm×列数）。全幅（100%）に伸ばすと数字が見出しから離れて読みにくい。
+     6列（Amazon・楽天市場・ヤフショ・メルカリ・合計・個口数）でも A4縦の本文幅180mmに収まる（試験で実寸を確認）。
+     見出しの左右の余白は 1mm（メルカリの列を足したときに 1.5mm から詰めた） */
   .sum-ship { width:auto; margin:0 0 3mm; }
   /* クリックポストの行の上を二重線にして、小計（ヤマト集荷依頼）までと区切る */
   .sum-table tr.cp-row td { border-top:2.5pt double #333; }
@@ -2114,7 +2249,7 @@ ${totalHtml}${summaryBlock}
         <p class="summary">${detailSummary}</p>
       </div>
     </div>
-${amazonDetailSection}${rakutenDetailSection}${yahooDetailSection}
+${amazonDetailSection}${rakutenDetailSection}${yahooDetailSection}${mercariDetailSection}
   </div>
 </section>
 
@@ -2123,20 +2258,22 @@ ${amazonDetailSection}${rakutenDetailSection}${yahooDetailSection}
 
 // 導線：STEP1 の結果エリアに統合ピッキング帳票の印刷ボタンを1つだけ置く。
 // 置き場所を #s1-results にしているのは、ここがモール切替ペイン（#s1-pane-amazon /
-// #s1-pane-rakuten / #s1-pane-yahoo）の外側にあり、どのタブを選んでいても常に見える唯一の領域だから。
-// Amazon分・楽天市場分・ヤフショ分のピッキングデータがそろうのは変換処理の中だけであるため、
+// #s1-pane-rakuten / #s1-pane-yahoo / #s1-pane-mercari）の外側にあり、どのタブを選んでいても常に見える唯一の領域だから。
+// Amazon分・楽天市場分・ヤフショ分・メルカリ分のピッキングデータがそろうのは変換処理の中だけであるため、
 // 生成もそのタイミングで行う。
 // load＝読込状態（renderCombinedPickingHTML と同じ）。少なくとも1モールが読込済みなら、注文0件でも出す（ラベルは「（0注文）」）。
-// yahoo＝ヤフショのピッキングデータ（楽天と同じ形）。後から足した引数のため末尾に置く
-function renderCombinedPickingButton(amazon, rakuten, load, yahoo) {
+// yahoo・mercari＝ヤフショ・メルカリのピッキングデータ（楽天と同じ形）。後から足した引数のため末尾に置く
+function renderCombinedPickingButton(amazon, rakuten, load, yahoo, mercari) {
   const old = document.getElementById('picking-print-wrap');
   const aLoaded = load ? load.amazon.loaded.length > 0 : !!amazon;
   const rLoaded = load ? load.rakuten === 'complete' : !!rakuten;
   const yLoaded = load ? load.yahoo === 'complete' : !!yahoo;
-  if (!aLoaded && !rLoaded && !yLoaded) { if (old) old.remove(); return; }
+  const mLoaded = load ? load.mercari === 'complete' : !!mercari;
+  if (!aLoaded && !rLoaded && !yLoaded && !mLoaded) { if (old) old.remove(); return; }
   if (!aLoaded) amazon = null;
   if (!rLoaded) rakuten = null;
   if (!yLoaded) yahoo = null;
+  if (!mLoaded) mercari = null;
 
   const wrap = document.createElement('div');
   wrap.id = 'picking-print-wrap';
@@ -2147,17 +2284,18 @@ function renderCombinedPickingButton(amazon, rakuten, load, yahoo) {
   btn.style.marginBottom = '0';
   const orders = (amazon ? (amazon.single || []).length : 0)
                + (rakuten ? (rakuten.orders || []).length : 0)
-               + (yahoo ? (yahoo.orders || []).length : 0);
+               + (yahoo ? (yahoo.orders || []).length : 0)
+               + (mercari ? (mercari.orders || []).length : 0);
   btn.textContent = `📋 ピッキングリスト＋梱包・発送明細を印刷（${orders}注文）`;
   // 行番号・識別子は帳票と画面の一覧で同じ結果を使う
-  const seq = buildMultiGroups(amazon, rakuten, yahoo);
+  const seq = buildMultiGroups(amazon, rakuten, yahoo, mercari);
   btn.addEventListener('click', () => {
     const dateNum = ((document.getElementById('s1-shipDate') || {}).value || '').replace(/-/g, '');
-    printHtmlDocument(renderCombinedPickingHTML(amazon, rakuten, seq, load, yahoo),
+    printHtmlDocument(renderCombinedPickingHTML(amazon, rakuten, seq, load, yahoo, mercari),
                       'ピッキングリスト' + (dateNum ? '_' + dateNum : ''));
   });
   wrap.appendChild(btn);
-  wrap.appendChild(renderPickingOrderList(seq, rakuten, yahoo));
+  wrap.appendChild(renderPickingOrderList(seq, rakuten, yahoo, mercari));
   // 照合の後に対象を絞って作り直すときは、同じ位置で差し替える
   if (old && old.isConnected) old.replaceWith(wrap);
   else s1Results.appendChild(wrap);
@@ -2183,11 +2321,12 @@ async function pickingCopyText(text) {
 // 注文番号は画面からコピーできるようにする。行番号・識別子は帳票と同じ buildMultiGroups の結果。
 // 行番号の列は帳票と同じく全角括弧で括る（例「（001）」）。見出しの範囲表示と［注文番号を全件コピー］は数字だけのまま。
 // 注文番号以外の個人情報（氏名・住所等）は出さない。
-function renderPickingOrderList(seq, rakuten, yahoo) {
+function renderPickingOrderList(seq, rakuten, yahoo, mercari) {
   const stores = loadStores();
   const mallStore = r => r.mall === 'amazon'
     ? `Amazon（${essStoreShort((stores[r.storeIndex] || {}).name)}）`
     : r.mall === 'yahoo' ? `ヤフショ${yahoo && yahoo.storeName ? `（${yahoo.storeName}）` : ''}`
+    : r.mall === 'mercari' ? `メルカリ${mercari && mercari.storeName ? `（${mercari.storeName}）` : ''}`
     : `楽天市場${rakuten && rakuten.storeName ? `（${rakuten.storeName}）` : ''}`;
   const det = document.createElement('details');
   det.id = 'picking-order-list';
@@ -2241,7 +2380,7 @@ document.querySelectorAll('.tab').forEach(tab => {
 // ============================================================
 // モール切替（STEP1/STEP2内のセグメントスイッチ。上部タブとは独立）
 // 表示ペインの切り替えのみを行う。入力済みデータ・変換結果は保持され、
-// 複数のモール（Amazon・楽天市場・ヤフショ）にファイルを入れた状態で変換すれば1ファイルに統合される挙動は不変。
+// 複数のモール（Amazon・楽天市場・ヤフショ・メルカリ）にファイルを入れた状態で変換すれば1ファイルに統合される挙動は不変。
 // ============================================================
 function wireMallSwitch(switchId, panes) {
   const sw = document.getElementById(switchId);
@@ -2255,7 +2394,7 @@ function wireMallSwitch(switchId, panes) {
     }
   }));
 }
-wireMallSwitch('s1-mall-switch', { amazon: 's1-pane-amazon', rakuten: 's1-pane-rakuten', yahoo: 's1-pane-yahoo' });
+wireMallSwitch('s1-mall-switch', { amazon: 's1-pane-amazon', rakuten: 's1-pane-rakuten', yahoo: 's1-pane-yahoo', mercari: 's1-pane-mercari' });
 
 // ============================================================
 // Settings tab
@@ -2434,6 +2573,60 @@ function renderYahooSenderCard() {
   container.appendChild(card);
 }
 
+// メルカリのB2依頼主カード（楽天市場のカードと同じ7項目）。初期値の考え方はヤフショと同じ：
+// 保存済みがあればその値。未保存なら電話/郵便/住所/建物は Amazon 店舗1から、店舗名はメルカリ向けの文言、
+// 請求先顧客コード・運賃管理番号はプリセットしない（空）。
+function renderMercariSenderCard() {
+  const container = document.getElementById('mercari-settings-card');
+  if (!container) return;
+  container.innerHTML = '';
+  const a1 = loadStores()[0] || {};
+  const s = loadMercariSender() || {
+    name: 'まいど萬福堂（メルカリShops）',
+    tel: a1.tel || '', postal: a1.postal || '', address: a1.address || '', building: a1.building || '',
+    customerCode: '', fareCode: ''
+  };
+  const card = document.createElement('div');
+  card.className = 'store-card';
+  card.id = 'mercari-sender-card';
+  card.innerHTML = `
+    <div class="store-card-header">
+      <span class="store-card-title">メルカリ（B2依頼主）</span>
+    </div>
+    <div class="store-card-grid">
+      <div class="field full">
+        <label>店舗名（依頼主名）</label>
+        <input type="text" data-field="name" value="${esc(s.name)}" placeholder="例：まいど萬福堂（メルカリShops）">
+      </div>
+      <div class="field">
+        <label>電話番号（ハイフンなし）</label>
+        <input type="text" data-field="tel" value="${esc(s.tel)}" placeholder="例：0312345678">
+      </div>
+      <div class="field">
+        <label>郵便番号（ハイフンなし）</label>
+        <input type="text" data-field="postal" value="${esc(s.postal)}" placeholder="例：1000001">
+      </div>
+      <div class="field full">
+        <label>住所</label>
+        <input type="text" data-field="address" value="${esc(s.address)}" placeholder="例：東京都千代田区千代田1-1">
+      </div>
+      <div class="field full">
+        <label>会社名・建物名</label>
+        <input type="text" data-field="building" value="${esc(s.building)}" placeholder="例：株式会社○○">
+      </div>
+      <div class="field">
+        <label>請求先顧客コード</label>
+        <input type="text" data-field="customerCode" value="${esc(s.customerCode)}" placeholder="B2クラウドの契約情報を確認して入力">
+      </div>
+      <div class="field">
+        <label>運賃管理番号</label>
+        <input type="text" data-field="fareCode" value="${esc(s.fareCode)}" placeholder="B2クラウドの契約情報を確認して入力">
+      </div>
+    </div>
+  `;
+  container.appendChild(card);
+}
+
 function renderSettingsCards() {
   const container = document.getElementById('settings-cards');
   container.innerHTML = '';
@@ -2441,6 +2634,7 @@ function renderSettingsCards() {
   if (stores.length === 0) { addStoreCard(); } else { stores.forEach(s => addStoreCard(s)); }
   renderRakutenSenderCard();
   renderYahooSenderCard();
+  renderMercariSenderCard();
 }
 
 document.getElementById('add-store-btn').addEventListener('click', () => {
@@ -2506,6 +2700,15 @@ document.getElementById('save-settings-btn').addEventListener('click', () => {
       building: g('building'), customerCode: g('customerCode'), fareCode: g('fareCode'), storeAccount: g('storeAccount'),
     });
   }
+  // メルカリ（B2依頼主・1店舗固定）：楽天・ヤフショと同じく入力途中でも別キーへ保存する（必須の検査は使用時 getMercariSenderStore）
+  const mcc = document.getElementById('mercari-sender-card');
+  if (mcc) {
+    const g = f => ((mcc.querySelector(`[data-field="${f}"]`) || {}).value || '').trim();
+    saveMercariSender({
+      name: g('name'), tel: g('tel'), postal: g('postal'), address: g('address'),
+      building: g('building'), customerCode: g('customerCode'), fareCode: g('fareCode'),
+    });
+  }
 
   renderStep1Sections();
   // 店舗設定の控えを Drive に取る。essPreAuth はクリックの同期部分で呼ぶ（ハンドラは同期のまま）
@@ -2558,7 +2761,8 @@ function cpContentText(gNums, name) {
 }
 
 // クリックポストの対象1件（s1ConvertRun の cpRecs の要素）→ クリックポスト用CSVの1行（A〜H 列）。
-// mall が amazon 以外（楽天・ヤフショ）は src.recipient（楽天の形。ヤフショも parseYahooFiles が同じ形で持つ）から組む。
+// mall が amazon 以外（楽天・ヤフショ・メルカリ）は src.recipient（楽天の形。ヤフショ・メルカリも parseYahooFiles／parseMercariFile が
+// 同じ形で持つ。メルカリの氏名は姓名が1つの欄のため lastName に全体を入れ firstName は空）から組む。
 // 戻り値 { ok:true, cells, warnings } または { ok:false, reason }。warnings は黄の警告（出力はする）。
 function buildClickpostRow(cpRec) {
   const src = cpRec.src || {};
@@ -2784,6 +2988,7 @@ const ESS_KINDS = {
   in_rakuten_dl:    { sub: '01_入力',         label: '01', suffix: () => '楽天_発送完了報告用DL.csv', mime: 'text/csv' },
   in_yahoo_order:   { sub: '01_入力',         label: '01', suffix: () => 'ヤフショ_注文情報.csv', mime: 'text/csv' },
   in_yahoo_item:    { sub: '01_入力',         label: '01', suffix: () => 'ヤフショ_商品情報.csv', mime: 'text/csv' },
+  in_mercari_order: { sub: '01_入力',         label: '01', suffix: () => 'メルカリ_注文データ.csv', mime: 'text/csv' },
   b2csv:            { sub: '02_B2用CSV',      label: '02', suffix: (s, o) => o.nomatch ? 'B2用CSV_照合なし.csv' : 'B2用CSV.csv', mime: 'text/csv' },
   issued:           { sub: '03_発行済データ', label: '03', suffix: () => '発行済データ.csv', mime: 'text/csv' },
   // 06：クリックポスト。cp_csv＝出力したクリックポスト用CSV（40件で分けたときは _{n}）／cp_out＝出力記録（照合キー付き）／
@@ -3074,30 +3279,33 @@ function essSaveFile(kind, store, bytes, origName, opts = {}) {
 // ============================================================
 // 店舗設定の控え（EC出荷記録/00_ツール設定）：純粋関数
 // ============================================================
-// 手元が空：店舗リストが空（配列でない値を含む）かつ楽天依頼主が null かつヤフショ依頼主が null
+// 手元が空：店舗リストが空（配列でない値を含む）かつ楽天依頼主が null かつヤフショ依頼主が null かつメルカリ依頼主が null
 function essSettingsEmpty() {
   const s = loadStores();
-  return (!Array.isArray(s) || s.length === 0) && loadRakutenSender() === null && loadYahooSender() === null;
+  return (!Array.isArray(s) || s.length === 0) && loadRakutenSender() === null && loadYahooSender() === null
+    && loadMercariSender() === null;
 }
 // 比較用の正規化（キーの並びに依らない。savedAt・build は含めない）。
-// ヤフショ依頼主は null のときは含めない（ヤフショ欄が無い既存の控えと同じ値になる＝ヤフショを設定するまで控えを取り直さない）
-function essSettingsCanonical(stores, rakutenSender, yahooSender) {
+// ヤフショ依頼主は null のときは含めない（ヤフショ欄が無い既存の控えと同じ値になる＝ヤフショを設定するまで控えを取り直さない）。
+// メルカリ依頼主も同じ（null のときは含めない＝メルカリを設定するまで控えを取り直さない）
+function essSettingsCanonical(stores, rakutenSender, yahooSender, mercariSender) {
   const sortObj = o => Object.fromEntries(Object.keys(o).sort().map(k => [k, o[k]]));
   const c = { stores: stores.map(sortObj), rakutenSender: rakutenSender ? sortObj(rakutenSender) : null };
   if (yahooSender) c.yahooSender = sortObj(yahooSender);
+  if (mercariSender) c.mercariSender = sortObj(mercariSender);
   return JSON.stringify(c);
 }
-async function essSettingsSha256(stores, rakutenSender, yahooSender) {
-  return essSha256Hex(new TextEncoder().encode(essSettingsCanonical(stores, rakutenSender, yahooSender)));
+async function essSettingsSha256(stores, rakutenSender, yahooSender, mercariSender) {
+  return essSha256Hex(new TextEncoder().encode(essSettingsCanonical(stores, rakutenSender, yahooSender, mercariSender)));
 }
-// 控えのファイル。戻り値 { name, bytes, sha256, savedAt }。ヤフショ依頼主（yahooSender）は無ければ null で書く
-async function essSettingsBuildFile(stores, rakutenSender, yahooSender) {
+// 控えのファイル。戻り値 { name, bytes, sha256, savedAt }。ヤフショ依頼主（yahooSender）・メルカリ依頼主（mercariSender）は無ければ null で書く
+async function essSettingsBuildFile(stores, rakutenSender, yahooSender, mercariSender) {
   const st = essWorkStamp();
   const name = `${st.ymd}_${st.hms}_${ESS_SETTINGS_SUFFIX}`;
   const savedAt = `${st.date}T${st.hms.slice(0, 2)}:${st.hms.slice(2, 4)}:${st.hms.slice(4, 6)}+09:00`;
   const bytes = new TextEncoder().encode(JSON.stringify({ schema: ESS_SETTINGS_SCHEMA, savedAt, build: essBuildLabel(), stores, rakutenSender,
-    yahooSender: yahooSender || null }, null, 2) + '\n');
-  const sha256 = await essSettingsSha256(stores, rakutenSender, yahooSender);
+    yahooSender: yahooSender || null, mercariSender: mercariSender || null }, null, 2) + '\n');
+  const sha256 = await essSettingsSha256(stores, rakutenSender, yahooSender, mercariSender);
   return { name, bytes, sha256, savedAt };
 }
 // 新しい順：createdTime の降順、同じなら name の降順（どちらも文字列比較）。元の配列は変えない
@@ -3138,6 +3346,13 @@ function essSettingsValidate(obj) {
     if (!Object.prototype.hasOwnProperty.call(obj.yahooSender, 'storeAccount')) return ng('yahooSender.storeAccount：無い');
     if (typeof obj.yahooSender.storeAccount !== 'string') return ng('yahooSender.storeAccount：文字列でない');
   }
+  // メルカリ依頼主：メルカリ欄の無い控え（キーが無い・null。ヤフショ欄の有無は問わない）はメルカリ欄が空として通す。
+  // ある控えは楽天と同じ7キーを見る
+  if (obj.mercariSender !== undefined && obj.mercariSender !== null) {
+    if (!isObj(obj.mercariSender)) return ng('mercariSender：形が違う');
+    const r = keysNg(obj.mercariSender, 'mercariSender');
+    if (r) return ng(r);
+  }
   return { ok: true };
 }
 // 合格した控えの一覧の行の文字列
@@ -3147,7 +3362,8 @@ function essSettingsPickLabel(obj) {
     + (n > ESS_SETTINGS_NAMES_MAX ? `、他${n - ESS_SETTINGS_NAMES_MAX}件` : '');
   const rs = obj.rakutenSender ? `あり（${obj.rakutenSender.name}）` : 'なし';
   const ys = obj.yahooSender ? `あり（${obj.yahooSender.name}）` : 'なし';
-  return `${obj.savedAt} ／ Amazon 店舗 ${n}件：${names} ／ 楽天依頼主：${rs} ／ ヤフショ依頼主：${ys}`;
+  const ms = obj.mercariSender ? `あり（${obj.mercariSender.name}）` : 'なし';
+  return `${obj.savedAt} ／ Amazon 店舗 ${n}件：${names} ／ 楽天依頼主：${rs} ／ ヤフショ依頼主：${ys} ／ メルカリ依頼主：${ms}`;
 }
 // ストアが設定の控えの3つの口を持つか（ハーネスが未対応のテスト用ストアでは偽）
 function essSettingsStoreOk() {
@@ -3210,15 +3426,15 @@ function essSettingsBackup() {
       if (essSettingsEmpty()) return;   // 空の控えは作らない（帯も変えない）
       // トークンが無効なら Drive を呼ばない（ready() から requestAccessToken を呼ばせない）
       if (!essIsTestStore() && !essTokenValid()) { essSettingsLine('info', ESS_SETTINGS_NOT_LOGGED_IN); return; }
-      const stores = loadStores(), rs = loadRakutenSender(), ys = loadYahooSender();
+      const stores = loadStores(), rs = loadRakutenSender(), ys = loadYahooSender(), ms = loadMercariSender();
       essSettingsLine('pending', '… 店舗設定の控えを Drive に保存中');
-      const sha = await essSettingsSha256(stores, rs, ys);
+      const sha = await essSettingsSha256(stores, rs, ys, ms);
       const latest = essSettingsSorted(await essStore().settingsList())[0];
       if (latest && latest.sha256 === sha) {
         essSettingsLine('ok', `✓ 店舗設定の控え：Drive の最新と同じ内容（${latest.name}）`);
         return;
       }
-      const f = await essSettingsBuildFile(stores, rs, ys);
+      const f = await essSettingsBuildFile(stores, rs, ys, ms);
       await essStore().settingsSave(f.bytes, { name: f.name, mimeType: ESS_SETTINGS_MIME,
         props: { ess_kind: 'settings', ess_sha256: sha }, md5: essMd5Hex(f.bytes) });
       essSettingsLine('ok', `✓ 店舗設定の控えを Drive に保存：${f.name}`);
@@ -3346,6 +3562,8 @@ function essSettingsRenderPicks(picks) {
       if (pick.obj.rakutenSender !== null) saveRakutenSender(pick.obj.rakutenSender);
       // ヤフショ欄の無い控え（キーが無い・null）はヤフショ欄を空のまま（書かない）
       if (pick.obj.yahooSender) saveYahooSender(pick.obj.yahooSender);
+      // メルカリ欄の無い控え（キーが無い・null）はメルカリ欄を空のまま（書かない）
+      if (pick.obj.mercariSender) saveMercariSender(pick.obj.mercariSender);
       renderSettingsCards();
       renderStep1Sections();
       essSettingsSummaryMsg('', '');
@@ -3427,6 +3645,7 @@ function essRowStore(row) {
   if (RAKUTEN_ORDER_ID_RE.test(row[0])) return '楽天';
   const yre = yahooOrderIdRe();
   if (yre && yre.test(row[0])) return 'ヤフショ';
+  if (MERCARI_ORDER_ID_RE.test(row[0])) return 'メルカリ';
   return essStoreShort(row[24]);
 }
 
@@ -3871,6 +4090,11 @@ let s1CpOutput = null;
 let s1YahooOrderFile = null;
 let s1YahooItemFile = null;
 let s1YahooParsed = null;
+// メルカリ：注文データ1ファイル（{ name, buffer, text, encoding }。text は mercariDecode 済み）。
+// s1MercariParsed は読み込んで判定できたときだけ入る（parseMercariFile の結果）。変換と STEP 2 の一括発送通知はこれを使う
+// （STEP 2 は buffer＝元のバイト列から作る）
+let s1MercariFile = null;
+let s1MercariParsed = null;
 
 // ============================================================
 // 商品サムネイル：SKU→画像URL マッピング
@@ -4035,13 +4259,20 @@ function s1YahooInputState() {
   return (!s1YahooOrderFile && !s1YahooItemFile) ? 'none' : 'partial';
 }
 
-// 変換ボタンの活性判定。Amazon分のみの運用（楽天・ヤフショを使わない日）は従来どおり変換できる。
+// メルカリの入力状態。ファイルは1つのため 'none'（未読込）か 'complete'（読み込んで判定できた）の2値
+function s1MercariInputState() {
+  return s1MercariParsed ? 'complete' : 'none';
+}
+
+// 変換ボタンの活性判定。Amazon分のみの運用（楽天・ヤフショ・メルカリを使わない日）は従来どおり変換できる。
 function updateS1ConvertEnabled() {
   const hasAmazon = Object.values(s1Buffers).some(Boolean);
   const rk = s1RakutenInputState();
   const yk = s1YahooInputState();
+  const mk = s1MercariInputState();
   // 処理中は押せないまま（処理中にファイルを読み込んでも有効に戻さない）
-  s1Convert.disabled = s1Busy || (rk === 'partial') || (yk === 'partial') || !(hasAmazon || rk === 'complete' || yk === 'complete');
+  s1Convert.disabled = s1Busy || (rk === 'partial') || (yk === 'partial')
+    || !(hasAmazon || rk === 'complete' || yk === 'complete' || mk === 'complete');
 }
 
 // 読込済みAmazonレポートの注文件数合計（変換出力と同じ基準：ネコポス以外除外後・orderIdあり）。
@@ -4104,7 +4335,8 @@ function updateS1ConvertLabel() {
 
   const hasRakuten = (rk === 'complete');
   const hasYahoo = (yk === 'complete');
-  if (!hasAmazon && !hasRakuten && !hasYahoo) { s1Convert.textContent = 'B2取込CSVを作る'; return; }
+  const hasMercari = (s1MercariInputState() === 'complete');
+  if (!hasAmazon && !hasRakuten && !hasYahoo && !hasMercari) { s1Convert.textContent = 'B2取込CSVを作る'; return; }
 
   s1Convert.textContent = 'B2取込CSVを作る';
 
@@ -4112,6 +4344,7 @@ function updateS1ConvertLabel() {
   if (!hasAmazon) addNote('⚠ Amazonの未出荷レポートが未読込です。Amazon分は含まれません', 'warn');
   if (!hasRakuten) addNote('⚠ 楽天市場のCSVが未読込です。楽天分は含まれません', 'warn');
   if (!hasYahoo) addNote('⚠ ヤフショの注文データが未読込です。ヤフショ分は含まれません', 'warn');
+  if (!hasMercari) addNote('⚠ メルカリの注文データが未読込です。メルカリ分は含まれません', 'warn');
 }
 
 s1Convert.addEventListener('click', async () => {
@@ -4403,6 +4636,98 @@ async function s1ConvertRun(auth) {
     }
   }
 
+  // ---- メルカリ分：注文データを読み込んで判定できていればB2行を生成（楽天・ヤフショと同じ規則） ----
+  // 出荷対象の判定（支払い・注文の種類・配送方法・追跡情報）と結合の警告は読み込み時にメルカリペインへ表示済み。
+  // ご依頼主は常に依頼主設定のメルカリ欄（請求先には切り替えない。他のモールの設定へはフォールバックしない）。
+  let mercariB2Rows = [];
+  let mercariPicking = null;   // 依頼主未設定でB2生成が落ちてもピッキングは印刷できるよう、try の外に持つ（楽天と同じ）
+  let mercariCp = [];
+  const isCpM = o => mercariResolvedMethod(o) === MERCARI_CLICKPOST;
+  if (s1MercariParsed) {
+    const item = document.createElement('div');
+    try {
+      const mData = buildMercariPickingData(s1MercariParsed.orders, essToday());
+      if (mData.orders.length) {
+        mercariPicking = { total: mData.total, orders: mData.orders, multiCount: mData.multiCount, storeName: MERCARI_STORE_NAME };
+      }
+      // 配送先が複数の注文（product 行ごとにお届け先が違う）は B2・クリックポストから外す（ピッキングには残す。手動対応）
+      const multiDest = mData.orders.filter(o => o.multiDest);
+      mercariCp = mData.orders.filter(o => isCpM(o) && !o.multiDest);
+      const sender = getMercariSenderStore();
+      if (!sender) throw new Error('メルカリの依頼主設定が未入力です（依頼主設定タブで登録してください）'
+        + `／未入力: ${mercariSenderMissingFields().join('・')}`);
+      const isNone = o => mercariResolvedMethod(o) === MERCARI_NONE;
+      const isSkip = o => mercariResolvedMethod(o) === MERCARI_SKIP;
+      const none   = mData.orders.filter(o => isNone(o));
+      const skip   = mData.orders.filter(o => isSkip(o));
+      const usable = mData.orders.filter(o => mercariInvoiceCode(o) !== '' && !isNone(o) && !isSkip(o) && !isCpM(o) && !o.multiDest);
+      const noCode = mData.orders.filter(o => mercariInvoiceCode(o) === '' && !isNone(o) && !isSkip(o) && !isCpM(o) && !o.multiDest);
+      const addrIssues = [];   // 住所欄・建物名欄の上限超過（楽天と同じ。出力は止めず警告のみ）
+      mercariB2Rows = usable.flatMap(o => parcelRows(buildMercariB2Row(o, shipDate, sender, addrIssues), mercariParcelCount(o)));
+      item.className = 'result-item success';
+      item.textContent = `✓ メルカリ：${usable.length}件`
+        + (mercariB2Rows.length !== usable.length ? `（B2 CSV ${mercariB2Rows.length}行）` : '')
+        + `（依頼主: ${sender.name}）`;
+      s1Results.appendChild(item);
+      const firstName = o => (o.lines[0] ? o.lines[0].name : '') + (o.lines.length > 1 ? ` 他${o.lines.length - 1}点` : '');
+      renderRakutenWarningSection(s1Results, 's1-mc-scheduled',
+        `📅 メルカリ：お届け希望日が先（本日+4日以降）のためB2から除外（予定分）: ${mData.scheduled.length}件`,
+        ['注文番号', 'お届け希望日', '商品名'],
+        mData.scheduled.map(o => [o.orderNumber, o.desiredDeliveryRaw || '', firstName(o)]), 'warn');
+      const badDate = usable.filter(o => o.desiredDeliveryRaw && !o.desiredDeliveryDate);
+      renderRakutenWarningSection(s1Results, 's1-mc-baddate',
+        `⚠ メルカリ：お届け希望日（requested_delivery_date）を解釈できないため「お届け予定日」を空欄で出力しました: ${badDate.length}件`,
+        ['注文番号', 'お届け希望日（生値）'],
+        badDate.map(o => [o.orderNumber, o.desiredDeliveryRaw]), 'warn');
+      const badTime = usable.filter(o => o.desiredTimeRaw && mercariB2TimeCode(o.desiredTimeRaw) === null);
+      renderRakutenWarningSection(s1Results, 's1-mc-badtime',
+        `⚠ メルカリ：お届け時間帯（requested_delivery_time）を解釈できないため「配達時間帯」を空欄（指定なし）で出力しました: ${badTime.length}件`,
+        ['注文番号', 'お届け時間帯（生値）'],
+        badTime.map(o => [o.orderNumber, o.desiredTimeRaw]), 'warn');
+      renderRakutenWarningSection(s1Results, 's1-mc-multidest',
+        `⚠ メルカリ：配送先が複数の注文（手動対応）。B2・クリックポストから除外しました（ピッキング・梱包・発送明細には載せます）: ${multiDest.length}件`,
+        ['注文番号', '商品名'], multiDest.map(o => [o.orderNumber, firstName(o)]), 'error');
+      renderRakutenWarningSection(s1Results, 's1-mc-none',
+        `📦 メルカリ：「送り状なし（同梱・手渡し）」を選んだためB2から除外: ${none.length}件`,
+        ['注文番号', '商品名'], none.map(o => [o.orderNumber, firstName(o)]), 'warn');
+      renderRakutenWarningSection(s1Results, 's1-mc-skip',
+        `📦 メルカリ：「本日出荷しない（MCF等）」を選んだためB2・ピッキングから除外（梱包・発送明細には載せます）: ${skip.length}件`,
+        ['注文番号', '商品名'], skip.map(o => [o.orderNumber, firstName(o)]), 'warn');
+      renderRakutenWarningSection(s1Results, 's1-mc-cp',
+        `📮 メルカリ：クリックポストを選んだためB2から除外（クリックポスト用CSVに出力）: ${mercariCp.length}件`,
+        ['注文番号', '商品名'], mercariCp.map(o => [o.orderNumber, firstName(o)]), 'warn');
+      renderRakutenWarningSection(s1Results, 's1-mc-unknown',
+        `⚠ メルカリ：配送方法が不明のためB2から除外（手動対応してください）: ${noCode.length}件`,
+        ['注文番号', '配送方法'], noCode.map(o => [o.orderNumber, mercariResolvedMethod(o) || '（空）']), 'error');
+      const hasIssue = k => addrIssues.filter(x => x.issues.includes(k));
+      const issueRow = x => [x.orderNumber, x.party || 'お届け先', x.fullAddress, fullwidthCharLength(x.fullAddress),
+                             x.building, fullwidthCharLength(x.building)];
+      const issueCols = ['注文番号', '対象', '住所欄', '住所（全角換算）', '建物名欄', '建物名（全角換算）'];
+      renderRakutenWarningSection(s1Results, 's1-mc-addr-bldgused',
+        `⚠ 要確認（メルカリ）：住所文字数超過・建物名欄使用中のため自動振り分け不可（全角${B2_ADDRESS_LIMIT}文字上限）: ${hasIssue('addrOverflowBuildingUsed').length}件`,
+        issueCols, hasIssue('addrOverflowBuildingUsed').map(issueRow), 'error');
+      renderRakutenWarningSection(s1Results, 's1-mc-addr-unresolved',
+        `⚠ 要確認（メルカリ）：住所文字数超過（自動対応不可）: ${hasIssue('addrOverflowUnresolved').length}件`,
+        issueCols, hasIssue('addrOverflowUnresolved').map(issueRow), 'error');
+      renderRakutenWarningSection(s1Results, 's1-mc-bldg-over',
+        `⚠ 要確認（メルカリ）：建物名欄が文字数上限超過（全角${B2_BUILDING_LIMIT}文字上限・そのまま出力しています）: ${hasIssue('buildingOverflow').length}件`,
+        issueCols, hasIssue('buildingOverflow').map(issueRow), 'warn');
+      renderRakutenWarningSection(s1Results, 's1-mc-addr-split',
+        `📍 メルカリ：住所が全角${B2_ADDRESS_LIMIT}文字を超えたため建物名欄へ自動振り分けしました（番地の途中で割れる場合があります。印字内容を確認してください）: ${hasIssue('addrSplit').length}件`,
+        issueCols, hasIssue('addrSplit').map(issueRow), 'warn');
+      // お届け先と請求先が違う注文：ご依頼主は店舗のまま（請求先には切り替えない）。確認用の一覧
+      const billingDiff = usable.filter(o => o.billingDiff);
+      renderRakutenWarningSection(s1Results, 's1-mc-billing-diff',
+        `メルカリ：お届け先と請求先が違う注文（ご依頼主は店舗名で出しています）: ${billingDiff.length}件`,
+        ['注文番号', 'お届け先名', '請求先名'],
+        billingDiff.map(o => [o.orderNumber, (o.recipient || {}).lastName || '', (o.billing || {}).name || '']), 'warn');
+    } catch(e) {
+      item.className = 'result-item error';
+      item.textContent = `⚠ メルカリ：${e.message}`;
+      s1Results.appendChild(item);
+    }
+  }
+
   // ピッキング帳票の読込状態（読み方 (d)）：Amazon は店舗ごとにファイルがあれば読込済み（変換0件・エラーでも）、
   // 楽天・ヤフショは 'complete' なら読込済み。0件・未読込のモールも帳票に出す（Kaz 確定 2026-10-29）
   const pickLoad = {
@@ -4410,13 +4735,15 @@ async function s1ConvertRun(auth) {
               missing: stores.filter(st => !s1Buffers[st.name]).map(st => st.name) },
     rakuten: s1RakutenInputState(),
     yahoo: s1YahooInputState(),
+    mercari: s1MercariInputState(),
   };
 
   // ピッキング帳票はB2 CSVが1本も出ない日でも必要なため、楽天分・ヤフショ分のピッキングが
   // 作れている限りここでは止めない（依頼主未設定でB2生成が落ちた場合など）。
   // 読込済みのモールが0件だけの日も、印刷ボタン（0注文）は出してから返す
-  if (!allRecords.length && !rakutenB2Rows.length && !rakutenPicking && !yahooB2Rows.length && !yahooPicking) {
-    renderCombinedPickingButton(null, null, pickLoad, null);
+  if (!allRecords.length && !rakutenB2Rows.length && !rakutenPicking && !yahooB2Rows.length && !yahooPicking
+      && !mercariB2Rows.length && !mercariPicking) {
+    renderCombinedPickingButton(null, null, pickLoad, null, null);
     return;
   }
 
@@ -4446,12 +4773,12 @@ async function s1ConvertRun(auth) {
     renderImageRegisterSection(pickingData);
   }
 
-  // ピッキング帳票の印刷ボタン（Amazon＋楽天市場＋ヤフショで1つ）。帳票には常に3モールを出す（0件・未読込も）。
+  // ピッキング帳票の印刷ボタン（Amazon＋楽天市場＋ヤフショ＋メルカリで1つ）。帳票には常に4モールを出す（0件・未読込も）。
   // B2 CSVの保存可否とは独立に常に出す。
-  renderCombinedPickingButton(amazonPicking, rakutenPicking, pickLoad, yahooPicking);
+  renderCombinedPickingButton(amazonPicking, rakutenPicking, pickLoad, yahooPicking, mercariPicking);
 
-  // クリックポストの対象（Amazon → 楽天 → ヤフショの順。Amazon は統一ソート順、楽天・ヤフショは orders の順）
-  // ヤフショの注文は楽天と同じ形（recipient）を持つため、buildClickpostRow は楽天と同じ道を通る
+  // クリックポストの対象（Amazon → 楽天 → ヤフショ → メルカリの順。Amazon は統一ソート順、楽天・ヤフショ・メルカリは orders の順）
+  // ヤフショ・メルカリの注文は楽天と同じ形（recipient）を持つため、buildClickpostRow は楽天と同じ道を通る
   const cpRecs = [
     // parcels＝個口数（クリックポスト用CSVに同じ行を出す本数）。照合（essCollate）は注文単位のまま
     ...sortedAmazon.filter(r => r.cp).map(r => ({ orderId: r.orderId, mall: 'amazon', storeIndex: r.storeIndex,
@@ -4461,27 +4788,29 @@ async function s1ConvertRun(auth) {
       parcels: rakutenParcelCount(o), gNums: o.lines.map(l => l.num || '') })),
     ...yahooCp.map(o => ({ orderId: o.orderNumber, mall: 'yahoo', storeIndex: null, storeName: 'ヤフショ', src: o,
       parcels: yahooParcelCount(o), gNums: o.lines.map(l => l.num || '') })),
+    ...mercariCp.map(o => ({ orderId: o.orderNumber, mall: 'mercari', storeIndex: null, storeName: 'メルカリ', src: o,
+      parcels: mercariParcelCount(o), gNums: o.lines.map(l => l.num || '') })),
   ];
 
   // B2行が1本も無い場合はヘッダだけのCSVを保存しない（全件がマケプレ配送のときに起きる）。
   // ピッキングリスト・梱包発送明細の印刷ボタンは上で生成済みなので、そのまま使える。
   // クリックポストがあれば、B2用CSVは出さずにクリックポスト用CSVだけを出す（essB2Output の中で分岐する）。
-  if (!amazonRows.length && !rakutenB2Rows.length && !yahooB2Rows.length && !cpRecs.length) {
+  if (!amazonRows.length && !rakutenB2Rows.length && !yahooB2Rows.length && !mercariB2Rows.length && !cpRecs.length) {
     const el = document.createElement('div');
     el.className = 'result-item error'; el.style.marginTop = '6px';
-    el.textContent = '⚠ B2 CSVに出力する注文がありません（別発行・送り状なし・本日出荷しない・配送方法不明の注文だけ、または楽天市場・ヤフショの依頼主が未設定など。上の表示を確認してください）。'
+    el.textContent = '⚠ B2 CSVに出力する注文がありません（別発行・送り状なし・本日出荷しない・配送方法不明の注文だけ、または楽天市場・ヤフショ・メルカリの依頼主が未設定など。上の表示を確認してください）。'
       + 'ピッキングリスト・梱包発送明細は印刷できます';
     s1Results.appendChild(el);
     return;
   }
 
-  // 出力順：Amazon分 → 楽天市場分 → ヤフショ分（Amazon分・楽天分の行順・行内容は従来と完全一致のまま末尾に追加）
+  // 出力順：Amazon分 → 楽天市場分 → ヤフショ分 → メルカリ分（それより前の行順・行内容は従来と完全一致のまま末尾に追加）
   // ダウンロードの前に、直近7日の Drive の記録（02・03）と照合する（A）。
   // 照合で除外した注文は、ピッキングリスト＋梱包・発送明細の対象からも外す（照合なしで出力のときは全件のまま）。
-  // ヤフショのピッキングデータは楽天と同じ形のため、照合の除外は essPickingRakutenExcluding で行う
-  await essB2Output([...amazonRows, ...rakutenB2Rows, ...yahooB2Rows], dateStr, exclude => renderCombinedPickingButton(
+  // ヤフショ・メルカリのピッキングデータは楽天と同じ形のため、照合の除外は essPickingRakutenExcluding で行う
+  await essB2Output([...amazonRows, ...rakutenB2Rows, ...yahooB2Rows, ...mercariB2Rows], dateStr, exclude => renderCombinedPickingButton(
     essPickingAmazonExcluding(amazonPickSrc, exclude), essPickingRakutenExcluding(rakutenPicking, exclude), pickLoad,
-    essPickingRakutenExcluding(yahooPicking, exclude)), cpRecs);
+    essPickingRakutenExcluding(yahooPicking, exclude), essPickingRakutenExcluding(mercariPicking, exclude)), cpRecs);
 }
 
 // ============================================================
@@ -4735,7 +5064,8 @@ function s2DuplicateTrackings() {
         const sender = gc(row, 'ご依頼主名');
         const yre = yahooOrderIdRe();
         const store = AMAZON_ORDER_ID_RE.test(orderId) ? essStoreShort(sender)
-          : RAKUTEN_ORDER_ID_RE.test(orderId) ? '楽天市場' : (yre && yre.test(orderId)) ? 'ヤフショ' : sender;
+          : RAKUTEN_ORDER_ID_RE.test(orderId) ? '楽天市場' : (yre && yre.test(orderId)) ? 'ヤフショ'
+          : MERCARI_ORDER_ID_RE.test(orderId) ? 'メルカリ' : sender;
         byOrder.set(orderId, { store, trackings: new Set() });
       }
       byOrder.get(orderId).trackings.add(tracking);
@@ -4877,14 +5207,16 @@ async function s2ConvertRun(auth) {
   const outputFiles = [];   // { baseFilename, ext, mime, data }（Amazon は rows を持ち、末尾でまとめてエンコードする）
   const allRakuten  = [];   // 楽天市場の注文番号形式だった行の全ファイル分累積
   const allYahoo    = [];   // ヤフショの注文番号形式だった行の全ファイル分累積
-  const allExcluded = [];   // Amazon・楽天市場・ヤフショのいずれの形式でもない行の全ファイル分累積
+  const allMercari  = [];   // メルカリの注文番号形式だった行の全ファイル分累積
+  const allExcluded = [];   // Amazon・楽天市場・ヤフショ・メルカリのいずれの形式でもない行の全ファイル分累積
 
   for (const { name, buffer } of s2Files) {
     try {
       const text = decodeBuffer(buffer);
-      const { results: storeResults, rakutenRows, yahooRows, excludedOther } = convertToShipmentNotify(text);
+      const { results: storeResults, rakutenRows, yahooRows, mercariRows, excludedOther } = convertToShipmentNotify(text);
       allRakuten.push(...rakutenRows);
       allYahoo.push(...yahooRows);
+      allMercari.push(...mercariRows);
       allExcluded.push(...excludedOther);
       for (const { storeKey, dataRows, shipDateStr, prefix } of storeResults) {
         // クリックポストの行を末尾に足すため、エンコードは後でまとめて行う（足さなければ従来と同じバイト列）
@@ -4976,6 +5308,14 @@ async function s2ConvertRun(auth) {
                       shipDateRaw: `${cy}/${parseInt(cm, 10)}/${parseInt(cd, 10)}`, carrier: YAHOO_CARRIER_JAPANPOST,
                       ...(nFilled < rs.length ? { partial: { parcels: rs.length, filled: nFilled } } : {}) });
     }
+    // メルカリ：楽天・ヤフショと同じ（追跡情報は日本郵便の書き方。一部の行だけ入力した注文は partial を付けて手動対応の警告に回す）
+    for (const r of targets.filter(x => x.mall === 'mercari')) {
+      const rs = cpOrderRows(r);
+      const nFilled = rs.filter(x => s2CpDigits(x.tracking).length === 12).length;
+      allMercari.push({ orderNumber: r.orderId, trackingRaw: s2CpDigits(r.tracking),
+                        shipDateRaw: `${cy}/${parseInt(cm, 10)}/${parseInt(cd, 10)}`, carrier: MERCARI_CARRIER_JAPANPOST,
+                        ...(nFilled < rs.length ? { partial: { parcels: rs.length, filled: nFilled } } : {}) });
+    }
   }
   for (const f of outputFiles) {
     if (f.rows) f.data = toSjisUint8(f.rows.map(r => r.join('\t')).join('\r\n') + '\r\n');
@@ -5036,6 +5376,40 @@ async function s2ConvertRun(auth) {
     }
   }
 
+  // ---- メルカリ分：一括発送通知用CSV（STEP 1 で読み込んだ注文データを、今回伝票が出た注文だけ残して追跡情報を入れたもの） ----
+  // STEP 1 の注文データ（元のバイト列）が要る。読み込んでいなければメルカリ分だけ作らず、他のモールの出力は続ける（楽天の送付先IDと同じ）
+  if (allMercari.length) {
+    if (!s1MercariFile || !s1MercariParsed) {
+      const need = document.createElement('div');
+      need.id = 's2-mercari-result';
+      need.className = 'result-item error';
+      need.textContent = `⚠ メルカリの注文が${new Set(allMercari.map(r => r.orderNumber)).size}件ありますが、一括発送通知用のファイルを作れません。`
+        + 'STEP 1 でメルカリの注文データを読み込んでください（他のモールの出力は続行します）';
+      s2Results.appendChild(need);
+    } else {
+      const rep = buildMercariBulkShip(allMercari, s1MercariFile, s1MercariParsed, essToday());
+      const item = document.createElement('div');
+      item.id = 's2-mercari-result';
+      item.className = rep.orderCount ? 'result-item success' : 'result-item error';
+      item.textContent = rep.orderCount
+        ? `✓ メルカリ：${rep.orderCount}件（一括発送通知 ${rep.rowCount}行`
+          + (rep.multiParcelCount ? `・うち複数個口 ${rep.multiParcelCount}件` : '') + '）'
+        : '⚠ メルカリ：出力対象が0件のため、ファイルは生成していません';
+      s2Results.appendChild(item);
+      if (rep.orderCount) {
+        const where = essResultItem('', 'メルカリ：ショップ管理画面の［注文］→［CSV一括機能］→［一括発送通知］で、'
+          + '一括発送通知用のファイル（mercari_bulk_ship_…）を上げてください');
+        where.id = 's2-mercari-where';
+        where.style.cssText = 'display:block;margin-top:6px;background:#fffbeb;border:1px solid #fcd34d;color:#92400e;font-weight:700;';
+        s2Results.appendChild(where);
+      }
+      renderMercariShipWarnings(s2Results, rep);
+      if (rep.orderCount) {
+        outputFiles.push({ baseFilename: `mercari_bulk_ship_${nowStamp().ymd}`, ext: 'csv', mime: 'text/csv', data: rep.bytes });
+      }
+    }
+  }
+
   // 除外一覧（0件なら何も描画しない）。出力0件の早期returnより前に必ず表示する
   renderNonAmazonExcludedSection(allExcluded);
 
@@ -5085,7 +5459,7 @@ function auxBar(container) {
 }
 
 // ============================================================
-// 発送方法の一覧（Amazon・楽天・ヤフショで共通の型。Kaz 確定 2026-10-30。ヤフショは 2026-11-10 に同じ型で追加）。
+// 発送方法の一覧（Amazon・楽天・ヤフショ・メルカリで共通の型。Kaz 確定 2026-10-30。ヤフショは 2026-11-10、メルカリは 2026-11-11 に同じ型で追加）。
 // 1注文＝1つのまとまり（<tbody class="sl-order">）で3段：
 //   1段目 .sl-head  … モール・店舗／注文番号（折り返さない）／札（複数個口の候補・楽天の定期 等）
 //   2段目 .sl-lines … 全明細を1行ずつ（画像・G番号・×数量・商品名・SKU）。楽天の警告（遅延 等）は先頭
@@ -5361,7 +5735,7 @@ function renderNonAmazonExcludedSection(excluded) {
 
   const head = document.createElement('div');
   head.className = 'result-item error';
-  head.textContent = `⚠ Amazon・楽天市場・ヤフショのいずれの注文番号形式でもないため除外: ${excluded.length}件`;
+  head.textContent = `⚠ Amazon・楽天市場・ヤフショ・メルカリのいずれの注文番号形式でもないため除外: ${excluded.length}件`;
 
   const toggle = document.createElement('button');
   toggle.type = 'button';
@@ -5795,7 +6169,7 @@ function splitRakutenShipped(groups, shippedMap) {
 //   scheduled … お届け日が本日+4日以降の予定分（画面表示用。ピッキング・B2 CSV対象には含めない）
 // total クラスタ（注文数降順）の R-001… 採番はピッキング対象注文のみが母集団。
 // 各注文明細行にも同じ R番号を付与する（Amazon側 buildSkuNumberMap とは完全独立）。
-// numPrefix … G番号の接頭辞（既定 'R-'）。ヤフショは同じ規則を 'Y-' で使う（buildYahooPickingData）。
+// numPrefix … G番号の接頭辞（既定 'R-'）。ヤフショは同じ規則を 'Y-'（buildYahooPickingData）、メルカリは 'M-'（buildMercariPickingData）で使う。
 function buildRakutenPickingData(groups, today, numPrefix = 'R-') {
   const pickGroups = [], scheduled = [];
   for (const g of groups) {
@@ -6026,7 +6400,7 @@ function rakutenInvoiceCode(order) {
 // 楽天市場用 記事欄：（R-001×1）／（R-001×1／R-002×2）形式。
 // Amazon側 buildKijiForRecord とは独立。KIJI_MAX_BYTES(44byte=cp932想定)超過時は
 // 収まる商品数まで表示し「／他N種」を付与する段階フォールバックを踏襲。
-// numFallback … G番号が無い明細に出す仮の番号（既定 'R-000'。ヤフショは 'Y-000'）
+// numFallback … G番号が無い明細に出す仮の番号（既定 'R-000'。ヤフショは 'Y-000'、メルカリは 'M-000'）
 function buildRakutenKiji(order, numFallback = 'R-000') {
   const parts = order.lines.map(l => `${l.num || numFallback}×${l.quantity}`);
   const full = `（${parts.join('／')}）`;
@@ -6585,10 +6959,10 @@ function rRefreshView() {
   else { rakutenShipChoice.clear(); rakutenParcelChoice.clear(); }   // 読み込めなかった＝残る注文が無いので選択も残さない
 }
 
-// 楽天ペイン・ヤフショペインの「出力後に配送方法・個口数を変更しました」の注意。s1ShipChoiceStale が真のときだけ出す
+// 楽天ペイン・ヤフショペイン・メルカリペインの「出力後に配送方法・個口数を変更しました」の注意。s1ShipChoiceStale が真のときだけ出す
 // （変換ボタンのハンドラが偽に戻したら消える）。
 function rRenderShipRedo() {
-  for (const id of ['r-ship-redo', 'y-ship-redo']) {
+  for (const id of ['r-ship-redo', 'y-ship-redo', 'm-ship-redo']) {
     const el = document.getElementById(id);
     if (el) el.style.display = s1ShipChoiceStale ? 'block' : 'none';
   }
@@ -7536,6 +7910,717 @@ function renderYahooReportWarnings(container, rep) {
     ['注文番号'], rep.notShipped.map(x => [x.orderNumber]), 'warn');
 }
 // ==== YAHOO (ヤフショ) — END ====
+
+// ============================================================
+// ==== MERCARI (メルカリ＝メルカリShops) — BEGIN ====
+// ショップ管理画面［注文］→［CSV一括機能］→［注文データのダウンロード］（フォーマット「通常」・新旧フォーマット
+// 「まとめ買い対応版（新フォーマット）」・配送ステータス「発送前」）の注文データCSV（1ファイル。Mac で落とすと UTF-8・BOM なし・LF、
+// Windows では Shift_JIS。1行目は英字の列名）→ ピッキング・B2・クリックポスト、
+// B2発行済データ（とクリックポスト）→ 一括発送通知用CSV（注文データを、今回伝票が出た注文だけ残して追跡情報を入れたもの）。
+// 1注文＝type=order の行1行＋type=product の行1行以上（同じ order_id）。セルの中に改行がありうる（引用符で囲まれる）。
+// 原則：楽天・ヤフショと同じ規則・同じ見た目（迷ったらヤフショと同じ）。配送方法の値も楽天と同じ文字列を使う。
+// 列は列名で参照する（列番号を使わない）。必須列が無いファイルは黙って0件にせずエラーで止める。
+// 発送方法の初期値は全件ネコポス（Kaz 決定 2026-11-11。メルカリのデータに配送方法の区別が無いため）。
+// メルカリ便（らくらく・ゆうゆう等）は使わない（送り状はメルカリ側。B2 に出すと二重になる）＝出荷対象から除外する。
+// ============================================================
+const MERCARI_NEKOPOS   = RAKUTEN_NEKOPOS;     // 'ネコポス'
+const MERCARI_COMPACT   = RAKUTEN_COMPACT;     // '宅急便コンパクト'
+const MERCARI_TAKKYUBIN = RAKUTEN_TAKKYUBIN;   // '宅急便'（B2で発行する。送り状種類 0）
+const MERCARI_NONE      = RAKUTEN_NONE;        // '発行しない'（表示名「送り状なし（同梱・手渡し）」）
+const MERCARI_SKIP      = RAKUTEN_SKIP;        // '本日出荷しない'
+const MERCARI_CLICKPOST = RAKUTEN_CLICKPOST;   // 'クリックポスト'
+const MERCARI_METHOD_OPTIONS = RAKUTEN_METHOD_OPTIONS;   // 一覧の6択（楽天と同じ並び・同じ表示名）
+const MERCARI_UNKNOWN_OPTION = RAKUTEN_UNKNOWN_OPTION;   // 判定値が不明の注文にだけ先頭に出す（メルカリは初期値が常にネコポスのため通常は出ない）
+const MERCARI_INITIAL_METHOD = MERCARI_NEKOPOS;          // 発送方法の初期値（全件）
+// 出荷対象のホワイトリスト（値は1か所にまとめる）。知らない値は除外側に倒し、警告に値をそのまま出す。
+// ※ 2026-11-10 に落とした発送完了65注文で確認した値。支払い待ち・予約・キャンセルの出方は本物の注文で未確認
+const MERCARI_ORDER_TYPE_NORMAL = '通常';                 // order_type（order 行）
+const MERCARI_SHIP_METHOD_SELLER = '未定(出品者が手配)';   // shipping_method（product 行）。これ以外（メルカリ便等）は除外
+const MERCARI_TYPE_ORDER = 'order';
+const MERCARI_TYPE_PRODUCT = 'product';
+// 判定に使う列（これがあればメルカリの注文データとみなす）と必須列（無ければエラーで止める）
+const MERCARI_DETECT_COLS = ['type', 'order_id', 'shipping_id', 'shipping_method'];
+const MERCARI_REQUIRED = ['type', 'order_id', 'order_type', 'payment_date', 'shipping_id', 'product_name', 'variant_id', 'quantity',
+  'shipping_method', 'shipping_tracking_info', 'requested_delivery_date', 'requested_delivery_time', 'shipping_postal_code',
+  'shipping_state', 'shipping_city', 'shipping_address_1', 'shipping_address_2', 'shipping_name', 'shipping_phone_number',
+  'billing_postal_code', 'billing_state', 'billing_city', 'billing_address_1', 'billing_address_2', 'billing_name'];
+// 一括発送通知：shipping_tracking_info に入れる追跡情報の書き方（購入者に見える。2026-11-11 実測で、その荷物の配送状況が開く URL）。
+// 複数個口は ' ／ '（全角スラッシュの前後に半角空白）でつなぐ（改行は使わない）
+const MERCARI_CARRIER_YAMATO = 'yamato';
+const MERCARI_CARRIER_JAPANPOST = 'japanpost';
+const MERCARI_TRACKING_TEXT = {
+  [MERCARI_CARRIER_YAMATO]: n => `ヤマト運輸 伝票番号：${n} https://jizen.kuronekoyamato.co.jp/jizen/servlet/crjz.b.NQ0010?id=${n}`,
+  [MERCARI_CARRIER_JAPANPOST]: n => `日本郵便 追跡番号：${n} https://trackings.post.japanpost.jp/services/srv/search/direct?reqCodeNo1=${n}&searchKind=S002&locale=ja`,
+};
+const MERCARI_TRACKING_JOIN = ' ／ ';
+const MERCARI_COL_TRACKING = 'shipping_tracking_info';
+
+// 注文データのバイト列 → { text, encoding:'utf8'|'cp932', bom }。UTF-8 として厳密に読めれば UTF-8（BOM は外す）、
+// 読めなければ cp932（Shift_JIS）。改行は '\n' にそろえる（読むためだけ。STEP 2 の出力は元のバイト列から作る）
+function mercariDecode(buffer) {
+  const u8 = new Uint8Array(buffer);
+  const bom = u8.length >= 3 && u8[0] === 0xEF && u8[1] === 0xBB && u8[2] === 0xBF;
+  let text, encoding;
+  try {
+    text = new TextDecoder('utf-8', { fatal: true }).decode(u8);   // BOM は TextDecoder が外す
+    encoding = 'utf8';
+  } catch (_) {
+    text = Encoding.codeToString(Encoding.convert(u8, { to: 'UNICODE', from: 'SJIS', type: 'array' }));
+    encoding = 'cp932';
+  }
+  return { text: text.replace(/^﻿/, '').replace(/\r\n/g, '\n').replace(/\r/g, '\n'), encoding, bom };
+}
+
+// CSV（mercariDecode 済み）→ { headers, idx:{列名→番号}, rows }。引用符の中の改行を考えて割る（splitCsvRecords）
+function mercariCsvTable(text) {
+  const lines = splitCsvRecords(text).filter(l => l.trim());
+  const headers = lines.length ? parseCsvLine(lines[0].replace(/^﻿/, '')).map(h => h.trim()) : [];
+  const idx = {};
+  headers.forEach((h, i) => { if (!Object.prototype.hasOwnProperty.call(idx, h)) idx[h] = i; });
+  return { headers, idx, rows: lines.slice(1).map(parseCsvLine) };
+}
+const mercariHas = (t, name) => Object.prototype.hasOwnProperty.call(t.idx, name);
+const mercariGc = (t, row, name) => { const i = t.idx[name]; return i != null ? String(row[i] == null ? '' : row[i]).trim() : ''; };
+
+// 1ファイルを読み、メルカリの注文データか（判定の列）と必須列を確かめる。戻り値 table。合わなければ例外
+function mercariReadFile(text) {
+  const t = mercariCsvTable(text);
+  if (!MERCARI_DETECT_COLS.every(c => mercariHas(t, c))) {
+    throw new Error('メルカリShops の注文データではありません。\n'
+      + 'ショップ管理画面の［注文］→［CSV一括機能］→［注文データのダウンロード］で、フォーマット「通常」・'
+      + '新旧フォーマット「まとめ買い対応版（新フォーマット）」・配送ステータス「発送前」を選び、作成履歴から落とし直してください');
+  }
+  const missing = MERCARI_REQUIRED.filter(c => !mercariHas(t, c));
+  if (missing.length) {
+    throw new Error(`メルカリの注文データに必要な列がありません（${missing.join('・')}）。\n`
+      + '新旧フォーマット「まとめ買い対応版（新フォーマット）」を選んで落とし直してください');
+  }
+  return t;
+}
+
+// requested_delivery_date → 'YYYY-MM-DD'。空なら ''、解釈できなければ null。
+// 書式は本物の注文で未確認（2026-11-10 時点の実物はすべて空）。yyyy/mm/dd・yyyy-mm-dd・yyyymmdd・yyyy年m月d日 を受ける（後ろに時刻が付いても可）
+function mercariNormalizeDate(raw) {
+  const s = String(raw == null ? '' : raw).normalize('NFKC').trim();
+  if (s === '') return '';
+  const m = /^(\d{4})[\/-](\d{1,2})[\/-](\d{1,2})(?:\s.*)?$/.exec(s) || /^(\d{4})(\d{2})(\d{2})$/.exec(s)
+    || /^(\d{4})年(\d{1,2})月(\d{1,2})日(?:\s.*)?$/.exec(s);
+  if (!m) return null;
+  const mi = parseInt(m[2], 10), di = parseInt(m[3], 10);
+  if (mi < 1 || mi > 12 || di < 1 || di > 31) return null;
+  return `${m[1]}-${String(mi).padStart(2, '0')}-${String(di).padStart(2, '0')}`;
+}
+// requested_delivery_time → B2 の配達時間帯コード。考え方はヤフショ（yahooB2TimeCode）と同じ（値の形は本物の注文で未確認）：
+// 時刻の範囲（14-16・14時～16時・14:00-16:00）と「午前中」を受ける。指定なしは ''、解釈できなければ null
+function mercariB2TimeCode(raw) { return yahooB2TimeCode(raw); }
+function mercariTimeRequested(raw) { return mercariB2TimeCode(raw) !== ''; }
+
+// 注文データ（mercariDecode 済みテキスト）→ 出荷対象の注文と除外の一覧。
+// 戻り値 { orders, notPaid, notNormal, otherMethod, shipped, orderOnly, productOnly, unknownType, needsCheck, multiDest, billingDiff,
+//          fileOrderIds, excludedReason }
+//   orders       : 出荷対象。楽天の groups と同じ形
+//                  [{ orderNumber（＝order_id）, orderType, initialMethod, shipMethodRaw, desiredDeliveryRaw, desiredDeliveryDate,
+//                     desiredTimeRaw, recipient, billing, multiDest, billingDiff, lines:[{name, quantity, sku, itemMgmtNo, skuInfo}] }]
+//   notPaid      : payment_date が空（支払い待ち） ／ notNormal : order_type が「通常」以外 ／
+//   otherMethod  : product 行の shipping_method が「未定(出品者が手配)」以外（1行でも当たれば注文ごと） ／
+//   shipped      : product 行の shipping_tracking_info が空でない（出荷済み）
+//   orderOnly／productOnly : order 行だけ・product 行だけの注文（除外） ／ unknownType : type が order・product 以外の行（無視）
+//   needsCheck   : ネコポスでお届け希望日・時間帯の指定がある注文（要確認。対象には含める）
+//   multiDest    : product 行ごとにお届け先が違う注文（対象に含める。B2・クリックポストからは外す＝手動対応）
+//   billingDiff  : お届け先と請求先の氏名・郵便番号・住所のどれかが違う注文（対象に含める。ご依頼主は店舗のまま）
+//   fileOrderIds : order 行と product 行の両方がある注文番号（STEP 2 で一括発送通知に残せる注文）
+//   excludedReason : 注文番号 → 出荷対象から外した理由（STEP 2 で、外した注文に伝票が出ていたときの警告に使う）
+// 商品キー：sku＝variant_id（画像の引きキーを兼ねる）、itemMgmtNo は空（クラスタキーは variant_id だけになる）
+function parseMercariFile(text) {
+  const t = mercariReadFile(text);
+  const orderRow = new Map(), productRows = new Map(), seq = [], seen = new Set();
+  const unknownType = [];
+  t.rows.forEach((row, i) => {
+    const g = n => mercariGc(t, row, n);
+    const type = g('type'), id = g('order_id');
+    if (type !== MERCARI_TYPE_ORDER && type !== MERCARI_TYPE_PRODUCT) {
+      unknownType.push({ recNo: i + 2, type: type || '（空）', orderNumber: id });
+      return;
+    }
+    if (!id) { unknownType.push({ recNo: i + 2, type, orderNumber: '（order_id が空）' }); return; }
+    if (!seen.has(id)) { seen.add(id); seq.push(id); }
+    if (type === MERCARI_TYPE_ORDER) { if (!orderRow.has(id)) orderRow.set(id, g); }
+    else {
+      if (!productRows.has(id)) productRows.set(id, []);
+      productRows.get(id).push(g);
+    }
+  });
+
+  const orders = [], notPaid = [], notNormal = [], otherMethod = [], shipped = [], orderOnly = [], productOnly = [];
+  const needsCheck = [], multiDest = [], billingDiff = [];
+  const fileOrderIds = new Set(), excludedReason = new Map();
+  const ns = s => String(s == null ? '' : s).replace(/[\s　]/g, '');
+  const nd = s => String(s == null ? '' : s).replace(/[^0-9]/g, '');
+  const destKey = p => [ns(p('shipping_name')), nd(p('shipping_postal_code')), ns(p('shipping_state')), ns(p('shipping_city')),
+    ns(p('shipping_address_1')), ns(p('shipping_address_2')), nd(p('shipping_phone_number'))].join('\u001f');
+  for (const id of seq) {
+    const og = orderRow.get(id), ps = productRows.get(id) || [];
+    const productName = ps.length ? ps[0]('product_name') + (ps.length > 1 ? ` 他${ps.length - 1}点` : '') : '';
+    if (!og) { productOnly.push({ orderNumber: id, productName }); continue; }
+    if (!ps.length) { orderOnly.push({ orderNumber: id, productName: '' }); continue; }
+    fileOrderIds.add(id);
+    // ホワイトリスト：支払い済み・通常・未定(出品者が手配)・追跡情報なし だけを通す（上から順に見て最初に当たった理由を出す）
+    if (og('payment_date') === '') {
+      notPaid.push({ orderNumber: id, productName }); excludedReason.set(id, '支払い待ち'); continue;
+    }
+    if (og('order_type') !== MERCARI_ORDER_TYPE_NORMAL) {
+      notNormal.push({ orderNumber: id, value: og('order_type'), productName });
+      excludedReason.set(id, `注文の種類（${og('order_type') || '空'}）`); continue;
+    }
+    const badMethod = ps.find(p => p('shipping_method') !== MERCARI_SHIP_METHOD_SELLER);
+    if (badMethod) {
+      otherMethod.push({ orderNumber: id, value: badMethod('shipping_method'), productName });
+      excludedReason.set(id, `配送方法（${badMethod('shipping_method') || '空'}）`); continue;
+    }
+    const tracked = ps.find(p => p('shipping_tracking_info') !== '');
+    if (tracked) {
+      shipped.push({ orderNumber: id, tracking: tracked('shipping_tracking_info').replace(/\s*\n\s*/g, ' '), productName });
+      excludedReason.set(id, '出荷済み（追跡情報あり）'); continue;
+    }
+
+    const p0 = ps[0];
+    const desiredDeliveryRaw = (ps.find(p => p('requested_delivery_date') !== '') || p0)('requested_delivery_date');
+    const desiredTimeRaw = (ps.find(p => p('requested_delivery_time') !== '') || p0)('requested_delivery_time');
+    const desiredDeliveryDate = mercariNormalizeDate(desiredDeliveryRaw);
+    if (desiredDeliveryDate === null) {
+      // 出荷を止めない側（本日扱い）に倒す（楽天・ヤフショと同じ）。B2 のお届け予定日は空欄にして画面で知らせる
+      console.warn('[parseMercariFile] お届け希望日（requested_delivery_date）を解釈できません:', desiredDeliveryRaw, id);
+    }
+    const isMultiDest = ps.some(p => destKey(p) !== destKey(p0));
+    const billing = { name: p0('billing_name'), postal: p0('billing_postal_code'), pref: p0('billing_state'), city: p0('billing_city'),
+      rest: p0('billing_address_1') + p0('billing_address_2') };
+    const isBillingDiff = ns(p0('shipping_name')) !== ns(billing.name) || nd(p0('shipping_postal_code')) !== nd(billing.postal)
+      || ns(p0('shipping_state') + p0('shipping_city') + p0('shipping_address_1') + p0('shipping_address_2'))
+         !== ns(billing.pref + billing.city + billing.rest);
+    const o = {
+      orderNumber: id, orderType: og('order_type'),
+      initialMethod: MERCARI_INITIAL_METHOD, shipMethodRaw: p0('shipping_method'),
+      desiredDeliveryRaw, desiredDeliveryDate: desiredDeliveryDate || null, desiredTimeRaw,
+      // お届け先は楽天の recipient と同じ形（クリックポスト用CSV は楽天と同じ道を通る）。
+      // 氏名は姓名が1つの欄（shipping_name）のため lastName に全体を入れ firstName は空。郵便番号は postal1 に全体
+      recipient: { lastName: p0('shipping_name'), firstName: '', phone: p0('shipping_phone_number'),
+        postal1: p0('shipping_postal_code'), postal2: '', pref: p0('shipping_state'), city: p0('shipping_city'),
+        rest: p0('shipping_address_1') + p0('shipping_address_2') },
+      billing,
+      multiDest: isMultiDest, billingDiff: isBillingDiff,
+      lines: ps.map(p => {
+        const q = p('quantity');
+        return { name: p('product_name'), quantity: parseInt(q || '1', 10) || 1, sku: p('variant_id'), itemMgmtNo: '', skuInfo: '' };
+      }),
+    };
+    if (isMultiDest) multiDest.push({ orderNumber: id, productName });
+    if (isBillingDiff) billingDiff.push({ orderNumber: id, shipName: p0('shipping_name'), billName: billing.name, productName });
+    if (o.initialMethod === MERCARI_NEKOPOS && (desiredDeliveryRaw || mercariTimeRequested(desiredTimeRaw))) {
+      needsCheck.push({ orderNumber: id, memo: `⚠ ネコポスは日時指定に対応していません（お届け希望日 ${desiredDeliveryRaw || 'なし'}／時間帯 ${desiredTimeRaw || 'なし'}）`, productName });
+    }
+    orders.push(o);
+  }
+  return { orders, notPaid, notNormal, otherMethod, shipped, orderOnly, productOnly, unknownType, needsCheck, multiDest, billingDiff,
+           fileOrderIds, excludedReason };
+}
+
+// 出荷対象の注文 → ピッキングデータ。楽天の buildRakutenPickingData と同じ規則（お届け希望日で 本日／遅延／予定 に分ける・
+// 本日+3日は最終出荷日・商品別集計・並び・複数商品注文・G番号）で、G番号の接頭辞だけ 'M-'。メルカリ固有の項目は注文に付け直す
+function buildMercariPickingData(groups, today) {
+  const d = buildRakutenPickingData(groups, today, 'M-');
+  const byId = new Map(groups.map(g => [g.orderNumber, g]));
+  d.orders = d.orders.map(o => ({ ...byId.get(o.orderNumber), delayed: o.delayed, isLastChance: o.isLastChance, lines: o.lines }));
+  return d;
+}
+
+// 発送方法の選択（注文番号 → 6択の値）と個口数（注文番号 → 2〜PARCEL_MAX）。楽天・ヤフショと同じ扱い（依頼主設定の保存では消さない）
+const mercariShipChoice = new Map();
+const mercariParcelChoice = new Map();
+let mercariShipListOpen = null;          // 一覧の開閉（null＝初回の自動判定）
+let mercariShipAutoSeen = new Set();     // 前回の描画で「開いて確認が要る」だった注文番号
+function mercariNoParcel(m) { return m === MERCARI_NONE || m === MERCARI_SKIP; }
+function mercariParcelCount(o) {
+  if (!o || mercariNoParcel(mercariResolvedMethod(o))) return 1;
+  return mercariParcelChoice.get(o.orderNumber) || 1;
+}
+function mercariInitialMethod(o) { return o.initialMethod || MERCARI_INITIAL_METHOD; }
+function mercariResolvedMethod(o) { return mercariShipChoice.get(o.orderNumber) || mercariInitialMethod(o); }
+function mercariIsMethodOption(m) { return MERCARI_METHOD_OPTIONS.some(([v]) => v === m); }
+function mercariIsUnknownMethod(o) { return !mercariIsMethodOption(mercariResolvedMethod(o)); }
+function mercariHasUnknownOption(o) { return !mercariIsMethodOption(mercariInitialMethod(o)); }
+// 確定値がネコポスなのに、お届け希望日か時間帯の指定がある注文（一覧で黄の警告。B2 には日時をそのまま出す＝楽天・ヤフショと同じ）
+function mercariNekoposDateConflict(o) {
+  return mercariResolvedMethod(o) === MERCARI_NEKOPOS && !!(o.desiredDeliveryRaw || mercariTimeRequested(o.desiredTimeRaw));
+}
+// 確定発送方法 → B2送り状種類コード（楽天の rakutenInvoiceCode と同じ逆引き）。B2に出さない方法・不明は ''
+function mercariInvoiceCode(o) {
+  const m = mercariResolvedMethod(o);
+  return Object.keys(SHIP_METHOD_MAP).find(k => SHIP_METHOD_MAP[k] === m) || '';
+}
+
+// メルカリの依頼主（設定タブ「メルカリ」ブロックのみ。Amazon・楽天・ヤフショの設定へは決してフォールバックしない）。
+// 必須は楽天と同じ（店舗名・郵便番号・住所・請求先顧客コード・運賃管理番号）。必須が空なら null（B2 を出す前に止める）
+const MERCARI_SENDER_REQUIRED = RAKUTEN_SENDER_REQUIRED;
+function mercariSenderMissingFields() {
+  const s = loadMercariSender() || {};
+  return MERCARI_SENDER_REQUIRED.filter(([k]) => !String(s[k] || '').trim()).map(([, label]) => label);
+}
+function getMercariSenderStore() {
+  return mercariSenderMissingFields().length === 0 ? loadMercariSender() : null;
+}
+
+// メルカリの注文 → B2クラウド1行（95列）。各列は楽天の buildRakutenB2Row・ヤフショの buildYahooB2Row と同じ位置に同じ種類の値を入れる。
+// ご依頼主（row[19][21][22][23][24]）・請求先顧客コード・運賃管理番号は常に store（依頼主設定のメルカリ欄）。
+// 請求先（billing_*）はお届け先の写しで注文者を表さないため、ご依頼主には使わない（設計 §4-5・Kaz 指示 2026-11-11）
+function buildMercariB2Row(order, shipDate, store, addressIssues) {
+  const row = new Array(95).fill('');
+  const r = order.recipient || {};
+  const { fullAddress, building, issues } = buildRakutenAddress(r.pref || '', r.city || '', r.rest || '');
+  if (addressIssues && issues.length) addressIssues.push({ orderNumber: order.orderNumber, issues, fullAddress, building });
+  row[0]  = order.orderNumber;   // お客様管理番号＝order_id（例 order_xxxxxxxxxxxxxxxxxxxxxx）
+  row[1]  = mercariInvoiceCode(order);
+  row[4]  = shipDate;
+  row[5]  = order.desiredDeliveryDate ? (formatB2DeliveryDate(order.desiredDeliveryDate) || '') : '';
+  row[6]  = mercariB2TimeCode(order.desiredTimeRaw) || '';   // 解釈できない値は空（指定なし。画面で警告）
+  row[8]  = normalizeJapanesePhone(r.phone);
+  row[10] = yahooFormatZip(r.postal1);   // 数字7桁なら 123-4567 の形にそろえる（ヤフショと同じ）
+  row[11] = fullAddress; row[12] = building;
+  row[15] = String(r.lastName || '').trim();   // shipping_name（姓名が1つの欄）をそのまま
+  row[19] = store.tel; row[21] = store.postal;
+  row[22] = store.address; row[23] = store.building; row[24] = store.name;
+  row[27] = ((order.lines[0] && order.lines[0].name) || '').slice(0, 25).trimEnd();
+  row[32] = buildRakutenKiji(order, 'M-000');
+  row[38] = String(order.lines.reduce((a, l) => a + (l.quantity || 0), 0));
+  row[39] = store.customerCode; row[41] = store.fareCode;
+  return row;
+}
+
+// 読み込み結果の画面（メルカリペイン）：サマリ → 警告 → 発送方法の確認・変更（楽天・ヤフショと同じ型）→ 画像URL登録
+function renderMercariResults(parsed) {
+  const mResults = document.getElementById('m-results');
+  const mArea = document.getElementById('m-picking-area');
+  mResults.innerHTML = '';
+  mArea.innerHTML = '';
+  // 選択は clear しない。読み込み後に残る注文の選択は保持し、消えた注文の選択だけ捨てる（楽天・ヤフショと同じ）
+  const ids = new Set(parsed.orders.map(o => o.orderNumber));
+  for (const id of Array.from(mercariShipChoice.keys())) if (!ids.has(id)) mercariShipChoice.delete(id);
+  for (const id of Array.from(mercariParcelChoice.keys())) if (!ids.has(id)) mercariParcelChoice.delete(id);
+  for (const id of Array.from(mercariShipAutoSeen)) if (!ids.has(id)) mercariShipAutoSeen.delete(id);
+
+  const data = buildMercariPickingData(parsed.orders, essToday());
+  const lineCount = parsed.orders.reduce((a, o) => a + o.lines.length, 0);
+  const firstName = o => (o.lines[0] ? o.lines[0].name : '') + (o.lines.length > 1 ? ` 他${o.lines.length - 1}点` : '');
+  const okItem = document.createElement('div');
+  okItem.className = 'result-item success';
+  okItem.textContent = `✓ メルカリ：${parsed.orders.length}注文 ／ ${lineCount}明細を読み込みました`
+    + (parsed.shipped.length ? `（出荷済み ${parsed.shipped.length}注文を除外。追跡情報あり）` : '')
+    + (data.scheduled.length ? `（うち予定 ${data.scheduled.length}注文は本日のピッキング対象外）` : '');
+  mResults.appendChild(okItem);
+
+  renderRakutenWarningSection(mResults, 'm-warn-shipped',
+    `⚠ 出荷済み（メルカリのデータに追跡情報あり）のため除外: ${parsed.shipped.length}件`,
+    ['注文番号', '追跡情報', '商品名'], parsed.shipped.map(x => [x.orderNumber, x.tracking, x.productName]), 'warn');
+  renderRakutenWarningSection(mResults, 'm-warn-notpaid',
+    `⚠ 支払い待ち（payment_date が空）のため除外（支払いが済むまで発送できません）: ${parsed.notPaid.length}件`,
+    ['注文番号', '商品名'], parsed.notPaid.map(x => [x.orderNumber, x.productName]), 'error');
+  renderRakutenWarningSection(mResults, 'm-warn-ordertype',
+    `⚠ 注文の種類（order_type）が「${MERCARI_ORDER_TYPE_NORMAL}」以外のため除外（予約など。手動対応してください）: ${parsed.notNormal.length}件`,
+    ['注文番号', '注文の種類（order_type）', '商品名'], parsed.notNormal.map(x => [x.orderNumber, x.value || '（空）', x.productName]), 'error');
+  renderRakutenWarningSection(mResults, 'm-warn-method',
+    `⚠ 配送方法（shipping_method）が「${MERCARI_SHIP_METHOD_SELLER}」以外のため除外（メルカリ便等は送り状がメルカリ側。B2 に出すと二重になります）: ${parsed.otherMethod.length}件`,
+    ['注文番号', '配送方法（shipping_method）', '商品名'], parsed.otherMethod.map(x => [x.orderNumber, x.value || '（空）', x.productName]), 'error');
+  renderRakutenWarningSection(mResults, 'm-warn-orderonly',
+    `⚠ 注文の行（type=order）だけで商品の行（type=product）が無い注文（除外。落とし直してください）: ${parsed.orderOnly.length}件`,
+    ['注文番号'], parsed.orderOnly.map(x => [x.orderNumber]), 'error');
+  renderRakutenWarningSection(mResults, 'm-warn-productonly',
+    `⚠ 商品の行（type=product）だけで注文の行（type=order）が無い注文（除外。落とし直してください）: ${parsed.productOnly.length}件`,
+    ['注文番号', '商品名'], parsed.productOnly.map(x => [x.orderNumber, x.productName]), 'error');
+  renderRakutenWarningSection(mResults, 'm-warn-type',
+    `⚠ type が order・product 以外の行（読み飛ばしました）: ${parsed.unknownType.length}件`,
+    ['行（見出しを1として）', 'type', '注文番号'], parsed.unknownType.map(x => [x.recNo, x.type, x.orderNumber || '']), 'warn');
+  const delayedOrders = data.orders.filter(o => o.delayed);
+  const lastChanceOrders = data.orders.filter(o => o.isLastChance);
+  renderRakutenWarningSection(mResults, 'm-warn-delayed',
+    `⚠ 遅延：お届け希望日を過ぎています（最優先で出荷してください）: ${delayedOrders.length}件`,
+    ['注文番号', 'お届け希望日', '商品名'], delayedOrders.map(o => [o.orderNumber, o.desiredDeliveryRaw || '', firstName(o)]), 'error');
+  renderRakutenWarningSection(mResults, 'm-warn-lastchance',
+    `⏰ 本日中に出荷が必要（お届け希望日 = 本日+3日 ＝ 最終出荷日): ${lastChanceOrders.length}件`,
+    ['注文番号', 'お届け希望日', '商品名'], lastChanceOrders.map(o => [o.orderNumber, o.desiredDeliveryRaw || '', firstName(o)]), 'orange');
+  renderRakutenWarningSection(mResults, 'm-warn-multidest',
+    `⚠ メルカリ：配送先が複数の注文（手動対応）。ピッキングには含めますが、B2・クリックポストからは除外します: ${parsed.multiDest.length}件`,
+    ['注文番号', '商品名'], parsed.multiDest.map(x => [x.orderNumber, x.productName]), 'error');
+  renderRakutenWarningSection(mResults, 'm-warn-billing',
+    `メルカリ：お届け先と請求先が違う注文（ご依頼主は店舗名で出しています）: ${parsed.billingDiff.length}件`,
+    ['注文番号', 'お届け先名', '請求先名'], parsed.billingDiff.map(x => [x.orderNumber, x.shipName, x.billName]), 'warn');
+  renderRakutenWarningSection(mResults, 'm-warn-check',
+    `⚠ 要確認（対象には含めています）: ${parsed.needsCheck.length}件`,
+    ['注文番号', '内容', '商品名'], parsed.needsCheck.map(x => [x.orderNumber, x.memo, x.productName]), 'warn');
+  renderRakutenWarningSection(mResults, 'm-warn-scheduled',
+    `📅 予定：お届け希望日が先のため本日のピッキング対象外です: ${data.scheduled.length}件`,
+    ['注文番号', 'お届け希望日', '商品名'], data.scheduled.map(o => [o.orderNumber, o.desiredDeliveryRaw || '', firstName(o)]), 'warn');
+
+  if (!parsed.orders.length) return;
+  if (!data.orders.length) {
+    const noPick = document.createElement('div');
+    noPick.className = 'result-item';
+    noPick.style.cssText = 'display:block;background:#f4f4f4;border:1px solid #ddd;color:#555;';
+    noPick.textContent = '本日出荷対象の注文はありません（全件が予定分です）';
+    mResults.appendChild(noPick);
+    return;
+  }
+
+  const sec = document.createElement('div');
+  sec.id = 'm-picking-list';
+  sec.style.marginTop = '14px';
+  const screenTotal = [...data.total, ...(data.multiTotal || [])];
+  // 並び・色・開閉の規則は楽天・ヤフショと同じ（複数個口の候補を先頭 → 遅延 → 不明 → ネコポス以外 → ネコポス）
+  const qtySum = o => o.lines.reduce((a, l) => a + (Number(l.quantity) || 0), 0);
+  const isCand = o => qtySum(o) >= 2;
+  const orderGroup = o => o.delayed ? 0 : mercariIsUnknownMethod(o) ? 1 : mercariResolvedMethod(o) !== MERCARI_NEKOPOS ? 2 : 3;
+  const displayOrders = data.orders.map((o, i) => ({ o, c: isCand(o) ? 0 : 1, k: orderGroup(o), i }))
+    .sort((a, b) => a.c - b.c || a.k - b.k || a.i - b.i).map(x => x.o);
+  const rowBg = o => o.delayed ? '#fef2f2' : o.isLastChance ? '#fff7ed'
+    : mercariIsUnknownMethod(o) ? '#fef2f2'
+    : (mercariResolvedMethod(o) !== MERCARI_NEKOPOS || mercariNekoposDateConflict(o)) ? '#fffbeb' : '';
+  const DT_WARN = '⚠ 日時指定があります。ネコポスは日時指定に対応していません';
+  const orderRows = displayOrders.map(o => {
+    const cur = mercariResolvedMethod(o);
+    const unknownOpt = mercariHasUnknownOption(o);
+    const opts = (unknownOpt ? [MERCARI_UNKNOWN_OPTION] : []).concat(MERCARI_METHOD_OPTIONS);
+    const curVal = mercariIsUnknownMethod(o) ? '' : cur;
+    const shipSelect = `<select class="mcp-ship" data-order="${esc(o.orderNumber)}">${
+        opts.map(([v, label]) => `<option value="${esc(v)}"${v === curVal ? ' selected' : ''}>${esc(label)}</option>`).join('')
+      }</select>`;
+    const shipExtra = unknownOpt ? `<div class="mcp-unknown">配送方法：${esc(o.shipMethodRaw || '（空）')}</div>` : '';
+    let alertLine = '';
+    if (o.delayed) alertLine = `<div class="mcp-alert-delayed">⚠ 遅延：お届け希望日 ${esc(o.desiredDeliveryRaw)} を過ぎています</div>`;
+    else if (o.isLastChance) alertLine = `<div class="mcp-alert-last">本日中に出荷が必要（お届け希望日 ${esc(o.desiredDeliveryRaw)}）</div>`;
+    else if (o.desiredDeliveryRaw || mercariTimeRequested(o.desiredTimeRaw)) {
+      alertLine = `<div class="mcp-dd">📅 お届け希望日 ${esc(o.desiredDeliveryRaw || 'なし')}${o.desiredTimeRaw ? `（時間帯 ${esc(o.desiredTimeRaw)}）` : ''}</div>`;
+    }
+    const multiDestLine = o.multiDest ? '<div class="mcp-alert-delayed">⚠ 配送先が複数の注文です（B2・クリックポストに出しません。手動対応）</div>' : '';
+    const dtWarn = `<div class="mcp-alert-dt" style="display:${mercariNekoposDateConflict(o) ? 'block' : 'none'};">${DT_WARN}</div>`;
+    const parcelSelect = `<select class="mcp-parcel" data-order="${esc(o.orderNumber)}"${mercariNoParcel(cur) ? ' disabled' : ''}>${
+      parcelOptionsHtml(mercariNoParcel(cur) ? 1 : (mercariParcelChoice.get(o.orderNumber) || 1))}</select>`;
+    return shipListOrderHtml({
+      orderId: o.orderNumber,
+      storeLabel: `メルカリ（${MERCARI_STORE_NAME}）`,
+      badges: shipListParcelHint(qtySum(o)),
+      alerts: alertLine + multiDestLine + dtWarn,
+      lines: o.lines,
+      shipSelect, parcelSelect, shipExtra,
+      bg: rowBg(o),
+    });
+  }).join('');
+
+  sec.innerHTML = `
+    <style>${SHIP_LIST_CSS}
+      #m-picking-list .mcp-unknown { font-weight:600; color:#991b1b; font-size:12px; padding-top:2px; }
+      #m-picking-list .mcp-alert-delayed { color:#b91c1c; font-weight:700; padding:2px 0; }
+      #m-picking-list .mcp-alert-last { color:#c2410c; font-weight:700; padding:2px 0; }
+      #m-picking-list .mcp-alert-dt { color:#92400e; font-weight:700; padding:2px 0; }
+      #m-picking-list .mcp-dd { color:#555; font-size:12px; padding:2px 0; }
+      #m-picking-list h3 { font-size:14px; margin:10px 0 6px; }
+    </style>
+    <h3>📋 発送方法の確認・変更（注文別明細）</h3>
+    <div id="m-ship-head" class="result-item"></div>
+    <div id="m-ship-dtwarn" class="result-item" style="display:none;background:#fffbeb;border:1px solid #fcd34d;color:#92400e;margin-top:6px;"></div>
+    <button type="button" id="m-ship-toggle" class="btn-aux" style="margin-top:6px;"></button>
+    <div id="m-ship-redo" class="result-item" style="display:none;background:#fffbeb;border:1px solid #fcd34d;color:#92400e;margin:8px 0;">⚠ 出力後に配送方法・個口数を変更しました。B2取込CSVを作り直してください</div>
+    <div id="m-ship-list" style="margin-top:8px;">
+      <table class="mcp-list ship-list">${orderRows}</table>
+    </div>`;
+  mArea.appendChild(sec);
+
+  const shipHead = sec.querySelector('#m-ship-head');
+  const shipDtWarn = sec.querySelector('#m-ship-dtwarn');
+  const refreshShipHead = () => {
+    const n = m => data.orders.filter(o => mercariResolvedMethod(o) === m).length;
+    const unknown  = data.orders.filter(mercariIsUnknownMethod).length;
+    const switched = data.orders.filter(o => mercariResolvedMethod(o) !== mercariInitialMethod(o)).length;
+    shipHead.className = 'result-item ' + (unknown ? 'error' : 'success');
+    shipHead.textContent = (unknown ? '⚠ ' : '✓ ')
+      + `発送方法：ネコポス ${n(MERCARI_NEKOPOS)}／宅急便コンパクト ${n(MERCARI_COMPACT)}／クリックポスト ${n(MERCARI_CLICKPOST)}`
+      + `／宅急便 ${n(MERCARI_TAKKYUBIN)}／送り状なし ${n(MERCARI_NONE)}／本日出荷しない ${n(MERCARI_SKIP)}`
+      + (unknown ? `／不明 ${unknown}` : '')
+      + parcelHeadText(data.orders.filter(o => !mercariNoParcel(mercariResolvedMethod(o))).map(mercariParcelCount))
+      + (switched ? `／判定から変更 ${switched}件` : '')
+      + (unknown ? '。不明の注文はB2から除外されます。発送方法を選んでください' : '');
+    const dt = data.orders.filter(mercariNekoposDateConflict).length;
+    shipDtWarn.style.display = dt ? 'block' : 'none';
+    shipDtWarn.textContent = `${DT_WARN}：${dt}件（B2には日時をそのまま出します）`;
+  };
+  refreshShipHead();
+
+  const shipList = sec.querySelector('#m-ship-list');
+  const shipToggle = sec.querySelector('#m-ship-toggle');
+  const setShipOpen = open => {
+    mercariShipListOpen = open;
+    shipList.style.display = open ? 'block' : 'none';
+    shipToggle.setAttribute('aria-expanded', open ? 'true' : 'false');
+    shipToggle.textContent = open ? '発送方法の一覧を隠す' : '発送方法の一覧を表示';
+  };
+  const hits = data.orders.filter(o => mercariIsUnknownMethod(o) || isCand(o)).map(o => o.orderNumber);
+  const newHit = hits.some(id => !mercariShipAutoSeen.has(id));
+  setShipOpen(mercariShipListOpen === null ? hits.length > 0 : (mercariShipListOpen || newHit));
+  mercariShipAutoSeen = new Set(hits);
+  shipToggle.addEventListener('click', () => setShipOpen(shipList.style.display === 'none'));
+
+  rRenderShipRedo();
+
+  sec.querySelectorAll('.mcp-ship').forEach(sel => {
+    sel.addEventListener('change', () => {
+      const id = sel.getAttribute('data-order');
+      if (sel.value) mercariShipChoice.set(id, sel.value);
+      else mercariShipChoice.delete(id);
+      const o = data.orders.find(x => x.orderNumber === id);
+      const tb = sel.closest('tbody.sl-order');
+      if (o && tb) {
+        tb.style.background = rowBg(o);
+        const w = tb.querySelector('.mcp-alert-dt');
+        if (w) w.style.display = mercariNekoposDateConflict(o) ? 'block' : 'none';
+        if (mercariIsUnknownMethod(o) || isCand(o)) mercariShipAutoSeen.add(id); else mercariShipAutoSeen.delete(id);
+        const pSel = tb.querySelector('.mcp-parcel');
+        if (pSel) {
+          pSel.disabled = mercariNoParcel(mercariResolvedMethod(o));
+          pSel.value = String(pSel.disabled ? 1 : (mercariParcelChoice.get(id) || 1));
+        }
+      }
+      if (s1OutputDone || s1ShipChoiceStale) {
+        s1ShipChoiceStale = true;
+        s1OutputDone = false;
+      }
+      refreshShipHead();
+      rRenderShipRedo();
+      updateS1ConvertLabel();
+    });
+  });
+  sec.querySelectorAll('.mcp-parcel').forEach(sel => {
+    sel.addEventListener('change', () => {
+      const id = sel.getAttribute('data-order');
+      const n = parseInt(sel.value, 10) || 1;
+      if (n > 1) mercariParcelChoice.set(id, n); else mercariParcelChoice.delete(id);
+      if (s1OutputDone || s1ShipChoiceStale) {
+        s1ShipChoiceStale = true;
+        s1OutputDone = false;
+      }
+      refreshShipHead();
+      rRenderShipRedo();
+      updateS1ConvertLabel();
+    });
+  });
+
+  // 画像URL登録UI（キーはメルカリの variant_id。未登録は「画像なし」＝正常）
+  renderImageRegisterSection({ total: screenTotal }, mArea, 'm-img-register-wrap');
+}
+
+// STEP1（メルカリペイン）のファイル読み込み。1ファイル。判定・必須列に合わないファイルは受け付けずエラー表示
+// （前に読み込んだファイルも取り消す＝古いファイルのまま進めない）
+const mDropzone  = document.getElementById('m-dropzone');
+const mFileInput = document.getElementById('m-fileInput');
+function mRenderFileState() {
+  const el = document.getElementById('m-file-order');
+  if (el) {
+    const f = s1MercariFile;
+    el.textContent = f ? `✓ 注文データ：${f.name}（${f.encoding === 'utf8' ? 'UTF-8' : 'Shift_JIS'}）` : '注文データ：未読込';
+    el.style.color = f ? '#166534' : '#888';
+    el.style.fontWeight = f ? '700' : '400';
+  }
+  if (mDropzone) mDropzone.classList.toggle('has-file', !!s1MercariParsed);
+}
+function mShowError(message) {
+  const item = document.createElement('div');
+  item.className = 'result-item error';
+  item.textContent = `⚠ ${message}`;
+  document.getElementById('m-results').appendChild(item);
+}
+function mRefreshView(error) {
+  document.getElementById('m-results').innerHTML = '';
+  document.getElementById('m-picking-area').innerHTML = '';
+  // 読み込み内容が変わった＝前回の変換で作った印刷ボタンは中身が古い（楽天の rRefreshView と同じ）
+  const oldBtn = document.getElementById('picking-print-wrap');
+  if (oldBtn) oldBtn.remove();
+  mRenderFileState();
+  if (s1MercariParsed) renderMercariResults(s1MercariParsed);
+  else { mercariShipChoice.clear(); mercariParcelChoice.clear(); }
+  if (error) mShowError(error);
+}
+function mLoadFile(file) {
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = e => {
+    const buffer = e.target.result;
+    let error = null;
+    try {
+      const dec = mercariDecode(buffer);
+      const parsed = parseMercariFile(dec.text);
+      s1MercariFile = { name: file.name, buffer, text: dec.text, encoding: dec.encoding, bom: dec.bom };
+      s1MercariParsed = parsed;
+      essSaveAndReport('s1', 'in_mercari_order', 'メルカリ', new Uint8Array(buffer), file.name);
+    } catch (err) {
+      s1MercariFile = null; s1MercariParsed = null;
+      error = `${file.name}：${err.message}`;
+    }
+    mRefreshView(error);
+    rAfterLoad();   // 変換ボタン・出力済み・照合の押し直しの扱いは楽天の読み込みと同じ
+  };
+  reader.onerror = () => { s1MercariFile = null; s1MercariParsed = null; mRefreshView(`${file.name}：ファイルを読めません`); rAfterLoad(); };
+  reader.readAsArrayBuffer(file);
+}
+if (mDropzone && mFileInput) {
+  mDropzone.addEventListener('click', () => mFileInput.click());
+  mDropzone.addEventListener('dragover', e => { e.preventDefault(); mDropzone.classList.add('drag-over'); });
+  mDropzone.addEventListener('dragleave', () => mDropzone.classList.remove('drag-over'));
+  mDropzone.addEventListener('drop', e => {
+    e.preventDefault(); mDropzone.classList.remove('drag-over');
+    mLoadFile(e.dataTransfer.files[0]);
+  });
+  mFileInput.addEventListener('change', e => { mLoadFile(e.target.files[0]); e.target.value = ''; });
+  mRenderFileState();
+}
+
+// ---- STEP2：一括発送通知用CSV ----
+// 元のファイルのバイト列を、引用符の外の改行で「レコード」に割る（UTF-8・cp932 のどちらでも、'"'・','・CR・LF は
+// 文字の途中のバイトに現れないため、バイトのまま割れる）。各レコードは改行（LF か CRLF）を含めたまま返す。
+// 戻り値 [{ start, end, bodyEnd }]（[start, end) がレコード全体、[start, bodyEnd) が改行を除いた中身）
+function mercariSplitRecordBytes(u8) {
+  const recs = [];
+  let start = 0, inQ = false;
+  for (let i = 0; i < u8.length; i++) {
+    const b = u8[i];
+    if (b === 0x22) inQ = !inQ;   // "" は2回反転して元に戻る
+    else if (b === 0x0A && !inQ) {
+      const bodyEnd = (i > start && u8[i - 1] === 0x0D) ? i - 1 : i;
+      recs.push({ start, end: i + 1, bodyEnd });
+      start = i + 1;
+    }
+  }
+  if (start < u8.length) recs.push({ start, end: u8.length, bodyEnd: u8.length });
+  return recs;
+}
+// レコードの中身 [start, bodyEnd) を引用符の外の ',' でセルに割る。戻り値 [{ s, e }]（セルの生のバイトの範囲）
+function mercariCellSpans(u8, start, bodyEnd) {
+  const spans = [];
+  let s = start, inQ = false;
+  for (let i = start; i < bodyEnd; i++) {
+    const b = u8[i];
+    if (b === 0x22) inQ = !inQ;
+    else if (b === 0x2C && !inQ) { spans.push({ s, e: i }); s = i + 1; }
+  }
+  spans.push({ s, e: bodyEnd });
+  return spans;
+}
+// 英数字だけのセル（type・order_id・列名）の値。引用符を外す（ASCII として読む）
+function mercariAsciiCell(u8, span) {
+  let t = '';
+  for (let i = span.s; i < span.e; i++) t += String.fromCharCode(u8[i]);
+  t = t.replace(/^﻿/, '').replace(/^ï»¿/, '').trim();
+  if (t.length >= 2 && t[0] === '"' && t[t.length - 1] === '"') t = t.slice(1, -1).replace(/""/g, '"');
+  return t.trim();
+}
+
+// B2発行済データ（とクリックポスト）のメルカリの行 → 一括発送通知用CSV（バイト列）。
+// rows   … [{ orderNumber（＝order_id）, trackingRaw, shipDateRaw, carrier?, partial? }]（クリックポストの行だけ carrier＝japanpost）
+// file   … STEP 1 で読み込んだ注文データ（s1MercariFile：{ buffer, encoding }）
+// parsed … STEP 1 の判定結果（s1MercariParsed：fileOrderIds・excludedReason・orders）
+// 作り方：元のバイト列から、今回伝票が出た注文の order 行と product 行だけを元の順で残す。1行目（列名）・列の順・他のセルの値・
+// 文字コード・BOM・改行コード・引用符の付け方は元のまま。product 行の shipping_tracking_info にだけ追跡情報を入れる
+// （order 行の値は変えない。shipping_carrier は空のまま）。1注文に product 行が複数あれば、各行に同じ追跡情報を入れる。
+// 除外して警告：一部の個口だけ伝票番号が入った注文（partial）・STEP 1 のデータに無い注文・STEP 1 で出荷対象から外した注文
+function buildMercariBulkShip(rows, file, parsed, today) {
+  const byOrder = new Map();   // order_id → { tracks:[{carrier, number}]（重複なし・出てきた順）, partial }
+  for (const r of (rows || [])) {
+    if (!r.orderNumber || !r.trackingRaw) continue;
+    const carrier = r.carrier || MERCARI_CARRIER_YAMATO;
+    // 伝票番号の正規化は Amazon の出荷通知と同じ（B2 は数値化して .0 を落とす。クリックポストは12桁の数字をそのまま）
+    const number = carrier === MERCARI_CARRIER_JAPANPOST ? String(r.trackingRaw)
+      : (n => isNaN(n) ? String(r.trackingRaw) : String(n))(parseInt(String(r.trackingRaw).replace(/\.0+$/, ''), 10));
+    if (!byOrder.has(r.orderNumber)) byOrder.set(r.orderNumber, { tracks: [], partial: null });
+    const e = byOrder.get(r.orderNumber);
+    if (!e.tracks.some(t => t.number === number && t.carrier === carrier)) e.tracks.push({ carrier, number });
+    if (r.partial) e.partial = r.partial;
+  }
+  const multiParcel = [], notInStep1 = [], excluded = [];
+  const trackingText = new Map();   // order_id → shipping_tracking_info に入れる文字列
+  let multiParcelCount = 0;
+  for (const [orderNumber, e] of byOrder) {
+    const joined = e.tracks.map(t => t.number).join(' / ');
+    if (e.partial) { multiParcel.push({ orderNumber, trackings: joined, partial: e.partial }); continue; }
+    if (!parsed.fileOrderIds.has(orderNumber)) { notInStep1.push({ orderNumber, trackings: joined }); continue; }
+    if (parsed.excludedReason.has(orderNumber)) {
+      excluded.push({ orderNumber, reason: parsed.excludedReason.get(orderNumber), trackings: joined }); continue;
+    }
+    trackingText.set(orderNumber, e.tracks.map(t => MERCARI_TRACKING_TEXT[t.carrier](t.number)).join(MERCARI_TRACKING_JOIN));
+    if (e.tracks.length > 1) multiParcelCount++;
+  }
+
+  // 元のバイト列から組み立てる
+  const u8 = new Uint8Array(file.buffer);
+  const recs = mercariSplitRecordBytes(u8);
+  const enc = file.encoding === 'utf8' ? (t => new TextEncoder().encode(t)) : toSjisUint8;
+  const parts = [];
+  let rowCount = 0;
+  const kept = new Set();
+  if (recs.length) {
+    const head = recs[0];
+    const headSpans = mercariCellSpans(u8, head.start, head.bodyEnd);
+    const names = headSpans.map(sp => mercariAsciiCell(u8, sp));
+    const iType = names.indexOf('type'), iId = names.indexOf('order_id'), iTrk = names.indexOf(MERCARI_COL_TRACKING);
+    parts.push(u8.subarray(head.start, head.end));   // 1行目（列名）は元のまま（BOM も含む）
+    for (let k = 1; k < recs.length; k++) {
+      const rec = recs[k];
+      if (rec.bodyEnd <= rec.start) continue;   // 空行
+      const spans = mercariCellSpans(u8, rec.start, rec.bodyEnd);
+      const type = spans[iType] ? mercariAsciiCell(u8, spans[iType]) : '';
+      const id = spans[iId] ? mercariAsciiCell(u8, spans[iId]) : '';
+      if (!trackingText.has(id)) continue;
+      if (type === MERCARI_TYPE_ORDER) {
+        parts.push(u8.subarray(rec.start, rec.end));
+      } else if (type === MERCARI_TYPE_PRODUCT && spans[iTrk]) {
+        const sp = spans[iTrk];
+        const v = trackingText.get(id);
+        // 引用符は元と同じく、必要なセル（','・'"'・改行を含む）だけに付ける
+        const cell = /[",\r\n]/.test(v) ? '"' + v.replace(/"/g, '""') + '"' : v;
+        parts.push(u8.subarray(rec.start, sp.s), enc(cell), u8.subarray(sp.e, rec.end));
+      } else continue;
+      rowCount++;
+      kept.add(id);
+    }
+  }
+  const total = parts.reduce((a, p) => a + p.length, 0);
+  const bytes = new Uint8Array(total);
+  let off = 0;
+  for (const p of parts) { bytes.set(p, off); off += p.length; }
+
+  // 出荷漏れの候補（ヤフショと同じ考え方）：STEP 1 の出荷対象で B2 に出したはずの注文に伝票が無い
+  const notShipped = [];
+  for (const o of buildMercariPickingData(parsed.orders || [], today || essToday()).orders) {
+    if (mercariInvoiceCode(o) === '' || o.multiDest) continue;
+    if (!byOrder.has(o.orderNumber)) notShipped.push({ orderNumber: o.orderNumber });
+  }
+  return { bytes, orderCount: kept.size, rowCount, multiParcelCount, multiParcel, notInStep1, excluded, notShipped,
+           trackingText };
+}
+
+// メルカリ分の警告（STEP2 の結果エリア）。出力0件でも警告は出す（なぜ0件だったのか分かるように）
+function renderMercariShipWarnings(container, rep) {
+  renderRakutenWarningSection(container, 'ms-warn-multi',
+    `⚠ メルカリ：複数個口の伝票番号が一部しか入っていません（自動処理から除外）。全部入れてから作り直してください: ${rep.multiParcel.length}件`,
+    ['注文番号', '伝票番号'],
+    rep.multiParcel.map(x => [x.orderNumber, x.trackings
+      + (x.partial ? `（一部未入力：${x.partial.parcels}個口のうち${x.partial.filled}本）` : '')]), 'error');
+  renderRakutenWarningSection(container, 'ms-warn-notinstep1',
+    `⚠ メルカリ：STEP 1 で読み込んだ注文データに無い注文のため除外（その注文を含む注文データを STEP 1 で読み込み直してください）: ${rep.notInStep1.length}件`,
+    ['注文番号', '伝票番号'], rep.notInStep1.map(x => [x.orderNumber, x.trackings]), 'error');
+  renderRakutenWarningSection(container, 'ms-warn-excluded',
+    `⚠ メルカリ：STEP 1 で出荷対象から外した注文のため除外（手動で確認してください）: ${rep.excluded.length}件`,
+    ['注文番号', '外した理由', '伝票番号'], rep.excluded.map(x => [x.orderNumber, x.reason, x.trackings]), 'error');
+  renderRakutenWarningSection(container, 'ms-warn-notshipped',
+    `📦 メルカリ：STEP 1の出荷対象のうち、今回の発行済みデータに伝票が無い注文（出荷漏れの可能性）: ${rep.notShipped.length}件`,
+    ['注文番号'], rep.notShipped.map(x => [x.orderNumber]), 'warn');
+}
+// ==== MERCARI (メルカリ) — END ====
+
 
 // ============================================================
 // Initialize
