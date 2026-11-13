@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>EC出荷オペレーションツール - Amazon FBM / 楽天市場 / ヤフショ / メルカリ × ヤマトB2クラウド</title>
+  <title>EC出荷オペレーションツール - Amazon FBM / 楽天市場 / ヤフショ / メルカリ / Qoo10 × ヤマトB2クラウド</title>
   <script>
   // ==== 定数（ルート・/preview/ 共通） ====
   // Google OAuth クライアントID（drive.file スコープのトークンモデル用。秘密情報ではない）。
@@ -17,7 +17,7 @@
   <link rel="icon" type="image/png" id="app-icon">
   <script>document.getElementById('app-icon').href = ASSET_BASE + 'assets/icon.png';</script>
   <script src="https://accounts.google.com/gsi/client" async></script>
-  <meta name="description" content="Amazon FBM（自己発送）・楽天市場・ヤフショ（Yahoo!ショッピング）・メルカリShopsの出荷業務を支援するブラウザツール。ヤマトB2クラウド取込CSV・クリックポスト用CSV・ピッキングリスト・Amazon出荷通知TXT・楽天市場発送完了報告CSV・ヤフショ注文処理実績アップロード用CSV・メルカリShops一括発送通知用CSVを生成します。処理はブラウザ内で行い、Google にログインしているときは入力・出力ファイルの控えを利用者自身の Google ドライブ（EC出荷記録）に保存します。">
+  <meta name="description" content="Amazon FBM（自己発送）・楽天市場・ヤフショ（Yahoo!ショッピング）・メルカリShops・Qoo10の出荷業務を支援するブラウザツール。ヤマトB2クラウド取込CSV・クリックポスト用CSV・ピッキングリスト・Amazon出荷通知TXT・楽天市場発送完了報告CSV・ヤフショ注文処理実績アップロード用CSV・メルカリShops一括発送通知用CSV・Qoo10一括発送用CSVを生成します。処理はブラウザ内で行い、Google にログインしているときは入力・出力ファイルの控えを利用者自身の Google ドライブ（EC出荷記録）に保存します。">
   <script src="https://cdn.jsdelivr.net/npm/encoding-japanese@2/encoding.min.js"></script>
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
@@ -138,6 +138,7 @@
     .mall-switch button.active.mall-rakuten { color: #c0392b; }
     .mall-switch button.active.mall-yahoo { color: #7c3aed; }
     .mall-switch button.active.mall-mercari { color: #0f766e; }
+    .mall-switch button.active.mall-qoo10 { color: #db2777; }
 
     .section-label {
       font-size: 11px;
@@ -206,6 +207,7 @@
     .dropzone.drop-red:hover, .dropzone.drop-red.drag-over { border-color: #c0392b; background: #fdf3f2; }
     .dropzone.drop-purple:hover, .dropzone.drop-purple.drag-over { border-color: #7c3aed; background: #f5f3ff; }
     .dropzone.drop-teal:hover, .dropzone.drop-teal.drag-over { border-color: #0f766e; background: #f0fdfa; }
+    .dropzone.drop-pink:hover, .dropzone.drop-pink.drag-over { border-color: #db2777; background: #fdf2f8; }
     .dropzone-icon { font-size: 22px; margin-bottom: 5px; }
     .dropzone-text { font-size: 13px; color: #555; line-height: 1.5; }
     .dropzone-hint { font-size: 11px; color: #aaa; margin-top: 3px; }
@@ -377,10 +379,10 @@
 <div class="container">
 
   <div class="app-header">
-    <div class="app-logo">Amazon FBM ＋ 楽天市場 ＋ ヤフショ ＋ メルカリ 出荷オペレーション</div>
+    <div class="app-logo">Amazon FBM ＋ 楽天市場 ＋ ヤフショ ＋ メルカリ ＋ Qoo10 出荷オペレーション</div>
     <div class="app-title">EC出荷オペレーションツール</div>
     <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-top:10px;">
-      <div class="security-badge">🔒 データはブラウザ内で処理。入力・出力ファイルを、Google にログインしているときだけ、ご自身の Google ドライブ（EC出荷記録）に保存します（STEP 2 で作る出荷通知TXT・発送完了報告CSV・ヤフショの注文処理実績アップロード用CSV・メルカリの一括発送通知用CSVは保存しません）。</div>
+      <div class="security-badge">🔒 データはブラウザ内で処理。入力・出力ファイルを、Google にログインしているときだけ、ご自身の Google ドライブ（EC出荷記録）に保存します（STEP 2 で作る出荷通知TXT・発送完了報告CSV・ヤフショの注文処理実績アップロード用CSV・メルカリの一括発送通知用CSV・Qoo10の一括発送用CSVは保存しません）。</div>
       <a id="manual-link" target="_blank" style="font-size:13px;font-weight:700;color:#fff;background:#e77a1a;border-radius:8px;padding:5px 14px;text-decoration:none;letter-spacing:0.03em;">📖 使い方マニュアル</a>
       <script>document.getElementById('manual-link').href = ASSET_BASE + 'manual.html';</script>
     </div>
@@ -441,6 +443,12 @@
       メルカリの注文データの請求先はお届け先の写しで注文者を表さないため、ご依頼主は<strong>常にこの設定</strong>（店舗名）です。請求先顧客コード・運賃管理番号も常にこの設定の値を使います。
     </div>
     <div id="mercari-settings-card"></div>
+    <div class="section-label" style="margin-top:18px;">Qoo10（B2依頼主・1店舗）</div>
+    <div class="info-box" style="margin-bottom:10px;">
+      Qoo10分のB2クラウド取込CSVの<strong>ご依頼主</strong>に使われます。Amazon・楽天市場・ヤフショ・メルカリの設定とは独立です（他のモールの設定で代わりに出すことはありません）。<br>
+      Qoo10 の配送管理ファイルには注文者の住所が無いため、ご依頼主は<strong>常にこの設定</strong>（店舗名）です。請求先顧客コード・運賃管理番号も常にこの設定の値を使います。
+    </div>
+    <div id="qoo10-settings-card"></div>
     <button class="btn-primary btn-green" id="save-settings-btn">保存してSTEP 1へ</button>
     <div id="settings-result"></div>
   </div>
@@ -448,7 +456,7 @@
   <!-- ============ STEP1 ============ -->
   <div class="tab-content" id="tab-step1">
     <p style="font-size:13px;color:#666;margin-bottom:20px;line-height:1.6;">
-      Amazonの未出荷注文レポート・楽天市場の通常購入データCSV・ヤフショの注文データ（注文情報・商品情報）・メルカリの注文データを<br>
+      Amazonの未出荷注文レポート・楽天市場の通常購入データCSV・ヤフショの注文データ（注文情報・商品情報）・メルカリの注文データ・Qoo10の配送管理ファイルを<br>
       ヤマトB2クラウド取込用CSV（1ファイル）に変換します。どれか1つのモールだけでも変換できます。<br>
       クリックポストを選んだ注文があれば、クリックポスト用CSVも出力します。変換後にピッキングリスト・梱包発送明細を印刷できます。<br>
       出力の前に、直近7日の Drive の記録と照合し、発行済み・出力済みの注文を除外します。
@@ -472,6 +480,7 @@
       <button type="button" class="mall-rakuten" data-mall="rakuten">楽天市場</button>
       <button type="button" class="mall-yahoo" data-mall="yahoo">ヤフショ</button>
       <button type="button" class="mall-mercari" data-mall="mercari">メルカリ</button>
+      <button type="button" class="mall-qoo10" data-mall="qoo10">Qoo10</button>
     </div>
     <div id="s1-pane-amazon">
       <div class="section-label">Amazon未出荷レポート（店舗別）</div>
@@ -526,6 +535,20 @@
       <div class="results" id="m-results"></div>
       <div id="m-picking-area"></div>
     </div>
+    <div id="s1-pane-qoo10" style="display:none;">
+      <div class="section-label">Qoo10 配送管理ファイル（1ファイル・必須）</div>
+      <div class="dropzone drop-pink" id="q-dropzone" style="margin-bottom:8px;">
+        <div class="dropzone-icon">🛍️</div>
+        <div class="dropzone-text" id="q-dropzone-text">配送管理ファイル（CSV）をドロップ<br>またはクリックして選択</div>
+        <div class="dropzone-hint">QSM［配送/キャンセル/未受取］→［配送管理］→［配送要請（詳細を見る）］で、下の［全体をダウンロード］から落としたファイル。先に QSM で発送予定日を入れておいてください</div>
+      </div>
+      <input type="file" id="q-fileInput" accept=".csv" style="display:none">
+      <div style="font-size:12px;line-height:1.7;margin-bottom:14px;">
+        <div id="q-file-order"></div>
+      </div>
+      <div class="results" id="q-results"></div>
+      <div id="q-picking-area"></div>
+    </div>
     <div id="s1-convert-note"></div>
     <button class="btn-primary btn-orange" id="s1-convertBtn" disabled>B2取込CSVを作る</button>
     <span id="s1-busy" class="busy" role="status" aria-live="polite"></span>
@@ -534,7 +557,7 @@
     <hr class="divider">
     <div class="section-label">出力ファイル</div>
     <div class="info-box">
-      B2用CSV: <strong>b2cloud_{出荷予定日YYYYMMDD}_HHMMSS.csv</strong>（Amazon全店舗＋楽天市場＋ヤフショ＋メルカリ 統合・1ファイル、Amazon分→楽天市場分→ヤフショ分→メルカリ分の順。照合なしで出力したときは末尾に _照合なし）<br>
+      B2用CSV: <strong>b2cloud_{出荷予定日YYYYMMDD}_HHMMSS.csv</strong>（Amazon全店舗＋楽天市場＋ヤフショ＋メルカリ＋Qoo10 統合・1ファイル、Amazon分→楽天市場分→ヤフショ分→メルカリ分→Qoo10分の順。照合なしで出力したときは末尾に _照合なし）<br>
       クリックポスト用CSV: <strong>clickpost_{出荷予定日YYYYMMDD}_HHMMSS.csv</strong>（クリックポストの注文があるときだけ。40行ごとに _1・_2… に分けます（N個口の注文は同じ行を N 行出します）。照合なしで出力したときは末尾に _照合なし）<br>
       B2の対象が0件でクリックポストだけのときは、b2cloud_… は出力しません。<br>
       出力の前に Drive の記録（直近7日）と照合します。出力後は Drive の EC出荷記録/{作業日}/02_B2用CSV・06_クリックポスト に控えを保存します。<br>
@@ -548,8 +571,8 @@
   <div class="tab-content" id="tab-step2">
     <p style="font-size:13px;color:#666;margin-bottom:16px;line-height:1.6;">
       ヤマトB2クラウドの「発行済みデータ」CSVを読み込み、<br>
-      Amazonの出荷通知ファイル（.txt）・楽天市場の発送完了報告データ（.csv）・ヤフショの注文処理実績アップロード用ファイル（.csv・2つ）・メルカリの一括発送通知用ファイル（.csv）を生成します。<br>
-      1つのファイルにAmazon分・楽天市場分・ヤフショ分・メルカリ分が混在していても、注文番号の形式で自動的に振り分けます（ヤフショは依頼主設定のストアアカウントで、メルカリは注文番号「order_…」の形で見分けます）。
+      Amazonの出荷通知ファイル（.txt）・楽天市場の発送完了報告データ（.csv）・ヤフショの注文処理実績アップロード用ファイル（.csv・2つ）・メルカリの一括発送通知用ファイル（.csv）・Qoo10の一括発送用ファイル（.csv）を生成します。<br>
+      1つのファイルにAmazon分・楽天市場分・ヤフショ分・メルカリ分・Qoo10分が混在していても、注文番号の形式で自動的に振り分けます（ヤフショは依頼主設定のストアアカウントで、メルカリは注文番号「order_…」、Qoo10 は「qoo10-…」の形で見分けます）。
     </p>
     <div class="warning">
       ⚠️ <strong>取り違え注意</strong>：B2クラウドへの「取込用CSV」ではなく、ラベル発行後にエクスポートする
@@ -563,6 +586,7 @@
       RMSの発送完了報告用テンプレートCSVは、STEP 2 では不要です。<br>
       ヤフショ分は STEP 1 の読み込みが無くても出力できます（STEP 1 で読み込んでいれば、出荷漏れの可能性がある注文も知らせます）。<br>
       メルカリ分を出力するには、<strong>STEP 1 でメルカリの注文データを読み込んでおく必要があります</strong>（一括発送通知用のファイルは、その注文データから今回発送した注文だけを残して作るため）。<br>
+      Qoo10分を出力するには、<strong>STEP 1 で Qoo10 の配送管理ファイルを読み込んでおく必要があります</strong>（一括発送用のファイルは、その配送管理ファイルから今回発送したカートの行だけを残して作るため）。<br>
       出荷通知ファイルを作る前に、読み込んだ発行済データを Drive（EC出荷記録/{作業日}/03_発行済データ）に保存します（クリックポストの伝票番号は 06_クリックポスト）。保存できないときは出荷通知ファイルを作りません。
     </div>
     <div class="section-label">発行済みデータCSV（複数ファイル対応）</div>
@@ -585,6 +609,7 @@
       楽天市場: <strong>rakuten_shipping_report_{作成日YYYYMMDD}_HHMMSS.csv</strong>（1ファイル）<br>
       ヤフショ: <strong>yahoo_odstats_ship_{作成日YYYYMMDD}_HHMMSS.csv</strong>（①出荷完了）と <strong>yahoo_odstats_complete_{作成日YYYYMMDD}_HHMMSS.csv</strong>（②注文の完了）。ストアクリエイターPro の［注文管理］→［注文処理実績アップロード］で、①を上げて反映を確かめてから②を上げてください。<br>
       メルカリ: <strong>mercari_bulk_ship_{作成日YYYYMMDD}_HHMMSS.csv</strong>（1ファイル）。ショップ管理画面の［注文］→［CSV一括機能］→［一括発送通知］で上げてください。<br>
+      Qoo10: <strong>qoo10_bulk_ship_{作成日YYYYMMDD}_HHMMSS.csv</strong>（1ファイル）。QSM［配送管理］→ 下の［発送処理(一括発送)］タブ →［注文番号でExcel一括発送(ポップアップ)］で上げてください。<br>
       ブラウザのダウンロードとして直接保存されます（フォルダ選択なし）。<br>
       ※複数ファイル時にブラウザが「複数ファイルのダウンロード許可」を求めた場合は許可してください。
     </div>
@@ -682,6 +707,19 @@ function loadMercariSender() {
 }
 function saveMercariSender(sender) {
   localStorage.setItem(MERCARI_SENDER_KEY, JSON.stringify(sender));
+}
+
+// Qoo10 のB2依頼主設定（設定タブ「Qoo10」ブロック・1店舗固定）。メルカリと同じ作りで、キーを分ける。
+// 項目は楽天・メルカリの欄と同じ7項目。送り状のご依頼主は常にこの設定。他のモールの設定へはフォールバックしない。
+const QOO10_SENDER_KEY = 'qoo10_sender_store';
+function loadQoo10Sender() {
+  try {
+    const d = JSON.parse(localStorage.getItem(QOO10_SENDER_KEY));
+    return (d && typeof d === 'object' && !Array.isArray(d)) ? d : null;
+  } catch { return null; }
+}
+function saveQoo10Sender(sender) {
+  localStorage.setItem(QOO10_SENDER_KEY, JSON.stringify(sender));
 }
 
 // ============================================================
@@ -1101,16 +1139,20 @@ function sortOrderRecords(records) {
 }
 // ==== ORDER PIPELINE — END ====
 
-// お客様管理番号（＝各モールの注文番号）の形式。STEP2はこの3本と、ヤフショの形（yahooOrderIdRe）でモールを振り分ける。
+// お客様管理番号（＝各モールの注文番号）の形式。STEP2はこの4本と、ヤフショの形（yahooOrderIdRe）でモールを振り分ける。
 // Amazon: 3-7-7桁 ／ 楽天市場: 店舗ID(433084)-受注日8桁-注文番号10桁 ／
 // ヤフショ: ストアアカウント（依頼主設定のヤフショ欄。例 mampukudo）-数字（例 mampukudo-10000001） ／
-// メルカリ: order_＋英数字（実物は英数字21〜22文字。MERCARI_ORDER_ID_RE）。ご依頼主名には頼らない（Amazon の店舗の判定より前に振り分ける）
+// メルカリ: order_＋英数字（実物は英数字21〜22文字。MERCARI_ORDER_ID_RE）。ご依頼主名には頼らない（Amazon の店舗の判定より前に振り分ける） ／
+// Qoo10: qoo10-カート番号（QOO10_ORDER_ID_RE）。ご依頼主名には頼らない（Amazon の店舗の判定より前に振り分ける）。
+//   ヤフショの形と重なるのはヤフショのストアアカウントが qoo10 のときだけ。そのときは Qoo10 を先に判定する
 // クリックポストの出荷通知の配送業者コード（carrier-code）。'Other' に替えたときは carrier-name に「日本郵便」を入れる
 const AMAZON_CARRIER_JAPANPOST = 'Japan Post';
 const AMAZON_ORDER_ID_RE  = /^\d{3}-\d{7}-\d{7}$/;
 const RAKUTEN_ORDER_ID_RE = /^433084-\d{8}-\d{10}$/;
 // メルカリの注文番号（order_id）の形。コードの処理と一緒にしか変わらない構造情報のため定数（設定値にしない）
 const MERCARI_ORDER_ID_RE = /^order_[A-Za-z0-9]+$/;
+// Qoo10 のお客様管理番号（qoo10-{カート番号}）の形。ツールが B2 に書く値。定数（設定値にしない）
+const QOO10_ORDER_ID_RE = /^qoo10-\d+$/;
 
 function convertToShipmentNotify(csvText) {
   const stores = loadStores();
@@ -1134,7 +1176,8 @@ function convertToShipmentNotify(csvText) {
   const rakutenRows = [];         // 楽天市場の注文番号形式の行（発送完了報告CSV生成へ回す）
   const yahooRows = [];           // ヤフショの注文番号形式の行（注文処理実績アップロード用CSV生成へ回す）
   const mercariRows = [];         // メルカリの注文番号形式の行（一括発送通知用CSV生成へ回す）
-  const excludedOther = [];       // Amazon・楽天市場・ヤフショ・メルカリのいずれの形式でもない行
+  const qoo10Rows = [];           // Qoo10 のお客様管理番号形式の行（一括発送用CSV生成へ回す）
+  const excludedOther = [];       // Amazon・楽天市場・ヤフショ・メルカリ・Qoo10 のいずれの形式でもない行
   const yahooRe = yahooOrderIdRe();   // ストアアカウントが未設定なら null（ヤフショとして振り分けない）
   let shipDateStr = '';
 
@@ -1153,6 +1196,10 @@ function convertToShipmentNotify(csvText) {
     if (!AMAZON_ORDER_ID_RE.test(orderId)) {
       if (RAKUTEN_ORDER_ID_RE.test(orderId)) {
         rakutenRows.push({ orderNumber: orderId, trackingRaw, shipDateRaw: dateRaw });
+      } else if (QOO10_ORDER_ID_RE.test(orderId)) {
+        // Qoo10：お客様管理番号の形だけで振り分ける（ご依頼主名は見ない）。ヤフショより先に判定する（ストアアカウントが qoo10 でも混ざらない）。
+        // 配送会社は送り状種類から決めるため invoiceType も渡す
+        qoo10Rows.push({ orderNumber: orderId, trackingRaw, shipDateRaw: dateRaw, invoiceType });
       } else if (yahooRe && yahooRe.test(orderId)) {
         yahooRows.push({ orderNumber: orderId, trackingRaw, shipDateRaw: dateRaw });
       } else if (MERCARI_ORDER_ID_RE.test(orderId)) {
@@ -1189,8 +1236,9 @@ function convertToShipmentNotify(csvText) {
     }
   }
 
-  // Amazon分が0件でも楽天分・ヤフショ分・メルカリ分・除外分があれば処理は継続する（楽天・ヤフショ・メルカリのみのファイルを止めない）。
-  if (storeOrderMaps.size === 0 && rakutenRows.length === 0 && yahooRows.length === 0 && mercariRows.length === 0 && excludedOther.length === 0) {
+  // Amazon分が0件でも楽天分・ヤフショ分・メルカリ分・Qoo10分・除外分があれば処理は継続する（楽天・ヤフショ・メルカリ・Qoo10のみのファイルを止めない）。
+  if (storeOrderMaps.size === 0 && rakutenRows.length === 0 && yahooRows.length === 0 && mercariRows.length === 0 && qoo10Rows.length === 0
+      && excludedOther.length === 0) {
     throw new Error('有効なデータ行が見つかりません');
   }
 
@@ -1201,7 +1249,7 @@ function convertToShipmentNotify(csvText) {
     const dataRows = Array.from(orderMap.values());
     results.push({ store, storeKey, dataRows, shipDateStr, prefix });
   }
-  return { results, rakutenRows, yahooRows, mercariRows, excludedOther };
+  return { results, rakutenRows, yahooRows, mercariRows, qoo10Rows, excludedOther };
 }
 
 // ============================================================
@@ -1355,14 +1403,14 @@ function thumbInner(sku) {
 }
 
 // ============================================================
-// ピッキング帳票（Amazon＋楽天市場＋ヤフショ＋メルカリ 統合・1文書1ボタン）
+// ピッキング帳票（Amazon＋楽天市場＋ヤフショ＋メルカリ＋Qoo10 統合・1文書1ボタン）
 // 出力は2セクション：
 //   1) 商品別合計   … A4縦・1段（@page portraitPage）。棚を回る用。
 //   2) 梱包・発送明細 … A4横・2段組み（@page landscapePage）。詰め・照合用。
 // 用紙の向きと段組みを変えているのは、2つの帳票がよく似ていて現場が取り違えるため。
 // 表そのものはモール別に分けたまま（SKU体系が異なるため統合しない）。
-// G番号は Amazon=A-NNN／楽天市場=R-NNN／ヤフショ=Y-NNN／メルカリ=M-NNN で名前空間を分ける（採番ロジックは各モール側のまま。
-// ヤフショ・メルカリは楽天の採番（buildRakutenPickingData）を接頭辞 Y-・M- で使う）。
+// G番号は Amazon=A-NNN／楽天市場=R-NNN／ヤフショ=Y-NNN／メルカリ=M-NNN／Qoo10=Q-NNN で名前空間を分ける（採番ロジックは各モール側のまま。
+// ヤフショ・メルカリ・Qoo10 は楽天の採番（buildRakutenPickingData）を接頭辞 Y-・M-・Q- で使う）。
 // ============================================================
 
 // 楽天市場の店舗コード。梱包・発送明細と商品別合計の黒帯に出す表示名で、
@@ -1382,6 +1430,9 @@ const YAHOO_STORE_NAME = 'まいど萬福堂';
 // メルカリの帳票の黒帯・一覧に出す店舗の表示名（ショップ名。2026-11-11 ショップ管理画面で確認）。
 // 送り状に印字されるご依頼主名（依頼主設定のメルカリ欄 loadMercariSender().name）とは別物（ヤフショの YAHOO_STORE_NAME と同じ作り）。
 const MERCARI_STORE_NAME = 'まいど萬福堂';
+// Qoo10 の帳票の黒帯・一覧に出す店舗の表示名（ショップ名。2026-11-13 QSM の画面で確認済み）。
+// 送り状に印字されるご依頼主名（依頼主設定の Qoo10 欄 loadQoo10Sender().name）とは別物（メルカリの MERCARI_STORE_NAME と同じ作り）。
+const QOO10_STORE_NAME = 'まいど萬福堂';
 // Amazon：店舗名（'／' 区切り）の各名前の末尾の「（Amazon）」を外す。名前の途中の「（Amazon）」は外さない
 function amazonStoreDisplayNames(names) {
   return String(names == null ? '' : names).replace(/（Amazon）(?=／|$)/g, '');
@@ -1406,12 +1457,12 @@ function amazonStoreDisplayNames(names) {
 // 宅急便コンパクト・ネコポス）に個口数で申告する（Kaz 確定 2026-10-29）。「送り状なし」「本日出荷しない」は個口数を数えない。
 //   parcels … { nekopos, compact, takkyubin, clickpost, yamato, orders }
 //             yamato＝宅急便＋コンパクト＋ネコポス／orders＝yamato＋クリックポスト（送り状なし・本日出荷しないを含まない）
-// ヤフショ（yahoo）・メルカリ（mercari）は楽天と同じ数え方（確定値 yahooResolvedMethod／mercariResolvedMethod。
-// 不明は宅急便へ寄せて unknown に数える）。戻り値に yahoo・mercari を足す。
-function buildShipMethodSummary(amazon, rakuten, yahoo, mercari) {
+// ヤフショ（yahoo）・メルカリ（mercari）・Qoo10（qoo10）は楽天と同じ数え方（確定値 yahooResolvedMethod／mercariResolvedMethod／
+// qoo10ResolvedMethod。不明は宅急便へ寄せて unknown に数える）。戻り値に yahoo・mercari・qoo10 を足す。
+function buildShipMethodSummary(amazon, rakuten, yahoo, mercari, qoo10) {
   const zero = () => ({ nekopos: 0, compact: 0, takkyubin: 0, unknown: 0, clickpost: 0, none: 0, skip: 0, yamato: 0, orders: 0,
     parcels: { nekopos: 0, compact: 0, takkyubin: 0, clickpost: 0, yamato: 0, orders: 0 } });
-  const a = zero(), r = zero(), y = zero(), mc = zero();
+  const a = zero(), r = zero(), y = zero(), mc = zero(), q = zero();
   const add = (x, k, n) => { x[k]++; if (k !== 'none' && k !== 'skip') x.parcels[k] += n; };
   for (const o of ((amazon && amazon.single) || [])) {
     const m = amazonResolvedMethod(o), n = amazonParcelCount(o);
@@ -1452,8 +1503,18 @@ function buildShipMethodSummary(amazon, rakuten, yahoo, mercari) {
     else if (m === MERCARI_CLICKPOST) add(mc, 'clickpost', n);
     else { add(mc, 'takkyubin', n); mc.unknown++; }   // 楽天と同じ
   }
+  for (const o of ((qoo10 && qoo10.orders) || [])) {
+    const m = qoo10ResolvedMethod(o), n = qoo10ParcelCount(o);
+    if (m === QOO10_NEKOPOS)        add(q, 'nekopos', n);
+    else if (m === QOO10_COMPACT)   add(q, 'compact', n);
+    else if (m === QOO10_TAKKYUBIN) add(q, 'takkyubin', n);
+    else if (m === QOO10_NONE)      add(q, 'none', n);
+    else if (m === QOO10_SKIP)      add(q, 'skip', n);
+    else if (m === QOO10_CLICKPOST) add(q, 'clickpost', n);
+    else { add(q, 'takkyubin', n); q.unknown++; }   // 楽天と同じ
+  }
   const all = zero();
-  for (const x of [a, r, y, mc]) {
+  for (const x of [a, r, y, mc, q]) {
     x.yamato = x.nekopos + x.compact + x.takkyubin;
     x.orders = x.yamato + x.clickpost + x.none + x.skip;
     x.parcels.yamato = x.parcels.nekopos + x.parcels.compact + x.parcels.takkyubin;
@@ -1461,7 +1522,7 @@ function buildShipMethodSummary(amazon, rakuten, yahoo, mercari) {
     for (const k of Object.keys(all)) if (k !== 'parcels') all[k] += x[k];
     for (const k of Object.keys(all.parcels)) all.parcels[k] += x.parcels[k];
   }
-  return { amazon: a, rakuten: r, yahoo: y, mercari: mc, all };
+  return { amazon: a, rakuten: r, yahoo: y, mercari: mc, qoo10: q, all };
 }
 
 // 梱包・発送明細の行番号（001…）と、複数商品注文の識別子（複-01…）。
@@ -1475,9 +1536,12 @@ function buildShipMethodSummary(amazon, rakuten, yahoo, mercari) {
 // itemMgmtNo＝ItemId）。ヤフショは楽天とは別に束ねる。
 // メルカリ（mercari）はヤフショの続き（並び Amazon→楽天→ヤフショ→メルカリ）。束ね方・商品キーは楽天と同じ（メルカリの sku＝variant_id、
 // itemMgmtNo は空）。メルカリは他のモールとは別に束ねる。
-// 戻り値 { rows:[{ no, mall:'amazon'|'rakuten'|'yahoo'|'mercari', storeIndex, orderId, multi }], amazonGroups, rakutenGroups, yahooGroups, mercariGroups }
+// Qoo10（qoo10）はメルカリの続き（並び Amazon→楽天→ヤフショ→メルカリ→Qoo10）。束ね方・商品キーは楽天と同じ（Qoo10 の sku＝クラスタキー
+// （販売者商品コード、空なら 商品番号:オプションコード）、itemMgmtNo は空。1件＝1カート）。Qoo10 は他のモールとは別に束ねる。
+// 戻り値 { rows:[{ no, mall:'amazon'|'rakuten'|'yahoo'|'mercari'|'qoo10', storeIndex, orderId, multi }], amazonGroups, rakutenGroups, yahooGroups,
+//          mercariGroups, qoo10Groups }
 //   *Groups … [{ id, count, lines:[{num, quantity, name}] }]（番号順）
-function buildMultiGroups(amazon, rakuten, yahoo, mercari) {
+function buildMultiGroups(amazon, rakuten, yahoo, mercari, qoo10) {
   const lineKeyA = l => l.sku || '';
   const lineKeyR = l => (l.sku || '') + '\u001f' + (l.itemMgmtNo || '');
   const items = [];
@@ -1485,6 +1549,7 @@ function buildMultiGroups(amazon, rakuten, yahoo, mercari) {
   for (const o of (rakuten ? (rakuten.orders || []) : [])) items.push({ mall: 'rakuten', storeIndex: null, orderId: o.orderNumber, lines: o.lines || [] });
   for (const o of (yahoo ? (yahoo.orders || []) : [])) items.push({ mall: 'yahoo', storeIndex: null, orderId: o.orderNumber, lines: o.lines || [] });
   for (const o of (mercari ? (mercari.orders || []) : [])) items.push({ mall: 'mercari', storeIndex: null, orderId: o.orderNumber, lines: o.lines || [] });
+  for (const o of (qoo10 ? (qoo10.orders || []) : [])) items.push({ mall: 'qoo10', storeIndex: null, orderId: o.orderNumber, lines: o.lines || [] });
 
   const groups = [];          // 出てきた順
   const byKey = new Map();    // mall + 中身 → group
@@ -1506,34 +1571,40 @@ function buildMultiGroups(amazon, rakuten, yahoo, mercari) {
   const rows = items.map((it, i) => ({ no: String(i + 1).padStart(noWidth, '0'), mall: it.mall, storeIndex: it.storeIndex,
     orderId: it.orderId, multi: it.group ? it.group.id : '' }));
   return { rows, amazonGroups: groups.filter(g => g.mall === 'amazon'), rakutenGroups: groups.filter(g => g.mall === 'rakuten'),
-           yahooGroups: groups.filter(g => g.mall === 'yahoo'), mercariGroups: groups.filter(g => g.mall === 'mercari') };
+           yahooGroups: groups.filter(g => g.mall === 'yahoo'), mercariGroups: groups.filter(g => g.mall === 'mercari'),
+           qoo10Groups: groups.filter(g => g.mall === 'qoo10') };
 }
 
 // 統合ピッキング帳票の印刷用HTML。
 //   amazon  … { total, single, multiCount, storeNames } ／ 注文が無い・未読込なら null でもよい
 //   rakuten … { total, orders, multiCount, storeName }  ／ 同上
 //   load    … 読込状態 { amazon: { loaded:[店舗名…], missing:[店舗名…] }, rakuten: 'complete'|'none', yahoo: 'complete'|'none',
-//             mercari: 'complete'|'none' }（s1ConvertRun が作る）。省略時はデータの有無で読込済みとみなす。
+//             mercari: 'complete'|'none', qoo10: 'complete'|'none' }（s1ConvertRun が作る）。省略時はデータの有無で読込済みとみなす。
 //   yahoo   … { total, orders, multiCount, storeName }（楽天と同じ形）／ 同上。後から足した引数のため末尾に置く
 //   mercari … { total, orders, multiCount, storeName }（楽天と同じ形）／ 同上。後から足した引数のため末尾に置く
-// 帳票には常に Amazon・楽天市場・ヤフショ・メルカリの4モールを出す（Kaz 確定 2026-10-29。ヤフショは 2026-11-10、メルカリは 2026-11-11）。
-// 読込済みで0件なら「注文：0件」、未読込なら「未読込」の黒帯と終わりの線だけを出す（表は出さない）。配送方法別内訳も常に4モールの列を出す。
-function renderCombinedPickingHTML(amazon, rakuten, seq, load, yahoo, mercari) {
+//   qoo10   … { total, orders, multiCount, storeName }（楽天と同じ形。1件＝1カート）／ 同上。後から足した引数のため末尾に置く
+// 帳票には常に Amazon・楽天市場・ヤフショ・メルカリ・Qoo10 の5モールを出す（Kaz 確定 2026-10-29。ヤフショは 2026-11-10、メルカリは 2026-11-11、
+// Qoo10 は 2026-11-13）。読込済みで0件なら「注文：0件」、未読込なら「未読込」の黒帯と終わりの線だけを出す（表は出さない）。
+// 配送方法別内訳も常に5モールの列を出す。
+function renderCombinedPickingHTML(amazon, rakuten, seq, load, yahoo, mercari, qoo10) {
   const aLoaded = load ? load.amazon.loaded.length > 0 : !!amazon;
   const rLoaded = load ? load.rakuten === 'complete' : !!rakuten;
   const yLoaded = load ? load.yahoo === 'complete' : !!yahoo;
   const mLoaded = load ? load.mercari === 'complete' : !!mercari;
+  const qLoaded = load ? load.qoo10 === 'complete' : !!qoo10;
   // 読込済みでデータが無い（変換できる注文が0件・照合で全部除外）ときは空のデータとして扱う
   if (!amazon && aLoaded) amazon = { total: [], single: [], multiCount: 0, storeNames: load.amazon.loaded.join('／') };
   if (!rakuten && rLoaded) rakuten = { total: [], orders: [], multiCount: 0, storeName: RAKUTEN_STORE_CODES.join('／') };
   if (!yahoo && yLoaded) yahoo = { total: [], orders: [], multiCount: 0, storeName: YAHOO_STORE_NAME };
   if (!mercari && mLoaded) mercari = { total: [], orders: [], multiCount: 0, storeName: MERCARI_STORE_NAME };
+  if (!qoo10 && qLoaded) qoo10 = { total: [], orders: [], multiCount: 0, storeName: QOO10_STORE_NAME };
   if (!aLoaded) amazon = null;
   if (!rLoaded) rakuten = null;
   if (!yLoaded) yahoo = null;
   if (!mLoaded) mercari = null;
+  if (!qLoaded) qoo10 = null;
   // 行番号・識別子（画面の一覧と同じ結果を渡されたらそれを使う）
-  seq = seq || buildMultiGroups(amazon, rakuten, yahoo, mercari);
+  seq = seq || buildMultiGroups(amazon, rakuten, yahoo, mercari, qoo10);
   const seqByOrder = new Map(seq.rows.map(r => [r.mall + '\u001e' + r.orderId, r]));
   const esc = s => String(s == null ? '' : s)
     .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
@@ -1581,14 +1652,17 @@ function renderCombinedPickingHTML(amazon, rakuten, seq, load, yahoo, mercari) {
   const isSkipR = o => rakutenResolvedMethod(o) === RAKUTEN_SKIP;
   const isSkipY = o => yahooResolvedMethod(o) === YAHOO_SKIP;
   const isSkipM = o => mercariResolvedMethod(o) === MERCARI_SKIP;
+  const isSkipQ = o => qoo10ResolvedMethod(o) === QOO10_SKIP;
   const aPickOrders = amazon ? (amazon.single || []).filter(o => !isSkipA(o)) : [];
   const rPickOrders = rakuten ? (rakuten.orders || []).filter(o => !isSkipR(o)) : [];
   const yPickOrders = yahoo ? (yahoo.orders || []).filter(o => !isSkipY(o)) : [];
   const mPickOrders = mercari ? (mercari.orders || []).filter(o => !isSkipM(o)) : [];
+  const qPickOrders = qoo10 ? (qoo10.orders || []).filter(o => !isSkipQ(o)) : [];
   const aSkip = amazon ? (amazon.single || []).length - aPickOrders.length : 0;
   const rSkip = rakuten ? (rakuten.orders || []).length - rPickOrders.length : 0;
   const ySkip = yahoo ? (yahoo.orders || []).length - yPickOrders.length : 0;
   const mSkip = mercari ? (mercari.orders || []).length - mPickOrders.length : 0;
+  const qSkip = qoo10 ? (qoo10.orders || []).length - qPickOrders.length : 0;
   // 商品別集計の行（単一商品注文のクラスタ）を残った注文で数え直す。並び・G番号は元の total のまま（B2記事欄と同じ値）。
   // その注文にしか無い商品は行ごと出さない。数え方は buildPickingItems／buildRakutenPickingData と同じ
   const pickSums = (orders, keyOf) => {
@@ -1618,6 +1692,10 @@ function renderCombinedPickingHTML(amazon, rakuten, seq, load, yahoo, mercari) {
   const mPickTotal = !mSkip ? ((mercari && mercari.total) || []) : (() => {
     const sums = pickSums(mPickOrders, l => (l.sku || '') + '\u001f' + (l.itemMgmtNo || ''));
     return (mercari.total || []).filter(t => sums.has(t.clusterKey)).map(t => ({ ...t, ...sums.get(t.clusterKey) }));
+  })();
+  const qPickTotal = !qSkip ? ((qoo10 && qoo10.total) || []) : (() => {
+    const sums = pickSums(qPickOrders, l => (l.sku || '') + '\u001f' + (l.itemMgmtNo || ''));
+    return (qoo10.total || []).filter(t => sums.has(t.clusterKey)).map(t => ({ ...t, ...sums.get(t.clusterKey) }));
   })();
   // 表の直後に出す一文（赤）。0件なら出さない
   const skipNote = n => n ? `
@@ -1669,6 +1747,12 @@ function renderCombinedPickingHTML(amazon, rakuten, seq, load, yahoo, mercari) {
     const k = (o.lines[0].sku || '') + '\u001f' + (o.lines[0].itemMgmtNo || '');
     mercariKeyParcels.set(k, (mercariKeyParcels.get(k) || 0) + mercariParcelCount(o));
   }
+  const qoo10KeyParcels = new Map();  // クラスタキー → 個口数の合計（楽天と同じ）
+  for (const o of qPickOrders) {
+    if ((o.lines || []).length !== 1) continue;
+    const k = (o.lines[0].sku || '') + '\u001f' + (o.lines[0].itemMgmtNo || '');
+    qoo10KeyParcels.set(k, (qoo10KeyParcels.get(k) || 0) + qoo10ParcelCount(o));
+  }
   // 複数商品注文の識別子（複-01…）→ 個口数の合計。buildMultiGroups の結果（seq）は変えずに描画側で数える。
   // 「本日出荷しない」の注文は商品別集計に載せないため数えない（multiOrders＝識別子ごとの残った注文数）
   const multiParcels = new Map();
@@ -1678,13 +1762,15 @@ function renderCombinedPickingHTML(amazon, rakuten, seq, load, yahoo, mercari) {
     const rById = new Map(((rakuten && rakuten.orders) || []).map(o => [o.orderNumber, o]));
     const yById = new Map(((yahoo && yahoo.orders) || []).map(o => [o.orderNumber, o]));
     const mById = new Map(((mercari && mercari.orders) || []).map(o => [o.orderNumber, o]));
+    const qById = new Map(((qoo10 && qoo10.orders) || []).map(o => [o.orderNumber, o]));
     for (const r of seq.rows) {
       if (!r.multi) continue;
       const o = r.mall === 'amazon' ? aById.get(r.orderId) : r.mall === 'yahoo' ? yById.get(r.orderId)
-        : r.mall === 'mercari' ? mById.get(r.orderId) : rById.get(r.orderId);
-      if (o && (r.mall === 'amazon' ? isSkipA(o) : r.mall === 'yahoo' ? isSkipY(o) : r.mall === 'mercari' ? isSkipM(o) : isSkipR(o))) continue;
+        : r.mall === 'mercari' ? mById.get(r.orderId) : r.mall === 'qoo10' ? qById.get(r.orderId) : rById.get(r.orderId);
+      if (o && (r.mall === 'amazon' ? isSkipA(o) : r.mall === 'yahoo' ? isSkipY(o) : r.mall === 'mercari' ? isSkipM(o)
+        : r.mall === 'qoo10' ? isSkipQ(o) : isSkipR(o))) continue;
       const n = r.mall === 'amazon' ? amazonParcelCount(o) : r.mall === 'yahoo' ? yahooParcelCount(o)
-        : r.mall === 'mercari' ? mercariParcelCount(o) : rakutenParcelCount(o);
+        : r.mall === 'mercari' ? mercariParcelCount(o) : r.mall === 'qoo10' ? qoo10ParcelCount(o) : rakutenParcelCount(o);
       multiParcels.set(r.multi, (multiParcels.get(r.multi) || 0) + n);
       multiOrders.set(r.multi, (multiOrders.get(r.multi) || 0) + 1);
     }
@@ -1708,11 +1794,13 @@ function renderCombinedPickingHTML(amazon, rakuten, seq, load, yahoo, mercari) {
   const rOrders = rakuten ? (rakuten.orders || []).length : 0;
   const yOrders = yahoo ? (yahoo.orders || []).length : 0;
   const mOrders = mercari ? (mercari.orders || []).length : 0;
+  const qOrders = qoo10 ? (qoo10.orders || []).length : 0;
   // 商品別集計の見出し・終端線の注文数（本日出荷しないを除く）
   const aPick = aPickOrders.length;
   const rPick = rPickOrders.length;
   const yPick = yPickOrders.length;
   const mPick = mPickOrders.length;
+  const qPick = qPickOrders.length;
 
   // 黒帯の見出し：{種別}（{モール} {店舗名}） 注文：{N}件。店舗名が空なら（{モール}）だけ。未読込（n が null）なら「… 未読込」
   const mallHead = (kind, mall, names, n) => {
@@ -1730,6 +1818,7 @@ function renderCombinedPickingHTML(amazon, rakuten, seq, load, yahoo, mercari) {
   const rakutenBandName = rakutenStoreDisplayName(rakuten ? rakuten.storeName : RAKUTEN_STORE_CODES.join('／'));
   const yahooBandName = (yahoo && yahoo.storeName) || YAHOO_STORE_NAME;
   const mercariBandName = (mercari && mercari.storeName) || MERCARI_STORE_NAME;
+  const qoo10BandName = (qoo10 && qoo10.storeName) || QOO10_STORE_NAME;
   // 0件・未読込のモールは黒帯と終わりの線だけ（表は出さない）。note＝黒帯と終わりの線の間に置く一文（本日出荷しないだけの日）
   const emptySection = (kind, mall, names, n, note = '') => `
   ${band(mallHead(kind, mall, names, n))}${note}
@@ -1890,6 +1979,35 @@ function renderCombinedPickingHTML(amazon, rakuten, seq, load, yahoo, mercari) {
   </table>${skipNote(mSkip)}
   ${mallEnd('メルカリ', mPick)}`;
 
+  // Qoo10：メルカリと同じ作り（商品キー＝クラスタキー（販売者商品コード、空なら 商品番号:オプションコード）、印の並び・色、複数商品の集約行）。
+  // 配送方法の値は楽天と同じ文字列（QOO10_* ＝ RAKUTEN_*）のため、印は rakutenMethodBadge をそのまま使う。
+  const qoo10SkuMethods = new Map();   // clusterKey → Set<配送方法>
+  for (const o of qPickOrders) {
+    const m = qoo10ResolvedMethod(o);
+    for (const l of o.lines) {
+      const k = rakutenClusterKey(l);
+      if (!qoo10SkuMethods.has(k)) qoo10SkuMethods.set(k, new Set());
+      qoo10SkuMethods.get(k).add(m);
+    }
+  }
+  const qoo10ShipBadges = (clusterKey) => {
+    const s = qoo10SkuMethods.get(clusterKey);
+    if (!s) return '';
+    return RAKUTEN_BADGE_ORDER.filter(m => s.has(m)).map(rakutenMethodBadge).join('');
+  };
+  const qoo10TotalSection = !qoo10 ? emptySection('商品別集計', 'Qoo10', qoo10BandName, null)
+    : !qPick ? emptySection('商品別集計', 'Qoo10', qoo10BandName, 0, skipNote(qSkip)) : `
+  ${band(mallHead('商品別集計', 'Qoo10', qoo10BandName, qPick))}
+  <table class="total">
+    ${TOTAL_COLGROUP}
+    ${totalHead('商品名（商品コード）')}
+    <tbody>${qPickTotal.map(t => {
+      const parcels = qoo10KeyParcels.has(t.clusterKey) ? qoo10KeyParcels.get(t.clusterKey) : t.orderCount;
+      return `<tr><td class="thumb-cell">${thumbInner(t.sku)}</td><td class="num">${esc(t.num)}</td><td class="${qtyCellCls(t.totalQty, parcels)}">${esc(t.totalQty)}</td><td class="cnt">${cntInner(parcels, t.orderCount)}</td><td class="name">${rakutenNameCell(t.name, t.skuInfo, t.sku)}${t.dupWarning ? RAKUTEN_DUP_BADGE : ''}${qoo10ShipBadges(t.clusterKey)}</td></tr>`;
+    }).join('')}${multiGroupRows(seq.qoo10Groups)}</tbody>
+  </table>${skipNote(qSkip)}
+  ${mallEnd('Qoo10', qPick)}`;
+
   // ---- 梱包・発送明細（A4横・2段組み） ----
   const detailHead = `<thead><tr><th class="thumb-cell">画像</th><th class="num">G番号</th><th class="qty">数量</th><th class="name">商品名</th></tr></thead>`;
 
@@ -1960,17 +2078,34 @@ function renderCombinedPickingHTML(amazon, rakuten, seq, load, yahoo, mercari) {
   }).join('')}</div>
   ${mallEnd('メルカリ', mOrders)}`;
 
+  // Qoo10：メルカリと同じ作り。見出しはお客様管理番号（qoo10-カート番号）と、そのカートの注文番号の一覧
+  const qoo10DetailSection = !qoo10 ? emptySection('梱包・発送明細', 'Qoo10', qoo10BandName, null)
+    : !qOrders ? emptySection('梱包・発送明細', 'Qoo10', qoo10BandName, 0) : `
+  ${band(mallHead('梱包・発送明細', 'Qoo10', qoo10BandName, qOrders))}
+  <div class="detail-cols">${(qoo10.orders || []).map(o => {
+    const rows = o.lines.map(l =>
+      `<tr><td class="thumb-cell">${thumbInner(l.sku)}</td><td class="num">${esc(l.num)}</td><td class="qty">${esc(l.quantity)}</td><td class="name">${esc(l.name)}${l.skuInfo ? ` <span class="skuinfo">${esc(l.skuInfo)}</span>` : ''}</td></tr>`
+    ).join('');
+    const qm = qoo10ResolvedMethod(o);
+    return `<section class="order">
+      <h2>${detailNo('qoo10', o.orderNumber)}${esc(o.orderNumber)}${rakutenMethodBadge(qm)}${parcelTag(qoo10ParcelCount(o))}${detailMulti('qoo10', o.orderNumber)}</h2>
+      <div class="q-orders">注文番号：${esc((o.orderNos || []).join(' ／ '))}</div>
+      <table>${detailHead}<tbody>${rows}</tbody></table>
+    </section>`;
+  }).join('')}</div>
+  ${mallEnd('Qoo10', qOrders)}`;
+
   // ---- 配送方法別内訳（1表）----
-  // 以前の2表（ヤマト集荷依頼 申告数／モール別内訳）を1表にまとめた。列は Amazon・楽天市場・ヤフショ・メルカリ・合計・個口数（常に4モール）。
-  const ship = buildShipMethodSummary(amazon, rakuten, yahoo, mercari);
+  // 以前の2表（ヤマト集荷依頼 申告数／モール別内訳）を1表にまとめた。列は Amazon・楽天市場・ヤフショ・メルカリ・Qoo10・合計・個口数（常に5モール）。
+  const ship = buildShipMethodSummary(amazon, rakuten, yahoo, mercari, qoo10);
   // 未読込のモールの列は見出しに「（未読込）」を添え、数値は「—」。合計・個口数は読込済みの分だけ（未読込のデータは空）
   const shipCols = [['Amazon', ship.amazon, aLoaded], ['楽天市場', ship.rakuten, rLoaded], ['ヤフショ', ship.yahoo, yLoaded],
-    ['メルカリ', ship.mercari, mLoaded], ['合計', ship.all, true]];
+    ['メルカリ', ship.mercari, mLoaded], ['Qoo10', ship.qoo10, qLoaded], ['合計', ship.all, true]];
   // 合計（注文数）＝梱包・発送明細の「合計 N注文」。同じ値（ship.all.orders）から組む＝ずれない
   const allOrders = ship.all.orders;
   const detailSummary = `合計 ${allOrders}注文`
     + `（Amazon ${aLoaded ? aOrders : '未読込'} ／ 楽天市場 ${rLoaded ? rOrders : '未読込'} ／ ヤフショ ${yLoaded ? yOrders : '未読込'}`
-    + ` ／ メルカリ ${mLoaded ? mOrders : '未読込'}）`;
+    + ` ／ メルカリ ${mLoaded ? mOrders : '未読込'} ／ Qoo10 ${qLoaded ? qOrders : '未読込'}）`;
   // ヤマトへの申告は配送方法の種類ごとに個口数で行う（Kaz 確定 2026-10-29）。実際の数を埋め込む
   const sp = ship.all.parcels;
   const shipNote = `※ヤマトへの集荷依頼は、配送方法の種類ごとに「個口数」の数で申告してください（宅急便 ${sp.takkyubin}口・宅急便コンパクト ${sp.compact}口・ネコポス ${sp.nekopos}口）。`
@@ -2014,7 +2149,7 @@ function renderCombinedPickingHTML(amazon, rakuten, seq, load, yahoo, mercari) {
   let totalHtml = '';
   let prevHas = false;
   for (const [html, has] of [[amazonTotalSection, aPick > 0], [rakutenTotalSection, rPick > 0], [yahooTotalSection, yPick > 0],
-                             [mercariTotalSection, mPick > 0]]) {
+                             [mercariTotalSection, mPick > 0], [qoo10TotalSection, qPick > 0]]) {
     totalHtml += (has && prevHas) ? `\n  <div class="mall-keep">${html}\n  </div>` : html;
     prevHas = prevHas || has;
   }
@@ -2113,6 +2248,8 @@ function renderCombinedPickingHTML(amazon, rakuten, seq, load, yahoo, mercari) {
   .multi-tag { display:inline-block; margin-left:3mm; padding:0 1.5mm; border-radius:0.8mm;
                background:#333; color:#fff; font-size:10.5pt; font-weight:bold; white-space:nowrap;
                -webkit-print-color-adjust:exact; print-color-adjust:exact; }
+  /* Qoo10 の梱包・発送明細：見出し（お客様管理番号 qoo10-カート番号）の下に、そのカートの注文番号の一覧 */
+  .q-orders { font-size:10pt; font-weight:bold; margin:0 0 1mm; }
 
   /* 数量不一致（ピッキング合計 ≠ 出荷個口数）の印。ピッキング合計セルのみ黒地・白抜き。
      濃度は .mall-band と同じ #333 に揃える（純黒 #000 は使わない）。
@@ -2143,14 +2280,18 @@ function renderCombinedPickingHTML(amazon, rakuten, seq, load, yahoo, mercari) {
      字の大きさは変えない。見出しの字が入らない列（「楽天市場」「（未読込）」等）は見出しの幅まで広がる） */
   .sum-table td.n { text-align:right; width:19mm; font-size:18pt; font-weight:bold;
                     font-variant-numeric:tabular-nums; }
+  /* Qoo10 の列を足して7列にしたため、ヤマトに申告する個口数の列（td.pc）以外の数値列（モール別・合計）は 15mm・15pt、
+     その見出しは 10pt に小さくした（Kaz 了承済み：申告する部分以外は字を小さくしてよい）。個口数の列は 19mm・18pt のまま */
+  .sum-table td.n:not(.pc) { width:15mm; font-size:15pt; padding-left:2mm; padding-right:2mm; }
+  .sum-table th.n:not(.pc) { font-size:10pt; }
   .sum-table tr.grand th, .sum-table tr.grand td { background:#f2f2f2; font-weight:bold;
                     -webkit-print-color-adjust:exact; print-color-adjust:exact; }
   /* 数値列のヘッダは <br> の位置だけで折る。nowrap が無いと「（注文数）」が
      「（注文」「数）」に割れて3行になるため。あわせて左右パディングを詰め、
      26mm 幅のまま2行に収める（字は小さくしない）。 */
   .sum-table th.n { white-space:nowrap; padding-left:1mm; padding-right:1mm; }
-  /* 幅は中身なり（見出し列＋数値列19mm×列数）。全幅（100%）に伸ばすと数字が見出しから離れて読みにくい。
-     6列（Amazon・楽天市場・ヤフショ・メルカリ・合計・個口数）でも A4縦の本文幅180mmに収まる（試験で実寸を確認）。
+  /* 幅は中身なり（見出し列＋数値列×列数）。全幅（100%）に伸ばすと数字が見出しから離れて読みにくい。
+     7列（Amazon・楽天市場・ヤフショ・メルカリ・Qoo10・合計・個口数）でも A4縦の本文幅180mmに収まる（試験で実寸を確認）。
      見出しの左右の余白は 1mm（メルカリの列を足したときに 1.5mm から詰めた） */
   .sum-ship { width:auto; margin:0 0 3mm; }
   /* クリックポストの行の上を二重線にして、小計（ヤマト集荷依頼）までと区切る */
@@ -2249,7 +2390,7 @@ ${totalHtml}${summaryBlock}
         <p class="summary">${detailSummary}</p>
       </div>
     </div>
-${amazonDetailSection}${rakutenDetailSection}${yahooDetailSection}${mercariDetailSection}
+${amazonDetailSection}${rakutenDetailSection}${yahooDetailSection}${mercariDetailSection}${qoo10DetailSection}
   </div>
 </section>
 
@@ -2258,22 +2399,24 @@ ${amazonDetailSection}${rakutenDetailSection}${yahooDetailSection}${mercariDetai
 
 // 導線：STEP1 の結果エリアに統合ピッキング帳票の印刷ボタンを1つだけ置く。
 // 置き場所を #s1-results にしているのは、ここがモール切替ペイン（#s1-pane-amazon /
-// #s1-pane-rakuten / #s1-pane-yahoo / #s1-pane-mercari）の外側にあり、どのタブを選んでいても常に見える唯一の領域だから。
-// Amazon分・楽天市場分・ヤフショ分・メルカリ分のピッキングデータがそろうのは変換処理の中だけであるため、
+// #s1-pane-rakuten / #s1-pane-yahoo / #s1-pane-mercari / #s1-pane-qoo10）の外側にあり、どのタブを選んでいても常に見える唯一の領域だから。
+// Amazon分・楽天市場分・ヤフショ分・メルカリ分・Qoo10分のピッキングデータがそろうのは変換処理の中だけであるため、
 // 生成もそのタイミングで行う。
 // load＝読込状態（renderCombinedPickingHTML と同じ）。少なくとも1モールが読込済みなら、注文0件でも出す（ラベルは「（0注文）」）。
-// yahoo・mercari＝ヤフショ・メルカリのピッキングデータ（楽天と同じ形）。後から足した引数のため末尾に置く
-function renderCombinedPickingButton(amazon, rakuten, load, yahoo, mercari) {
+// yahoo・mercari・qoo10＝ヤフショ・メルカリ・Qoo10 のピッキングデータ（楽天と同じ形）。後から足した引数のため末尾に置く
+function renderCombinedPickingButton(amazon, rakuten, load, yahoo, mercari, qoo10) {
   const old = document.getElementById('picking-print-wrap');
   const aLoaded = load ? load.amazon.loaded.length > 0 : !!amazon;
   const rLoaded = load ? load.rakuten === 'complete' : !!rakuten;
   const yLoaded = load ? load.yahoo === 'complete' : !!yahoo;
   const mLoaded = load ? load.mercari === 'complete' : !!mercari;
-  if (!aLoaded && !rLoaded && !yLoaded && !mLoaded) { if (old) old.remove(); return; }
+  const qLoaded = load ? load.qoo10 === 'complete' : !!qoo10;
+  if (!aLoaded && !rLoaded && !yLoaded && !mLoaded && !qLoaded) { if (old) old.remove(); return; }
   if (!aLoaded) amazon = null;
   if (!rLoaded) rakuten = null;
   if (!yLoaded) yahoo = null;
   if (!mLoaded) mercari = null;
+  if (!qLoaded) qoo10 = null;
 
   const wrap = document.createElement('div');
   wrap.id = 'picking-print-wrap';
@@ -2285,17 +2428,18 @@ function renderCombinedPickingButton(amazon, rakuten, load, yahoo, mercari) {
   const orders = (amazon ? (amazon.single || []).length : 0)
                + (rakuten ? (rakuten.orders || []).length : 0)
                + (yahoo ? (yahoo.orders || []).length : 0)
-               + (mercari ? (mercari.orders || []).length : 0);
+               + (mercari ? (mercari.orders || []).length : 0)
+               + (qoo10 ? (qoo10.orders || []).length : 0);
   btn.textContent = `📋 ピッキングリスト＋梱包・発送明細を印刷（${orders}注文）`;
   // 行番号・識別子は帳票と画面の一覧で同じ結果を使う
-  const seq = buildMultiGroups(amazon, rakuten, yahoo, mercari);
+  const seq = buildMultiGroups(amazon, rakuten, yahoo, mercari, qoo10);
   btn.addEventListener('click', () => {
     const dateNum = ((document.getElementById('s1-shipDate') || {}).value || '').replace(/-/g, '');
-    printHtmlDocument(renderCombinedPickingHTML(amazon, rakuten, seq, load, yahoo, mercari),
+    printHtmlDocument(renderCombinedPickingHTML(amazon, rakuten, seq, load, yahoo, mercari, qoo10),
                       'ピッキングリスト' + (dateNum ? '_' + dateNum : ''));
   });
   wrap.appendChild(btn);
-  wrap.appendChild(renderPickingOrderList(seq, rakuten, yahoo, mercari));
+  wrap.appendChild(renderPickingOrderList(seq, rakuten, yahoo, mercari, qoo10));
   // 照合の後に対象を絞って作り直すときは、同じ位置で差し替える
   if (old && old.isConnected) old.replaceWith(wrap);
   else s1Results.appendChild(wrap);
@@ -2321,12 +2465,13 @@ async function pickingCopyText(text) {
 // 注文番号は画面からコピーできるようにする。行番号・識別子は帳票と同じ buildMultiGroups の結果。
 // 行番号の列は帳票と同じく全角括弧で括る（例「（001）」）。見出しの範囲表示と［注文番号を全件コピー］は数字だけのまま。
 // 注文番号以外の個人情報（氏名・住所等）は出さない。
-function renderPickingOrderList(seq, rakuten, yahoo, mercari) {
+function renderPickingOrderList(seq, rakuten, yahoo, mercari, qoo10) {
   const stores = loadStores();
   const mallStore = r => r.mall === 'amazon'
     ? `Amazon（${essStoreShort((stores[r.storeIndex] || {}).name)}）`
     : r.mall === 'yahoo' ? `ヤフショ${yahoo && yahoo.storeName ? `（${yahoo.storeName}）` : ''}`
     : r.mall === 'mercari' ? `メルカリ${mercari && mercari.storeName ? `（${mercari.storeName}）` : ''}`
+    : r.mall === 'qoo10' ? `Qoo10${qoo10 && qoo10.storeName ? `（${qoo10.storeName}）` : ''}`
     : `楽天市場${rakuten && rakuten.storeName ? `（${rakuten.storeName}）` : ''}`;
   const det = document.createElement('details');
   det.id = 'picking-order-list';
@@ -2380,7 +2525,7 @@ document.querySelectorAll('.tab').forEach(tab => {
 // ============================================================
 // モール切替（STEP1/STEP2内のセグメントスイッチ。上部タブとは独立）
 // 表示ペインの切り替えのみを行う。入力済みデータ・変換結果は保持され、
-// 複数のモール（Amazon・楽天市場・ヤフショ・メルカリ）にファイルを入れた状態で変換すれば1ファイルに統合される挙動は不変。
+// 複数のモール（Amazon・楽天市場・ヤフショ・メルカリ・Qoo10）にファイルを入れた状態で変換すれば1ファイルに統合される挙動は不変。
 // ============================================================
 function wireMallSwitch(switchId, panes) {
   const sw = document.getElementById(switchId);
@@ -2394,7 +2539,8 @@ function wireMallSwitch(switchId, panes) {
     }
   }));
 }
-wireMallSwitch('s1-mall-switch', { amazon: 's1-pane-amazon', rakuten: 's1-pane-rakuten', yahoo: 's1-pane-yahoo', mercari: 's1-pane-mercari' });
+wireMallSwitch('s1-mall-switch', { amazon: 's1-pane-amazon', rakuten: 's1-pane-rakuten', yahoo: 's1-pane-yahoo', mercari: 's1-pane-mercari',
+  qoo10: 's1-pane-qoo10' });
 
 // ============================================================
 // Settings tab
@@ -2627,6 +2773,60 @@ function renderMercariSenderCard() {
   container.appendChild(card);
 }
 
+// Qoo10 のB2依頼主カード（メルカリのカードと同じ7項目）。初期値の考え方はメルカリと同じ：
+// 保存済みがあればその値。未保存なら電話/郵便/住所/建物は Amazon 店舗1から、店舗名は Qoo10 向けの文言、
+// 請求先顧客コード・運賃管理番号はプリセットしない（空）。
+function renderQoo10SenderCard() {
+  const container = document.getElementById('qoo10-settings-card');
+  if (!container) return;
+  container.innerHTML = '';
+  const a1 = loadStores()[0] || {};
+  const s = loadQoo10Sender() || {
+    name: 'まいど萬福堂 Qoo10',
+    tel: a1.tel || '', postal: a1.postal || '', address: a1.address || '', building: a1.building || '',
+    customerCode: '', fareCode: ''
+  };
+  const card = document.createElement('div');
+  card.className = 'store-card';
+  card.id = 'qoo10-sender-card';
+  card.innerHTML = `
+    <div class="store-card-header">
+      <span class="store-card-title">Qoo10（B2依頼主）</span>
+    </div>
+    <div class="store-card-grid">
+      <div class="field full">
+        <label>店舗名（依頼主名）</label>
+        <input type="text" data-field="name" value="${esc(s.name)}" placeholder="例：まいど萬福堂 Qoo10">
+      </div>
+      <div class="field">
+        <label>電話番号（ハイフンなし）</label>
+        <input type="text" data-field="tel" value="${esc(s.tel)}" placeholder="例：0312345678">
+      </div>
+      <div class="field">
+        <label>郵便番号（ハイフンなし）</label>
+        <input type="text" data-field="postal" value="${esc(s.postal)}" placeholder="例：1000001">
+      </div>
+      <div class="field full">
+        <label>住所</label>
+        <input type="text" data-field="address" value="${esc(s.address)}" placeholder="例：東京都千代田区千代田1-1">
+      </div>
+      <div class="field full">
+        <label>会社名・建物名</label>
+        <input type="text" data-field="building" value="${esc(s.building)}" placeholder="例：株式会社○○">
+      </div>
+      <div class="field">
+        <label>請求先顧客コード</label>
+        <input type="text" data-field="customerCode" value="${esc(s.customerCode)}" placeholder="B2クラウドの契約情報を確認して入力">
+      </div>
+      <div class="field">
+        <label>運賃管理番号</label>
+        <input type="text" data-field="fareCode" value="${esc(s.fareCode)}" placeholder="B2クラウドの契約情報を確認して入力">
+      </div>
+    </div>
+  `;
+  container.appendChild(card);
+}
+
 function renderSettingsCards() {
   const container = document.getElementById('settings-cards');
   container.innerHTML = '';
@@ -2635,6 +2835,7 @@ function renderSettingsCards() {
   renderRakutenSenderCard();
   renderYahooSenderCard();
   renderMercariSenderCard();
+  renderQoo10SenderCard();
 }
 
 document.getElementById('add-store-btn').addEventListener('click', () => {
@@ -2709,6 +2910,15 @@ document.getElementById('save-settings-btn').addEventListener('click', () => {
       building: g('building'), customerCode: g('customerCode'), fareCode: g('fareCode'),
     });
   }
+  // Qoo10（B2依頼主・1店舗固定）：メルカリと同じく入力途中でも別キーへ保存する（必須の検査は使用時 getQoo10SenderStore）
+  const qcc = document.getElementById('qoo10-sender-card');
+  if (qcc) {
+    const g = f => ((qcc.querySelector(`[data-field="${f}"]`) || {}).value || '').trim();
+    saveQoo10Sender({
+      name: g('name'), tel: g('tel'), postal: g('postal'), address: g('address'),
+      building: g('building'), customerCode: g('customerCode'), fareCode: g('fareCode'),
+    });
+  }
 
   renderStep1Sections();
   // 店舗設定の控えを Drive に取る。essPreAuth はクリックの同期部分で呼ぶ（ハンドラは同期のまま）
@@ -2761,8 +2971,9 @@ function cpContentText(gNums, name) {
 }
 
 // クリックポストの対象1件（s1ConvertRun の cpRecs の要素）→ クリックポスト用CSVの1行（A〜H 列）。
-// mall が amazon 以外（楽天・ヤフショ・メルカリ）は src.recipient（楽天の形。ヤフショ・メルカリも parseYahooFiles／parseMercariFile が
-// 同じ形で持つ。メルカリの氏名は姓名が1つの欄のため lastName に全体を入れ firstName は空）から組む。
+// mall が amazon 以外（楽天・ヤフショ・メルカリ・Qoo10）は src.recipient（楽天の形。ヤフショ・メルカリ・Qoo10 も parseYahooFiles／
+// parseMercariFile／parseQoo10File が同じ形で持つ。メルカリ・Qoo10 の氏名は1つの欄のため lastName に全体を入れ firstName は空。
+// Qoo10 の住所は都道府県を切り出した残りを rest に持つ）から組む。
 // 戻り値 { ok:true, cells, warnings } または { ok:false, reason }。warnings は黄の警告（出力はする）。
 function buildClickpostRow(cpRec) {
   const src = cpRec.src || {};
@@ -2989,6 +3200,7 @@ const ESS_KINDS = {
   in_yahoo_order:   { sub: '01_入力',         label: '01', suffix: () => 'ヤフショ_注文情報.csv', mime: 'text/csv' },
   in_yahoo_item:    { sub: '01_入力',         label: '01', suffix: () => 'ヤフショ_商品情報.csv', mime: 'text/csv' },
   in_mercari_order: { sub: '01_入力',         label: '01', suffix: () => 'メルカリ_注文データ.csv', mime: 'text/csv' },
+  in_qoo10_delivery: { sub: '01_入力',        label: '01', suffix: () => 'Qoo10_配送管理.csv', mime: 'text/csv' },
   b2csv:            { sub: '02_B2用CSV',      label: '02', suffix: (s, o) => o.nomatch ? 'B2用CSV_照合なし.csv' : 'B2用CSV.csv', mime: 'text/csv' },
   issued:           { sub: '03_発行済データ', label: '03', suffix: () => '発行済データ.csv', mime: 'text/csv' },
   // 06：クリックポスト。cp_csv＝出力したクリックポスト用CSV（40件で分けたときは _{n}）／cp_out＝出力記録（照合キー付き）／
@@ -3280,32 +3492,35 @@ function essSaveFile(kind, store, bytes, origName, opts = {}) {
 // 店舗設定の控え（EC出荷記録/00_ツール設定）：純粋関数
 // ============================================================
 // 手元が空：店舗リストが空（配列でない値を含む）かつ楽天依頼主が null かつヤフショ依頼主が null かつメルカリ依頼主が null
+// かつ Qoo10 依頼主が null
 function essSettingsEmpty() {
   const s = loadStores();
   return (!Array.isArray(s) || s.length === 0) && loadRakutenSender() === null && loadYahooSender() === null
-    && loadMercariSender() === null;
+    && loadMercariSender() === null && loadQoo10Sender() === null;
 }
 // 比較用の正規化（キーの並びに依らない。savedAt・build は含めない）。
 // ヤフショ依頼主は null のときは含めない（ヤフショ欄が無い既存の控えと同じ値になる＝ヤフショを設定するまで控えを取り直さない）。
-// メルカリ依頼主も同じ（null のときは含めない＝メルカリを設定するまで控えを取り直さない）
-function essSettingsCanonical(stores, rakutenSender, yahooSender, mercariSender) {
+// メルカリ依頼主も同じ（null のときは含めない＝メルカリを設定するまで控えを取り直さない）。Qoo10 依頼主も同じ
+function essSettingsCanonical(stores, rakutenSender, yahooSender, mercariSender, qoo10Sender) {
   const sortObj = o => Object.fromEntries(Object.keys(o).sort().map(k => [k, o[k]]));
   const c = { stores: stores.map(sortObj), rakutenSender: rakutenSender ? sortObj(rakutenSender) : null };
   if (yahooSender) c.yahooSender = sortObj(yahooSender);
   if (mercariSender) c.mercariSender = sortObj(mercariSender);
+  if (qoo10Sender) c.qoo10Sender = sortObj(qoo10Sender);
   return JSON.stringify(c);
 }
-async function essSettingsSha256(stores, rakutenSender, yahooSender, mercariSender) {
-  return essSha256Hex(new TextEncoder().encode(essSettingsCanonical(stores, rakutenSender, yahooSender, mercariSender)));
+async function essSettingsSha256(stores, rakutenSender, yahooSender, mercariSender, qoo10Sender) {
+  return essSha256Hex(new TextEncoder().encode(essSettingsCanonical(stores, rakutenSender, yahooSender, mercariSender, qoo10Sender)));
 }
-// 控えのファイル。戻り値 { name, bytes, sha256, savedAt }。ヤフショ依頼主（yahooSender）・メルカリ依頼主（mercariSender）は無ければ null で書く
-async function essSettingsBuildFile(stores, rakutenSender, yahooSender, mercariSender) {
+// 控えのファイル。戻り値 { name, bytes, sha256, savedAt }。ヤフショ依頼主（yahooSender）・メルカリ依頼主（mercariSender）・
+// Qoo10 依頼主（qoo10Sender）は無ければ null で書く
+async function essSettingsBuildFile(stores, rakutenSender, yahooSender, mercariSender, qoo10Sender) {
   const st = essWorkStamp();
   const name = `${st.ymd}_${st.hms}_${ESS_SETTINGS_SUFFIX}`;
   const savedAt = `${st.date}T${st.hms.slice(0, 2)}:${st.hms.slice(2, 4)}:${st.hms.slice(4, 6)}+09:00`;
   const bytes = new TextEncoder().encode(JSON.stringify({ schema: ESS_SETTINGS_SCHEMA, savedAt, build: essBuildLabel(), stores, rakutenSender,
-    yahooSender: yahooSender || null, mercariSender: mercariSender || null }, null, 2) + '\n');
-  const sha256 = await essSettingsSha256(stores, rakutenSender, yahooSender, mercariSender);
+    yahooSender: yahooSender || null, mercariSender: mercariSender || null, qoo10Sender: qoo10Sender || null }, null, 2) + '\n');
+  const sha256 = await essSettingsSha256(stores, rakutenSender, yahooSender, mercariSender, qoo10Sender);
   return { name, bytes, sha256, savedAt };
 }
 // 新しい順：createdTime の降順、同じなら name の降順（どちらも文字列比較）。元の配列は変えない
@@ -3353,6 +3568,13 @@ function essSettingsValidate(obj) {
     const r = keysNg(obj.mercariSender, 'mercariSender');
     if (r) return ng(r);
   }
+  // Qoo10 依頼主：Qoo10 欄の無い控え（キーが無い・null。ヤフショ・メルカリ欄の有無は問わない）は Qoo10 欄が空として通す。
+  // ある控えは楽天・メルカリと同じ7キーを見る
+  if (obj.qoo10Sender !== undefined && obj.qoo10Sender !== null) {
+    if (!isObj(obj.qoo10Sender)) return ng('qoo10Sender：形が違う');
+    const r = keysNg(obj.qoo10Sender, 'qoo10Sender');
+    if (r) return ng(r);
+  }
   return { ok: true };
 }
 // 合格した控えの一覧の行の文字列
@@ -3363,7 +3585,9 @@ function essSettingsPickLabel(obj) {
   const rs = obj.rakutenSender ? `あり（${obj.rakutenSender.name}）` : 'なし';
   const ys = obj.yahooSender ? `あり（${obj.yahooSender.name}）` : 'なし';
   const ms = obj.mercariSender ? `あり（${obj.mercariSender.name}）` : 'なし';
-  return `${obj.savedAt} ／ Amazon 店舗 ${n}件：${names} ／ 楽天依頼主：${rs} ／ ヤフショ依頼主：${ys} ／ メルカリ依頼主：${ms}`;
+  const qs = obj.qoo10Sender ? `あり（${obj.qoo10Sender.name}）` : 'なし';
+  return `${obj.savedAt} ／ Amazon 店舗 ${n}件：${names} ／ 楽天依頼主：${rs} ／ ヤフショ依頼主：${ys} ／ メルカリ依頼主：${ms}`
+    + ` ／ Qoo10依頼主：${qs}`;
 }
 // ストアが設定の控えの3つの口を持つか（ハーネスが未対応のテスト用ストアでは偽）
 function essSettingsStoreOk() {
@@ -3426,15 +3650,15 @@ function essSettingsBackup() {
       if (essSettingsEmpty()) return;   // 空の控えは作らない（帯も変えない）
       // トークンが無効なら Drive を呼ばない（ready() から requestAccessToken を呼ばせない）
       if (!essIsTestStore() && !essTokenValid()) { essSettingsLine('info', ESS_SETTINGS_NOT_LOGGED_IN); return; }
-      const stores = loadStores(), rs = loadRakutenSender(), ys = loadYahooSender(), ms = loadMercariSender();
+      const stores = loadStores(), rs = loadRakutenSender(), ys = loadYahooSender(), ms = loadMercariSender(), qs = loadQoo10Sender();
       essSettingsLine('pending', '… 店舗設定の控えを Drive に保存中');
-      const sha = await essSettingsSha256(stores, rs, ys, ms);
+      const sha = await essSettingsSha256(stores, rs, ys, ms, qs);
       const latest = essSettingsSorted(await essStore().settingsList())[0];
       if (latest && latest.sha256 === sha) {
         essSettingsLine('ok', `✓ 店舗設定の控え：Drive の最新と同じ内容（${latest.name}）`);
         return;
       }
-      const f = await essSettingsBuildFile(stores, rs, ys, ms);
+      const f = await essSettingsBuildFile(stores, rs, ys, ms, qs);
       await essStore().settingsSave(f.bytes, { name: f.name, mimeType: ESS_SETTINGS_MIME,
         props: { ess_kind: 'settings', ess_sha256: sha }, md5: essMd5Hex(f.bytes) });
       essSettingsLine('ok', `✓ 店舗設定の控えを Drive に保存：${f.name}`);
@@ -3564,6 +3788,8 @@ function essSettingsRenderPicks(picks) {
       if (pick.obj.yahooSender) saveYahooSender(pick.obj.yahooSender);
       // メルカリ欄の無い控え（キーが無い・null）はメルカリ欄を空のまま（書かない）
       if (pick.obj.mercariSender) saveMercariSender(pick.obj.mercariSender);
+      // Qoo10 欄の無い控え（キーが無い・null）は Qoo10 欄を空のまま（書かない）
+      if (pick.obj.qoo10Sender) saveQoo10Sender(pick.obj.qoo10Sender);
       renderSettingsCards();
       renderStep1Sections();
       essSettingsSummaryMsg('', '');
@@ -3643,6 +3869,7 @@ function essStampFromName(name) {
 // B2行 → 一覧の「店舗」
 function essRowStore(row) {
   if (RAKUTEN_ORDER_ID_RE.test(row[0])) return '楽天';
+  if (QOO10_ORDER_ID_RE.test(row[0])) return 'Qoo10';
   const yre = yahooOrderIdRe();
   if (yre && yre.test(row[0])) return 'ヤフショ';
   if (MERCARI_ORDER_ID_RE.test(row[0])) return 'メルカリ';
@@ -4095,6 +4322,11 @@ let s1YahooParsed = null;
 // （STEP 2 は buffer＝元のバイト列から作る）
 let s1MercariFile = null;
 let s1MercariParsed = null;
+// Qoo10：配送管理ファイル1ファイル（{ name, buffer, text, encoding, bom }。text は qoo10Decode 済み）。
+// s1Qoo10Parsed は読み込んで判定できたときだけ入る（parseQoo10File の結果）。変換と STEP 2 の一括発送はこれを使う
+// （STEP 2 は buffer＝元のバイト列から作る）
+let s1Qoo10File = null;
+let s1Qoo10Parsed = null;
 
 // ============================================================
 // 商品サムネイル：SKU→画像URL マッピング
@@ -4264,15 +4496,21 @@ function s1MercariInputState() {
   return s1MercariParsed ? 'complete' : 'none';
 }
 
-// 変換ボタンの活性判定。Amazon分のみの運用（楽天・ヤフショ・メルカリを使わない日）は従来どおり変換できる。
+// Qoo10 の入力状態。メルカリと同じ2値（'none'＝未読込／'complete'＝読み込んで判定できた）
+function s1Qoo10InputState() {
+  return s1Qoo10Parsed ? 'complete' : 'none';
+}
+
+// 変換ボタンの活性判定。Amazon分のみの運用（楽天・ヤフショ・メルカリ・Qoo10を使わない日）は従来どおり変換できる。
 function updateS1ConvertEnabled() {
   const hasAmazon = Object.values(s1Buffers).some(Boolean);
   const rk = s1RakutenInputState();
   const yk = s1YahooInputState();
   const mk = s1MercariInputState();
+  const qk = s1Qoo10InputState();
   // 処理中は押せないまま（処理中にファイルを読み込んでも有効に戻さない）
   s1Convert.disabled = s1Busy || (rk === 'partial') || (yk === 'partial')
-    || !(hasAmazon || rk === 'complete' || yk === 'complete' || mk === 'complete');
+    || !(hasAmazon || rk === 'complete' || yk === 'complete' || mk === 'complete' || qk === 'complete');
 }
 
 // 読込済みAmazonレポートの注文件数合計（変換出力と同じ基準：ネコポス以外除外後・orderIdあり）。
@@ -4336,7 +4574,8 @@ function updateS1ConvertLabel() {
   const hasRakuten = (rk === 'complete');
   const hasYahoo = (yk === 'complete');
   const hasMercari = (s1MercariInputState() === 'complete');
-  if (!hasAmazon && !hasRakuten && !hasYahoo && !hasMercari) { s1Convert.textContent = 'B2取込CSVを作る'; return; }
+  const hasQoo10 = (s1Qoo10InputState() === 'complete');
+  if (!hasAmazon && !hasRakuten && !hasYahoo && !hasMercari && !hasQoo10) { s1Convert.textContent = 'B2取込CSVを作る'; return; }
 
   s1Convert.textContent = 'B2取込CSVを作る';
 
@@ -4345,6 +4584,7 @@ function updateS1ConvertLabel() {
   if (!hasRakuten) addNote('⚠ 楽天市場のCSVが未読込です。楽天分は含まれません', 'warn');
   if (!hasYahoo) addNote('⚠ ヤフショの注文データが未読込です。ヤフショ分は含まれません', 'warn');
   if (!hasMercari) addNote('⚠ メルカリの注文データが未読込です。メルカリ分は含まれません', 'warn');
+  if (!hasQoo10) addNote('⚠ Qoo10の配送管理ファイルが未読込です。Qoo10分は含まれません', 'warn');
 }
 
 s1Convert.addEventListener('click', async () => {
@@ -4728,6 +4968,92 @@ async function s1ConvertRun(auth) {
     }
   }
 
+  // ---- Qoo10分：配送管理ファイルを読み込んで判定できていればB2行を生成（メルカリと同じ規則） ----
+  // 出荷対象の判定（入金・配送状態・配送方法・送り状番号・国家）とカートの警告は読み込み時に Qoo10 ペインへ表示済み。
+  // ご依頼主は常に依頼主設定の Qoo10 欄（他のモールの設定へはフォールバックしない）。
+  let qoo10B2Rows = [];
+  let qoo10Picking = null;   // 依頼主未設定でB2生成が落ちてもピッキングは印刷できるよう、try の外に持つ（メルカリと同じ）
+  let qoo10Cp = [];
+  const isCpQ = o => qoo10ResolvedMethod(o) === QOO10_CLICKPOST;
+  if (s1Qoo10Parsed) {
+    const item = document.createElement('div');
+    try {
+      const qData = buildQoo10PickingData(s1Qoo10Parsed.orders, essToday());
+      if (qData.orders.length) {
+        qoo10Picking = { total: qData.total, orders: qData.orders, multiCount: qData.multiCount, storeName: QOO10_STORE_NAME };
+      }
+      // 配送先が複数のカート・住所の先頭に都道府県が無いカートは B2・クリックポストから外す（ピッキングには残す。手動対応）
+      const manual = o => o.multiDest || o.noPref;
+      const multiDest = qData.orders.filter(o => o.multiDest);
+      const noPref = qData.orders.filter(o => o.noPref && !o.multiDest);
+      qoo10Cp = qData.orders.filter(o => isCpQ(o) && !manual(o));
+      const sender = getQoo10SenderStore();
+      if (!sender) throw new Error('Qoo10の依頼主設定が未入力です（依頼主設定タブで登録してください）'
+        + `／未入力: ${qoo10SenderMissingFields().join('・')}`);
+      const isNone = o => qoo10ResolvedMethod(o) === QOO10_NONE;
+      const isSkip = o => qoo10ResolvedMethod(o) === QOO10_SKIP;
+      const none   = qData.orders.filter(o => isNone(o));
+      const skip   = qData.orders.filter(o => isSkip(o));
+      const usable = qData.orders.filter(o => qoo10InvoiceCode(o) !== '' && !isNone(o) && !isSkip(o) && !isCpQ(o) && !manual(o));
+      const noCode = qData.orders.filter(o => qoo10InvoiceCode(o) === '' && !isNone(o) && !isSkip(o) && !isCpQ(o) && !manual(o));
+      const addrIssues = [];   // 住所欄・建物名欄の上限超過（楽天と同じ。出力は止めず警告のみ）
+      qoo10B2Rows = usable.flatMap(o => parcelRows(buildQoo10B2Row(o, shipDate, sender, addrIssues), qoo10ParcelCount(o)));
+      item.className = 'result-item success';
+      item.textContent = `✓ Qoo10：${usable.length}件`
+        + (qoo10B2Rows.length !== usable.length ? `（B2 CSV ${qoo10B2Rows.length}行）` : '')
+        + `（依頼主: ${sender.name}）`;
+      s1Results.appendChild(item);
+      const firstName = o => (o.lines[0] ? o.lines[0].name : '') + (o.lines.length > 1 ? ` 他${o.lines.length - 1}点` : '');
+      renderRakutenWarningSection(s1Results, 's1-qo-scheduled',
+        `📅 Qoo10：お届け希望日が先（本日+4日以降）のためB2から除外（予定分）: ${qData.scheduled.length}件`,
+        ['お客様管理番号', 'お届け希望日', '商品名'],
+        qData.scheduled.map(o => [o.orderNumber, o.desiredDeliveryRaw || '', firstName(o)]), 'warn');
+      const badDate = usable.filter(o => o.desiredDeliveryRaw && !o.desiredDeliveryDate);
+      renderRakutenWarningSection(s1Results, 's1-qo-baddate',
+        `⚠ Qoo10：お届け希望日を解釈できないため「お届け予定日」を空欄で出力しました: ${badDate.length}件`,
+        ['お客様管理番号', 'お届け希望日（生値）'],
+        badDate.map(o => [o.orderNumber, o.desiredDeliveryRaw]), 'warn');
+      renderRakutenWarningSection(s1Results, 's1-qo-multidest',
+        `⚠ Qoo10：配送先が複数のカート（手動対応）。B2・クリックポストから除外しました（ピッキング・梱包・発送明細には載せます）: ${multiDest.length}件`,
+        ['お客様管理番号', '商品名'], multiDest.map(o => [o.orderNumber, firstName(o)]), 'error');
+      renderRakutenWarningSection(s1Results, 's1-qo-nopref',
+        `⚠ Qoo10：住所の先頭に都道府県が無いカート（手動対応）。B2・クリックポストから除外しました（ピッキング・梱包・発送明細には載せます）: ${noPref.length}件`,
+        ['お客様管理番号', '住所', '商品名'], noPref.map(o => [o.orderNumber, o.addressRaw || '', firstName(o)]), 'error');
+      renderRakutenWarningSection(s1Results, 's1-qo-none',
+        `📦 Qoo10：「送り状なし（同梱・手渡し）」を選んだためB2から除外: ${none.length}件`,
+        ['お客様管理番号', '商品名'], none.map(o => [o.orderNumber, firstName(o)]), 'warn');
+      renderRakutenWarningSection(s1Results, 's1-qo-skip',
+        `📦 Qoo10：「本日出荷しない（MCF等）」を選んだためB2・ピッキングから除外（梱包・発送明細には載せます）: ${skip.length}件`,
+        ['お客様管理番号', '商品名'], skip.map(o => [o.orderNumber, firstName(o)]), 'warn');
+      renderRakutenWarningSection(s1Results, 's1-qo-cp',
+        `📮 Qoo10：クリックポストを選んだためB2から除外（クリックポスト用CSVに出力）: ${qoo10Cp.length}件`,
+        ['お客様管理番号', '商品名'], qoo10Cp.map(o => [o.orderNumber, firstName(o)]), 'warn');
+      renderRakutenWarningSection(s1Results, 's1-qo-unknown',
+        `⚠ Qoo10：配送方法が不明のためB2から除外（手動対応してください）: ${noCode.length}件`,
+        ['お客様管理番号', '配送方法'], noCode.map(o => [o.orderNumber, qoo10ResolvedMethod(o) || '（空）']), 'error');
+      const hasIssue = k => addrIssues.filter(x => x.issues.includes(k));
+      const issueRow = x => [x.orderNumber, x.party || 'お届け先', x.fullAddress, fullwidthCharLength(x.fullAddress),
+                             x.building, fullwidthCharLength(x.building)];
+      const issueCols = ['お客様管理番号', '対象', '住所欄', '住所（全角換算）', '建物名欄', '建物名（全角換算）'];
+      renderRakutenWarningSection(s1Results, 's1-qo-addr-bldgused',
+        `⚠ 要確認（Qoo10）：住所文字数超過・建物名欄使用中のため自動振り分け不可（全角${B2_ADDRESS_LIMIT}文字上限）: ${hasIssue('addrOverflowBuildingUsed').length}件`,
+        issueCols, hasIssue('addrOverflowBuildingUsed').map(issueRow), 'error');
+      renderRakutenWarningSection(s1Results, 's1-qo-addr-unresolved',
+        `⚠ 要確認（Qoo10）：住所文字数超過（自動対応不可）: ${hasIssue('addrOverflowUnresolved').length}件`,
+        issueCols, hasIssue('addrOverflowUnresolved').map(issueRow), 'error');
+      renderRakutenWarningSection(s1Results, 's1-qo-bldg-over',
+        `⚠ 要確認（Qoo10）：建物名欄が文字数上限超過（全角${B2_BUILDING_LIMIT}文字上限・そのまま出力しています）: ${hasIssue('buildingOverflow').length}件`,
+        issueCols, hasIssue('buildingOverflow').map(issueRow), 'warn');
+      renderRakutenWarningSection(s1Results, 's1-qo-addr-split',
+        `📍 Qoo10：住所が全角${B2_ADDRESS_LIMIT}文字を超えたため建物名欄へ自動振り分けしました（番地の途中で割れる場合があります。印字内容を確認してください）: ${hasIssue('addrSplit').length}件`,
+        issueCols, hasIssue('addrSplit').map(issueRow), 'warn');
+    } catch(e) {
+      item.className = 'result-item error';
+      item.textContent = `⚠ Qoo10：${e.message}`;
+      s1Results.appendChild(item);
+    }
+  }
+
   // ピッキング帳票の読込状態（読み方 (d)）：Amazon は店舗ごとにファイルがあれば読込済み（変換0件・エラーでも）、
   // 楽天・ヤフショは 'complete' なら読込済み。0件・未読込のモールも帳票に出す（Kaz 確定 2026-10-29）
   const pickLoad = {
@@ -4736,14 +5062,15 @@ async function s1ConvertRun(auth) {
     rakuten: s1RakutenInputState(),
     yahoo: s1YahooInputState(),
     mercari: s1MercariInputState(),
+    qoo10: s1Qoo10InputState(),
   };
 
   // ピッキング帳票はB2 CSVが1本も出ない日でも必要なため、楽天分・ヤフショ分のピッキングが
   // 作れている限りここでは止めない（依頼主未設定でB2生成が落ちた場合など）。
   // 読込済みのモールが0件だけの日も、印刷ボタン（0注文）は出してから返す
   if (!allRecords.length && !rakutenB2Rows.length && !rakutenPicking && !yahooB2Rows.length && !yahooPicking
-      && !mercariB2Rows.length && !mercariPicking) {
-    renderCombinedPickingButton(null, null, pickLoad, null, null);
+      && !mercariB2Rows.length && !mercariPicking && !qoo10B2Rows.length && !qoo10Picking) {
+    renderCombinedPickingButton(null, null, pickLoad, null, null, null);
     return;
   }
 
@@ -4773,12 +5100,12 @@ async function s1ConvertRun(auth) {
     renderImageRegisterSection(pickingData);
   }
 
-  // ピッキング帳票の印刷ボタン（Amazon＋楽天市場＋ヤフショ＋メルカリで1つ）。帳票には常に4モールを出す（0件・未読込も）。
+  // ピッキング帳票の印刷ボタン（Amazon＋楽天市場＋ヤフショ＋メルカリ＋Qoo10で1つ）。帳票には常に5モールを出す（0件・未読込も）。
   // B2 CSVの保存可否とは独立に常に出す。
-  renderCombinedPickingButton(amazonPicking, rakutenPicking, pickLoad, yahooPicking, mercariPicking);
+  renderCombinedPickingButton(amazonPicking, rakutenPicking, pickLoad, yahooPicking, mercariPicking, qoo10Picking);
 
-  // クリックポストの対象（Amazon → 楽天 → ヤフショ → メルカリの順。Amazon は統一ソート順、楽天・ヤフショ・メルカリは orders の順）
-  // ヤフショ・メルカリの注文は楽天と同じ形（recipient）を持つため、buildClickpostRow は楽天と同じ道を通る
+  // クリックポストの対象（Amazon → 楽天 → ヤフショ → メルカリ → Qoo10 の順。Amazon は統一ソート順、ほかは orders の順）
+  // ヤフショ・メルカリ・Qoo10 の注文は楽天と同じ形（recipient）を持つため、buildClickpostRow は楽天と同じ道を通る
   const cpRecs = [
     // parcels＝個口数（クリックポスト用CSVに同じ行を出す本数）。照合（essCollate）は注文単位のまま
     ...sortedAmazon.filter(r => r.cp).map(r => ({ orderId: r.orderId, mall: 'amazon', storeIndex: r.storeIndex,
@@ -4790,27 +5117,31 @@ async function s1ConvertRun(auth) {
       parcels: yahooParcelCount(o), gNums: o.lines.map(l => l.num || '') })),
     ...mercariCp.map(o => ({ orderId: o.orderNumber, mall: 'mercari', storeIndex: null, storeName: 'メルカリ', src: o,
       parcels: mercariParcelCount(o), gNums: o.lines.map(l => l.num || '') })),
+    ...qoo10Cp.map(o => ({ orderId: o.orderNumber, mall: 'qoo10', storeIndex: null, storeName: 'Qoo10', src: o,
+      parcels: qoo10ParcelCount(o), gNums: o.lines.map(l => l.num || '') })),
   ];
 
   // B2行が1本も無い場合はヘッダだけのCSVを保存しない（全件がマケプレ配送のときに起きる）。
   // ピッキングリスト・梱包発送明細の印刷ボタンは上で生成済みなので、そのまま使える。
   // クリックポストがあれば、B2用CSVは出さずにクリックポスト用CSVだけを出す（essB2Output の中で分岐する）。
-  if (!amazonRows.length && !rakutenB2Rows.length && !yahooB2Rows.length && !mercariB2Rows.length && !cpRecs.length) {
+  if (!amazonRows.length && !rakutenB2Rows.length && !yahooB2Rows.length && !mercariB2Rows.length && !qoo10B2Rows.length && !cpRecs.length) {
     const el = document.createElement('div');
     el.className = 'result-item error'; el.style.marginTop = '6px';
-    el.textContent = '⚠ B2 CSVに出力する注文がありません（別発行・送り状なし・本日出荷しない・配送方法不明の注文だけ、または楽天市場・ヤフショ・メルカリの依頼主が未設定など。上の表示を確認してください）。'
+    el.textContent = '⚠ B2 CSVに出力する注文がありません（別発行・送り状なし・本日出荷しない・配送方法不明の注文だけ、または楽天市場・ヤフショ・メルカリ・Qoo10の依頼主が未設定など。上の表示を確認してください）。'
       + 'ピッキングリスト・梱包発送明細は印刷できます';
     s1Results.appendChild(el);
     return;
   }
 
-  // 出力順：Amazon分 → 楽天市場分 → ヤフショ分 → メルカリ分（それより前の行順・行内容は従来と完全一致のまま末尾に追加）
+  // 出力順：Amazon分 → 楽天市場分 → ヤフショ分 → メルカリ分 → Qoo10分（それより前の行順・行内容は従来と完全一致のまま末尾に追加）
   // ダウンロードの前に、直近7日の Drive の記録（02・03）と照合する（A）。
   // 照合で除外した注文は、ピッキングリスト＋梱包・発送明細の対象からも外す（照合なしで出力のときは全件のまま）。
-  // ヤフショ・メルカリのピッキングデータは楽天と同じ形のため、照合の除外は essPickingRakutenExcluding で行う
-  await essB2Output([...amazonRows, ...rakutenB2Rows, ...yahooB2Rows, ...mercariB2Rows], dateStr, exclude => renderCombinedPickingButton(
+  // ヤフショ・メルカリ・Qoo10 のピッキングデータは楽天と同じ形のため、照合の除外は essPickingRakutenExcluding で行う
+  // （Qoo10 の照合キーはお客様管理番号 qoo10-カート番号＝B2行の1列目）
+  await essB2Output([...amazonRows, ...rakutenB2Rows, ...yahooB2Rows, ...mercariB2Rows, ...qoo10B2Rows], dateStr, exclude => renderCombinedPickingButton(
     essPickingAmazonExcluding(amazonPickSrc, exclude), essPickingRakutenExcluding(rakutenPicking, exclude), pickLoad,
-    essPickingRakutenExcluding(yahooPicking, exclude), essPickingRakutenExcluding(mercariPicking, exclude)), cpRecs);
+    essPickingRakutenExcluding(yahooPicking, exclude), essPickingRakutenExcluding(mercariPicking, exclude),
+    essPickingRakutenExcluding(qoo10Picking, exclude)), cpRecs);
 }
 
 // ============================================================
@@ -5064,7 +5395,8 @@ function s2DuplicateTrackings() {
         const sender = gc(row, 'ご依頼主名');
         const yre = yahooOrderIdRe();
         const store = AMAZON_ORDER_ID_RE.test(orderId) ? essStoreShort(sender)
-          : RAKUTEN_ORDER_ID_RE.test(orderId) ? '楽天市場' : (yre && yre.test(orderId)) ? 'ヤフショ'
+          : RAKUTEN_ORDER_ID_RE.test(orderId) ? '楽天市場' : QOO10_ORDER_ID_RE.test(orderId) ? 'Qoo10'
+          : (yre && yre.test(orderId)) ? 'ヤフショ'
           : MERCARI_ORDER_ID_RE.test(orderId) ? 'メルカリ' : sender;
         byOrder.set(orderId, { store, trackings: new Set() });
       }
@@ -5208,15 +5540,17 @@ async function s2ConvertRun(auth) {
   const allRakuten  = [];   // 楽天市場の注文番号形式だった行の全ファイル分累積
   const allYahoo    = [];   // ヤフショの注文番号形式だった行の全ファイル分累積
   const allMercari  = [];   // メルカリの注文番号形式だった行の全ファイル分累積
-  const allExcluded = [];   // Amazon・楽天市場・ヤフショ・メルカリのいずれの形式でもない行の全ファイル分累積
+  const allQoo10    = [];   // Qoo10 のお客様管理番号形式だった行の全ファイル分累積
+  const allExcluded = [];   // Amazon・楽天市場・ヤフショ・メルカリ・Qoo10 のいずれの形式でもない行の全ファイル分累積
 
   for (const { name, buffer } of s2Files) {
     try {
       const text = decodeBuffer(buffer);
-      const { results: storeResults, rakutenRows, yahooRows, mercariRows, excludedOther } = convertToShipmentNotify(text);
+      const { results: storeResults, rakutenRows, yahooRows, mercariRows, qoo10Rows, excludedOther } = convertToShipmentNotify(text);
       allRakuten.push(...rakutenRows);
       allYahoo.push(...yahooRows);
       allMercari.push(...mercariRows);
+      allQoo10.push(...qoo10Rows);
       allExcluded.push(...excludedOther);
       for (const { storeKey, dataRows, shipDateStr, prefix } of storeResults) {
         // クリックポストの行を末尾に足すため、エンコードは後でまとめて行う（足さなければ従来と同じバイト列）
@@ -5316,6 +5650,14 @@ async function s2ConvertRun(auth) {
                         shipDateRaw: `${cy}/${parseInt(cm, 10)}/${parseInt(cd, 10)}`, carrier: MERCARI_CARRIER_JAPANPOST,
                         ...(nFilled < rs.length ? { partial: { parcels: rs.length, filled: nFilled } } : {}) });
     }
+    // Qoo10：メルカリと同じ（配送会社はクリックポスト。一部の行だけ入力したカートは partial を付けて手動対応の警告に回す）
+    for (const r of targets.filter(x => x.mall === 'qoo10')) {
+      const rs = cpOrderRows(r);
+      const nFilled = rs.filter(x => s2CpDigits(x.tracking).length === 12).length;
+      allQoo10.push({ orderNumber: r.orderId, trackingRaw: s2CpDigits(r.tracking),
+                      shipDateRaw: `${cy}/${parseInt(cm, 10)}/${parseInt(cd, 10)}`, carrier: QOO10_CARRIER_CLICKPOST,
+                      ...(nFilled < rs.length ? { partial: { parcels: rs.length, filled: nFilled } } : {}) });
+    }
   }
   for (const f of outputFiles) {
     if (f.rows) f.data = toSjisUint8(f.rows.map(r => r.join('\t')).join('\r\n') + '\r\n');
@@ -5410,6 +5752,41 @@ async function s2ConvertRun(auth) {
     }
   }
 
+  // ---- Qoo10分：一括発送用CSV（STEP 1 で読み込んだ配送管理ファイルを、今回伝票が出たカートの行だけ残して
+  //      配送会社・送り状番号・発送日を入れたもの） ----
+  // STEP 1 の配送管理ファイル（元のバイト列）が要る。読み込んでいなければ Qoo10 分だけ作らず、他のモールの出力は続ける（メルカリと同じ）
+  if (allQoo10.length) {
+    if (!s1Qoo10File || !s1Qoo10Parsed) {
+      const need = document.createElement('div');
+      need.id = 's2-qoo10-result';
+      need.className = 'result-item error';
+      need.textContent = `⚠ Qoo10の注文が${new Set(allQoo10.map(r => r.orderNumber)).size}件ありますが、一括発送用のファイルを作れません。`
+        + 'STEP 1 で Qoo10 の配送管理ファイルを読み込んでください（他のモールの出力は続行します）';
+      s2Results.appendChild(need);
+    } else {
+      const rep = buildQoo10BulkShip(allQoo10, s1Qoo10File, s1Qoo10Parsed, essToday());
+      const item = document.createElement('div');
+      item.id = 's2-qoo10-result';
+      item.className = rep.orderCount ? 'result-item success' : 'result-item error';
+      item.textContent = rep.orderCount
+        ? `✓ Qoo10：${rep.orderCount}件（一括発送 ${rep.rowCount}行`
+          + (rep.multiFirst.length ? `・うち2個口以上 ${rep.multiFirst.length}件` : '') + '）'
+        : '⚠ Qoo10：出力対象が0件のため、ファイルは生成していません';
+      s2Results.appendChild(item);
+      if (rep.orderCount) {
+        const where = essResultItem('', 'Qoo10：QSM［配送管理］→ 下の［発送処理(一括発送)］タブ →［注文番号でExcel一括発送(ポップアップ)］→'
+          + '［Excel Upload］→［Upload File］→［一括発送処理］。購入者に発送通知メールが届きます（ファイルは qoo10_bulk_ship_…）');
+        where.id = 's2-qoo10-where';
+        where.style.cssText = 'display:block;margin-top:6px;background:#fffbeb;border:1px solid #fcd34d;color:#92400e;font-weight:700;';
+        s2Results.appendChild(where);
+      }
+      renderQoo10ShipWarnings(s2Results, rep);
+      if (rep.orderCount) {
+        outputFiles.push({ baseFilename: `qoo10_bulk_ship_${nowStamp().ymd}`, ext: 'csv', mime: 'text/csv', data: rep.bytes });
+      }
+    }
+  }
+
   // 除外一覧（0件なら何も描画しない）。出力0件の早期returnより前に必ず表示する
   renderNonAmazonExcludedSection(allExcluded);
 
@@ -5459,7 +5836,8 @@ function auxBar(container) {
 }
 
 // ============================================================
-// 発送方法の一覧（Amazon・楽天・ヤフショ・メルカリで共通の型。Kaz 確定 2026-10-30。ヤフショは 2026-11-10、メルカリは 2026-11-11 に同じ型で追加）。
+// 発送方法の一覧（Amazon・楽天・ヤフショ・メルカリ・Qoo10で共通の型。Kaz 確定 2026-10-30。ヤフショは 2026-11-10、メルカリは 2026-11-11、
+// Qoo10 は 2026-11-13 に同じ型で追加）。
 // 1注文＝1つのまとまり（<tbody class="sl-order">）で3段：
 //   1段目 .sl-head  … モール・店舗／注文番号（折り返さない）／札（複数個口の候補・楽天の定期 等）
 //   2段目 .sl-lines … 全明細を1行ずつ（画像・G番号・×数量・商品名・SKU）。楽天の警告（遅延 等）は先頭
@@ -5735,7 +6113,7 @@ function renderNonAmazonExcludedSection(excluded) {
 
   const head = document.createElement('div');
   head.className = 'result-item error';
-  head.textContent = `⚠ Amazon・楽天市場・ヤフショ・メルカリのいずれの注文番号形式でもないため除外: ${excluded.length}件`;
+  head.textContent = `⚠ Amazon・楽天市場・ヤフショ・メルカリ・Qoo10のいずれの注文番号形式でもないため除外: ${excluded.length}件`;
 
   const toggle = document.createElement('button');
   toggle.type = 'button';
@@ -6169,7 +6547,8 @@ function splitRakutenShipped(groups, shippedMap) {
 //   scheduled … お届け日が本日+4日以降の予定分（画面表示用。ピッキング・B2 CSV対象には含めない）
 // total クラスタ（注文数降順）の R-001… 採番はピッキング対象注文のみが母集団。
 // 各注文明細行にも同じ R番号を付与する（Amazon側 buildSkuNumberMap とは完全独立）。
-// numPrefix … G番号の接頭辞（既定 'R-'）。ヤフショは同じ規則を 'Y-'（buildYahooPickingData）、メルカリは 'M-'（buildMercariPickingData）で使う。
+// numPrefix … G番号の接頭辞（既定 'R-'）。ヤフショは同じ規則を 'Y-'（buildYahooPickingData）、メルカリは 'M-'（buildMercariPickingData）、
+// Qoo10 は 'Q-'（buildQoo10PickingData）で使う。
 function buildRakutenPickingData(groups, today, numPrefix = 'R-') {
   const pickGroups = [], scheduled = [];
   for (const g of groups) {
@@ -6400,7 +6779,7 @@ function rakutenInvoiceCode(order) {
 // 楽天市場用 記事欄：（R-001×1）／（R-001×1／R-002×2）形式。
 // Amazon側 buildKijiForRecord とは独立。KIJI_MAX_BYTES(44byte=cp932想定)超過時は
 // 収まる商品数まで表示し「／他N種」を付与する段階フォールバックを踏襲。
-// numFallback … G番号が無い明細に出す仮の番号（既定 'R-000'。ヤフショは 'Y-000'、メルカリは 'M-000'）
+// numFallback … G番号が無い明細に出す仮の番号（既定 'R-000'。ヤフショは 'Y-000'、メルカリは 'M-000'、Qoo10 は 'Q-000'）
 function buildRakutenKiji(order, numFallback = 'R-000') {
   const parts = order.lines.map(l => `${l.num || numFallback}×${l.quantity}`);
   const full = `（${parts.join('／')}）`;
@@ -6959,10 +7338,10 @@ function rRefreshView() {
   else { rakutenShipChoice.clear(); rakutenParcelChoice.clear(); }   // 読み込めなかった＝残る注文が無いので選択も残さない
 }
 
-// 楽天ペイン・ヤフショペイン・メルカリペインの「出力後に配送方法・個口数を変更しました」の注意。s1ShipChoiceStale が真のときだけ出す
+// 楽天ペイン・ヤフショペイン・メルカリペイン・Qoo10ペインの「出力後に配送方法・個口数を変更しました」の注意。s1ShipChoiceStale が真のときだけ出す
 // （変換ボタンのハンドラが偽に戻したら消える）。
 function rRenderShipRedo() {
-  for (const id of ['r-ship-redo', 'y-ship-redo', 'm-ship-redo']) {
+  for (const id of ['r-ship-redo', 'y-ship-redo', 'm-ship-redo', 'q-ship-redo']) {
     const el = document.getElementById(id);
     if (el) el.style.display = s1ShipChoiceStale ? 'block' : 'none';
   }
@@ -8620,6 +8999,719 @@ function renderMercariShipWarnings(container, rep) {
     ['注文番号'], rep.notShipped.map(x => [x.orderNumber]), 'warn');
 }
 // ==== MERCARI (メルカリ) — END ====
+
+// ============================================================
+// ==== QOO10 (Qoo10) — BEGIN ====
+// QSM［配送/キャンセル/未受取］→［配送管理］→［配送要請（詳細を見る）］の下の［全体をダウンロード］で落とす配送管理ファイル
+// （CSV 1ファイル・46列。実物は UTF-8・BOM 付き・改行 CRLF。引用符は ',' を含むセル（金額 "3,290"）だけ）→ ピッキング・B2・クリックポスト、
+// B2発行済データ（とクリックポスト）→ 一括発送用CSV（配送管理ファイルを、今回伝票が出たカートの行だけ残して配送会社・送り状番号・発送日を入れたもの）。
+// 1行＝1注文番号（1商品）。同じカート番号の行は同梱の1件（送り状1枚）にまとめる。お客様管理番号は qoo10-{カート番号}。
+// 原則：楽天・ヤフショ・メルカリと同じ規則・同じ見た目（迷ったらメルカリと同じ）。配送方法の値も楽天と同じ文字列を使う。
+// 列は列名で参照する（列番号を使わない）。必須列が無いファイルは黙って0件にせずエラーで止める。
+// 発送方法の初期値は全件ネコポス（メルカリと同じ。Qoo10 のデータに配送方法の区別が無いため）。
+// MCF の注文（配送方法 一般配送(追跡-X)）は扱わない（出荷対象から除外して警告）。
+// ============================================================
+const QOO10_NEKOPOS   = RAKUTEN_NEKOPOS;     // 'ネコポス'
+const QOO10_COMPACT   = RAKUTEN_COMPACT;     // '宅急便コンパクト'
+const QOO10_TAKKYUBIN = RAKUTEN_TAKKYUBIN;   // '宅急便'（B2で発行する。送り状種類 0）
+const QOO10_NONE      = RAKUTEN_NONE;        // '発行しない'（表示名「送り状なし（同梱・手渡し）」）
+const QOO10_SKIP      = RAKUTEN_SKIP;        // '本日出荷しない'
+const QOO10_CLICKPOST = RAKUTEN_CLICKPOST;   // 'クリックポスト'
+const QOO10_METHOD_OPTIONS = RAKUTEN_METHOD_OPTIONS;   // 一覧の6択（楽天と同じ並び・同じ表示名）
+const QOO10_UNKNOWN_OPTION = RAKUTEN_UNKNOWN_OPTION;   // 判定値が不明のカートにだけ先頭に出す（Qoo10 は初期値が常にネコポスのため通常は出ない）
+const QOO10_INITIAL_METHOD = QOO10_NEKOPOS;            // 発送方法の初期値（全件）
+// 出荷対象のホワイトリスト（値は1か所にまとめる）。知らない値は除外側に倒し、警告に値をそのまま出す。
+// ※ 2026-11-13 時点で、配送要請の状態の実物は未確認（注文が無いため。列と値の形は配送完了の注文で確認）。
+//   配送状態の値は配送管理の画面の区分（新規注文・配送準備・配送遅延）と「配送要請」。本物の注文で確かめる
+const QOO10_SHIP_STATES = ['新規注文', '配送準備', '配送遅延', '配送要請'];
+const QOO10_SHIP_METHOD_SELF = '一般配送(追跡-O)';   // 配送方法（前後の空白を除いて比べる。実物は末尾に半角空白）。MCF は 一般配送(追跡-X)
+const QOO10_COUNTRIES = ['Japan', 'JP', ''];        // 国家（空も国内とみなす）
+const QOO10_TRACKING_EMPTY = ['', '.'];             // 送り状番号が「未入力」とみなす値（実物の MCF の完了分は '.'）
+// 判定に使う列（これがあれば Qoo10 の配送管理ファイルとみなす）と必須列（無ければエラーで止める）
+const QOO10_DETECT_COLS = ['配送状態', '注文番号', 'カート番号', '配送方法', '決済サイト'];
+const QOO10_REQUIRED = ['配送状態', '注文番号', 'カート番号', '配送会社', '送り状番号', '発送日', '入金日', 'お届け希望日', '発送予定日',
+  '配送方法', '商品番号', '商品名', '数量', 'オプション情報', 'オプションコード', '受取人名', '受取人電話番号', '受取人携帯電話番号',
+  '住所', '郵便番号', '国家', '決済サイト', '販売者商品コード'];
+const QOO10_COL_ORDER = '注文番号';
+const QOO10_COL_CARRIER = '配送会社';
+const QOO10_COL_TRACKING = '送り状番号';
+const QOO10_COL_SHIPDATE = '発送日';
+// 一括発送：配送会社の列に入れる値（QSM の配送会社のプルダウンの値。2026-11-13 確認）。
+// 商品に設定した配送方法と合わないとエラーになるか（ネコポス等）は本物の注文で未確認
+const QOO10_CARRIER_NAMES = {
+  [QOO10_NEKOPOS]: 'ネコポス',
+  [QOO10_COMPACT]: '宅急便コンパクト',
+  [QOO10_TAKKYUBIN]: 'ヤマト宅急便',
+  [QOO10_CLICKPOST]: 'クリックポスト',
+};
+const QOO10_CARRIER_CLICKPOST = 'clickpost';   // STEP 2 で、クリックポストの伝票番号から来た行の印
+// 住所の欄は1つ（都道府県から全部）。先頭の都道府県をこの一覧で照合して切り出す
+const QOO10_PREFECTURES = ['北海道', '青森県', '岩手県', '宮城県', '秋田県', '山形県', '福島県', '茨城県', '栃木県', '群馬県',
+  '埼玉県', '千葉県', '東京都', '神奈川県', '新潟県', '富山県', '石川県', '福井県', '山梨県', '長野県', '岐阜県', '静岡県', '愛知県',
+  '三重県', '滋賀県', '京都府', '大阪府', '兵庫県', '奈良県', '和歌山県', '鳥取県', '島根県', '岡山県', '広島県', '山口県', '徳島県',
+  '香川県', '愛媛県', '高知県', '福岡県', '佐賀県', '長崎県', '熊本県', '大分県', '宮崎県', '鹿児島県', '沖縄県'];
+
+// 文字コード・CSV の読み方はメルカリと同じ（UTF-8 を厳密に読めれば UTF-8、読めなければ cp932。引用符の中の改行・',' を考えて割る）
+function qoo10Decode(buffer) { return mercariDecode(buffer); }
+const qoo10Has = (t, name) => Object.prototype.hasOwnProperty.call(t.idx, name);
+// セルの値。前後の空白を除き、先頭のアポストロフィ（実物：'532-0022・'）を1つだけ外す（読むときだけ。STEP 2 の出力は元のセルのまま）
+function qoo10Unquote(v) {
+  const s = String(v == null ? '' : v).trim();
+  return s.startsWith("'") ? s.slice(1).trim() : s;
+}
+const qoo10Gc = (t, row, name) => { const i = t.idx[name]; return i != null ? qoo10Unquote(row[i]) : ''; };
+
+// 1ファイルを読み、Qoo10 の配送管理ファイルか（判定の列）と必須列を確かめる。戻り値 table。合わなければ例外
+function qoo10ReadFile(text) {
+  const t = mercariCsvTable(text);
+  if (!QOO10_DETECT_COLS.every(c => qoo10Has(t, c))) {
+    throw new Error('Qoo10 の配送管理ファイルではありません。\n'
+      + 'QSM［配送/キャンセル/未受取］→［配送管理］→［配送要請（詳細を見る）］で、下の［全体をダウンロード］から落とし直してください');
+  }
+  const missing = QOO10_REQUIRED.filter(c => !qoo10Has(t, c));
+  if (missing.length) {
+    throw new Error(`Qoo10 の配送管理ファイルに必要な列がありません（${missing.join('・')}）。\n`
+      + 'QSM［配送/キャンセル/未受取］→［配送管理］→［配送要請（詳細を見る）］で、下の［全体をダウンロード］から落とし直してください');
+  }
+  return t;
+}
+
+// 住所（都道府県から1つの欄）→ { pref, rest }。先頭が47都道府県のどれでもなければ null
+function qoo10SplitAddress(addr) {
+  const s = String(addr == null ? '' : addr).normalize('NFKC').replace(/^[\s　]+/, '');
+  const pref = QOO10_PREFECTURES.find(p => s.startsWith(p));
+  return pref ? { pref, rest: s.slice(pref.length) } : null;
+}
+// 電話番号として読めるか（数字が10桁か11桁）
+function qoo10IsPhone(raw) {
+  const d = normalizeJapanesePhone(raw);
+  return d.length === 10 || d.length === 11;
+}
+// お届け先の電話：携帯の番号が電話番号として読めればそれ、読めなければ受取人電話番号（実物で '-' だけのことがある）
+function qoo10PickPhone(mobile, tel) {
+  return qoo10IsPhone(mobile) ? mobile : tel;
+}
+// クラスタキー（＝商品キー）：販売者商品コードが空でなければそれ、空なら 商品番号（オプションコードが空でなければ ':'＋オプションコード）
+function qoo10ItemKey(sellerCode, itemNo, optCode) {
+  if (sellerCode) return sellerCode;
+  return itemNo + (optCode ? ':' + optCode : '');
+}
+
+// 配送管理ファイル（qoo10Decode 済みテキスト）→ 出荷対象のカートと除外の一覧。
+// 戻り値 { orders, notPaid, otherState, otherMethod, shipped, overseas, badRow, mixedCart, needsCheck, multiDest, noPref,
+//          noShipPlan, badDate, fileCarts, cartTargets, excludedReason }
+//   orders     : 出荷対象のカート。楽天の groups と同じ形
+//                [{ orderNumber（＝お客様管理番号 qoo10-{カート番号}）, cartNo, orderNos:[注文番号…], initialMethod, shipMethodRaw,
+//                   desiredDeliveryRaw, desiredDeliveryDate, desiredTimeRaw（常に空）, recipient, multiDest, noPref,
+//                   lines:[{ name, quantity, sku（＝クラスタキー）, itemMgmtNo（空）, skuInfo（オプション情報）, orderNo }] }]
+//   notPaid／otherState／otherMethod／shipped／overseas : 除外した注文（1行＝1注文番号。上から順に見て最初に当たった理由）
+//   badRow     : 注文番号かカート番号が空の行（読み飛ばし）
+//   mixedCart  : 同じカートに出荷対象と除外が混ざるカート（対象の行だけでカートを作る）
+//   needsCheck : ネコポスでお届け希望日の指定があるカート（要確認。対象には含める）
+//   multiDest  : 行ごとにお届け先が違うカート（対象に含める。B2・クリックポストからは外す＝手動対応）
+//   noPref     : 住所の先頭に都道府県が無いカート（対象に含める。B2・クリックポストからは外す＝手動対応）
+//   noShipPlan : 発送予定日が空の注文（対象に含める。購入者がキャンセルできる状態のため警告）
+//   badDate    : お届け希望日を解釈できない注文（本日扱いで対象に含める）
+//   fileCarts  : ファイルにあるカート番号（STEP 2 で「STEP 1 のデータに無いカート」を見分ける）
+//   cartTargets: カート番号 → 出荷対象の注文番号の配列（STEP 2 で残す行）
+//   cartExcluded : カート番号 → [{ orderNo, reason }]（出荷対象から外した注文。STEP 2 の警告に使う）
+//   excludedReason : 注文番号 → 出荷対象から外した理由
+function parseQoo10File(text) {
+  const t = qoo10ReadFile(text);
+  const notPaid = [], otherState = [], otherMethod = [], shipped = [], overseas = [], badRow = [];
+  const fileCarts = new Set(), excludedReason = new Map();
+  const cartSeq = [], cartRows = new Map(), cartExcluded = new Map();
+  t.rows.forEach((row, i) => {
+    const g = n => qoo10Gc(t, row, n);
+    if (row.every(c => String(c == null ? '' : c).trim() === '')) return;   // 空行
+    const orderNo = g('注文番号'), cart = g('カート番号'), productName = g('商品名');
+    if (!orderNo || !cart) { badRow.push({ recNo: i + 2, orderNo: orderNo || '（空）', cart: cart || '（空）', productName }); return; }
+    fileCarts.add(cart);
+    const base = { orderNo, cart, productName };
+    let reason = null;
+    // ホワイトリスト：入金済み・対象の配送状態・一般配送(追跡-O)・送り状番号なし・国内 だけを通す（上から順に見て最初に当たった理由を出す）
+    if (g('入金日') === '') { notPaid.push(base); reason = '入金待ち'; }
+    else if (!QOO10_SHIP_STATES.includes(g('配送状態'))) {
+      otherState.push({ ...base, value: g('配送状態') }); reason = `配送状態（${g('配送状態') || '空'}）`;
+    } else if (g('配送方法') !== QOO10_SHIP_METHOD_SELF) {
+      otherMethod.push({ ...base, value: g('配送方法') }); reason = `配送方法（${g('配送方法') || '空'}）`;
+    } else if (!QOO10_TRACKING_EMPTY.includes(g('送り状番号'))) {
+      shipped.push({ ...base, carrier: g('配送会社'), tracking: g('送り状番号') }); reason = '出荷済み（送り状番号あり）';
+    } else if (!QOO10_COUNTRIES.includes(g('国家'))) {
+      overseas.push({ ...base, value: g('国家') }); reason = `国家（${g('国家')}）`;
+    }
+    if (reason) {
+      excludedReason.set(orderNo, reason);
+      if (!cartExcluded.has(cart)) cartExcluded.set(cart, []);
+      cartExcluded.get(cart).push({ orderNo, reason });
+      return;
+    }
+    if (!cartRows.has(cart)) { cartRows.set(cart, []); cartSeq.push(cart); }
+    cartRows.get(cart).push(g);
+  });
+
+  const orders = [], mixedCart = [], needsCheck = [], multiDest = [], noPref = [], noShipPlan = [], badDate = [];
+  const cartTargets = new Map();
+  const ns = s => String(s == null ? '' : s).normalize('NFKC').replace(/[\s　]/g, '');
+  const nd = s => String(s == null ? '' : s).replace(/[^0-9]/g, '');
+  const destKey = p => [ns(p('受取人名')), nd(p('郵便番号')), ns(p('住所'))].join('\u001f');
+  for (const cart of cartSeq) {
+    const ps = cartRows.get(cart), p0 = ps[0];
+    const id = `qoo10-${cart}`;
+    const orderNos = ps.map(p => p('注文番号'));
+    cartTargets.set(cart, orderNos);
+    const productName = p0('商品名') + (ps.length > 1 ? ` 他${ps.length - 1}点` : '');
+    if (cartExcluded.has(cart)) {
+      mixedCart.push({ orderNumber: id, targets: orderNos.join(' / '),
+        excluded: cartExcluded.get(cart).map(x => `${x.orderNo}（${x.reason}）`).join(' / ') });
+    }
+    for (const p of ps) {
+      if (p('発送予定日') === '') noShipPlan.push({ orderNumber: id, orderNo: p('注文番号'), productName: p('商品名') });
+    }
+    const dRow = ps.find(p => p('お届け希望日') !== '') || p0;
+    const desiredDeliveryRaw = dRow('お届け希望日');
+    // 書式は本物の注文で未確認。メルカリと同じ規則で受け、解釈できなければ本日扱い（出荷を止めない側）にして警告
+    const desiredDeliveryDate = mercariNormalizeDate(desiredDeliveryRaw);
+    if (desiredDeliveryDate === null) {
+      console.warn('[parseQoo10File] お届け希望日を解釈できません:', desiredDeliveryRaw, id);
+      badDate.push({ orderNumber: id, raw: desiredDeliveryRaw, productName });
+    }
+    const isMultiDest = ps.some(p => destKey(p) !== destKey(p0));
+    const split = qoo10SplitAddress(p0('住所'));
+    const o = {
+      orderNumber: id, cartNo: cart, orderNos,
+      initialMethod: QOO10_INITIAL_METHOD, shipMethodRaw: p0('配送方法'),
+      desiredDeliveryRaw, desiredDeliveryDate: desiredDeliveryDate || null, desiredTimeRaw: '',
+      // お届け先は楽天の recipient と同じ形（クリックポスト用CSV は楽天と同じ道を通る）。
+      // 氏名は1つの欄（受取人名）のため lastName に全体を入れ firstName は空。郵便番号は postal1 に全体（アポストロフィは外してある）。
+      // 住所は先頭の都道府県を切り出し、残りを rest に入れる（city は空）
+      recipient: { lastName: p0('受取人名'), firstName: '', phone: qoo10PickPhone(p0('受取人携帯電話番号'), p0('受取人電話番号')),
+        postal1: p0('郵便番号'), postal2: '', pref: split ? split.pref : '', city: '', rest: split ? split.rest : p0('住所') },
+      addressRaw: p0('住所'),
+      multiDest: isMultiDest, noPref: !split,
+      lines: ps.map(p => {
+        const q = p('数量');
+        return { name: p('商品名'), quantity: parseInt(q || '1', 10) || 1,
+          sku: qoo10ItemKey(p('販売者商品コード'), p('商品番号'), p('オプションコード')), itemMgmtNo: '',
+          skuInfo: p('オプション情報'), orderNo: p('注文番号') };
+      }),
+    };
+    if (isMultiDest) multiDest.push({ orderNumber: id, productName });
+    if (!split) noPref.push({ orderNumber: id, address: p0('住所'), productName });
+    if (o.initialMethod === QOO10_NEKOPOS && desiredDeliveryRaw) {
+      needsCheck.push({ orderNumber: id, memo: `⚠ ネコポスは日時指定に対応していません（お届け希望日 ${desiredDeliveryRaw}）`, productName });
+    }
+    orders.push(o);
+  }
+  return { orders, notPaid, otherState, otherMethod, shipped, overseas, badRow, mixedCart, needsCheck, multiDest, noPref,
+           noShipPlan, badDate, fileCarts, cartTargets, cartExcluded, excludedReason };
+}
+
+// 出荷対象のカート → ピッキングデータ。楽天の buildRakutenPickingData と同じ規則（お届け希望日で 本日／遅延／予定 に分ける・
+// 本日+3日は最終出荷日・商品別集計・並び・複数商品注文・G番号）で、G番号の接頭辞だけ 'Q-'。Qoo10 固有の項目はカートに付け直す
+function buildQoo10PickingData(groups, today) {
+  const d = buildRakutenPickingData(groups, today, 'Q-');
+  const byId = new Map(groups.map(g => [g.orderNumber, g]));
+  d.orders = d.orders.map(o => ({ ...byId.get(o.orderNumber), delayed: o.delayed, isLastChance: o.isLastChance, lines: o.lines }));
+  return d;
+}
+
+// 発送方法の選択（お客様管理番号 → 6択の値）と個口数（→ 2〜PARCEL_MAX）。楽天・ヤフショ・メルカリと同じ扱い（依頼主設定の保存では消さない）
+const qoo10ShipChoice = new Map();
+const qoo10ParcelChoice = new Map();
+let qoo10ShipListOpen = null;          // 一覧の開閉（null＝初回の自動判定）
+let qoo10ShipAutoSeen = new Set();     // 前回の描画で「開いて確認が要る」だったカート
+function qoo10NoParcel(m) { return m === QOO10_NONE || m === QOO10_SKIP; }
+function qoo10ParcelCount(o) {
+  if (!o || qoo10NoParcel(qoo10ResolvedMethod(o))) return 1;
+  return qoo10ParcelChoice.get(o.orderNumber) || 1;
+}
+function qoo10InitialMethod(o) { return o.initialMethod || QOO10_INITIAL_METHOD; }
+function qoo10ResolvedMethod(o) { return qoo10ShipChoice.get(o.orderNumber) || qoo10InitialMethod(o); }
+function qoo10IsMethodOption(m) { return QOO10_METHOD_OPTIONS.some(([v]) => v === m); }
+function qoo10IsUnknownMethod(o) { return !qoo10IsMethodOption(qoo10ResolvedMethod(o)); }
+function qoo10HasUnknownOption(o) { return !qoo10IsMethodOption(qoo10InitialMethod(o)); }
+// 確定値がネコポスなのに、お届け希望日の指定があるカート（一覧で黄の警告。B2 には日付をそのまま出す＝楽天・メルカリと同じ）
+function qoo10NekoposDateConflict(o) {
+  return qoo10ResolvedMethod(o) === QOO10_NEKOPOS && !!o.desiredDeliveryRaw;
+}
+// 確定発送方法 → B2送り状種類コード（楽天の rakutenInvoiceCode と同じ逆引き）。B2に出さない方法・不明は ''
+function qoo10InvoiceCode(o) {
+  const m = qoo10ResolvedMethod(o);
+  return Object.keys(SHIP_METHOD_MAP).find(k => SHIP_METHOD_MAP[k] === m) || '';
+}
+
+// Qoo10 の依頼主（設定タブ「Qoo10」ブロックのみ。Amazon・楽天・ヤフショ・メルカリの設定へは決してフォールバックしない）。
+// 必須は楽天・メルカリと同じ（店舗名・郵便番号・住所・請求先顧客コード・運賃管理番号）。必須が空なら null（B2 を出す前に止める）
+const QOO10_SENDER_REQUIRED = RAKUTEN_SENDER_REQUIRED;
+function qoo10SenderMissingFields() {
+  const s = loadQoo10Sender() || {};
+  return QOO10_SENDER_REQUIRED.filter(([k]) => !String(s[k] || '').trim()).map(([, label]) => label);
+}
+function getQoo10SenderStore() {
+  return qoo10SenderMissingFields().length === 0 ? loadQoo10Sender() : null;
+}
+
+// Qoo10 のカート → B2クラウド1行（95列）。各列はメルカリの buildMercariB2Row と同じ位置に同じ種類の値を入れる。
+// ご依頼主（row[19][21][22][23][24]）・請求先顧客コード・運賃管理番号は常に store（依頼主設定の Qoo10 欄）。
+// 配達時間帯の列は配送管理ファイルに無いため空（指定なし）
+function buildQoo10B2Row(order, shipDate, store, addressIssues) {
+  const row = new Array(95).fill('');
+  const r = order.recipient || {};
+  const { fullAddress, building, issues } = buildRakutenAddress(r.pref || '', '', r.rest || '');
+  if (addressIssues && issues.length) addressIssues.push({ orderNumber: order.orderNumber, issues, fullAddress, building });
+  row[0]  = order.orderNumber;   // お客様管理番号＝qoo10-{カート番号}
+  row[1]  = qoo10InvoiceCode(order);
+  row[4]  = shipDate;
+  row[5]  = order.desiredDeliveryDate ? (formatB2DeliveryDate(order.desiredDeliveryDate) || '') : '';
+  row[8]  = normalizeJapanesePhone(r.phone);
+  row[10] = yahooFormatZip(r.postal1);   // 数字7桁なら 123-4567 の形にそろえる（ヤフショ・メルカリと同じ）
+  row[11] = fullAddress; row[12] = building;
+  row[15] = String(r.lastName || '').trim();   // 受取人名（1つの欄）をそのまま
+  row[19] = store.tel; row[21] = store.postal;
+  row[22] = store.address; row[23] = store.building; row[24] = store.name;
+  row[27] = ((order.lines[0] && order.lines[0].name) || '').slice(0, 25).trimEnd();
+  row[32] = buildRakutenKiji(order, 'Q-000');
+  row[38] = String(order.lines.reduce((a, l) => a + (l.quantity || 0), 0));
+  row[39] = store.customerCode; row[41] = store.fareCode;
+  return row;
+}
+
+// 読み込み結果の画面（Qoo10 ペイン）：サマリ → 警告 → 発送方法の確認・変更（メルカリと同じ型）→ 画像URL登録
+function renderQoo10Results(parsed) {
+  const qResults = document.getElementById('q-results');
+  const qArea = document.getElementById('q-picking-area');
+  qResults.innerHTML = '';
+  qArea.innerHTML = '';
+  // 選択は clear しない。読み込み後に残るカートの選択は保持し、消えたカートの選択だけ捨てる（メルカリと同じ）
+  const ids = new Set(parsed.orders.map(o => o.orderNumber));
+  for (const id of Array.from(qoo10ShipChoice.keys())) if (!ids.has(id)) qoo10ShipChoice.delete(id);
+  for (const id of Array.from(qoo10ParcelChoice.keys())) if (!ids.has(id)) qoo10ParcelChoice.delete(id);
+  for (const id of Array.from(qoo10ShipAutoSeen)) if (!ids.has(id)) qoo10ShipAutoSeen.delete(id);
+
+  const data = buildQoo10PickingData(parsed.orders, essToday());
+  const lineCount = parsed.orders.reduce((a, o) => a + o.lines.length, 0);
+  const firstName = o => (o.lines[0] ? o.lines[0].name : '') + (o.lines.length > 1 ? ` 他${o.lines.length - 1}点` : '');
+  const okItem = document.createElement('div');
+  okItem.className = 'result-item success';
+  okItem.textContent = `✓ Qoo10：${parsed.orders.length}件（カート） ／ ${lineCount}注文を読み込みました`
+    + (parsed.shipped.length ? `（出荷済み ${parsed.shipped.length}注文を除外。送り状番号あり）` : '')
+    + (data.scheduled.length ? `（うち予定 ${data.scheduled.length}件は本日のピッキング対象外）` : '');
+  qResults.appendChild(okItem);
+
+  renderRakutenWarningSection(qResults, 'q-warn-shipped',
+    `⚠ 出荷済み（Qoo10 のデータに送り状番号あり）のため除外: ${parsed.shipped.length}件`,
+    ['注文番号', 'カート番号', '配送会社', '送り状番号', '商品名'],
+    parsed.shipped.map(x => [x.orderNo, x.cart, x.carrier, x.tracking, x.productName]), 'warn');
+  renderRakutenWarningSection(qResults, 'q-warn-notpaid',
+    `⚠ 入金待ち（入金日が空）のため除外（入金が済むまで発送できません）: ${parsed.notPaid.length}件`,
+    ['注文番号', 'カート番号', '商品名'], parsed.notPaid.map(x => [x.orderNo, x.cart, x.productName]), 'error');
+  renderRakutenWarningSection(qResults, 'q-warn-state',
+    `⚠ 配送状態が「${QOO10_SHIP_STATES.join('」「')}」以外のため除外（手動で確認してください）: ${parsed.otherState.length}件`,
+    ['注文番号', 'カート番号', '配送状態', '商品名'], parsed.otherState.map(x => [x.orderNo, x.cart, x.value || '（空）', x.productName]), 'error');
+  renderRakutenWarningSection(qResults, 'q-warn-method',
+    `⚠ 配送方法が「${QOO10_SHIP_METHOD_SELF}」以外のため除外（MCF の注文は 一般配送(追跡-X)。このツールでは扱いません）: ${parsed.otherMethod.length}件`,
+    ['注文番号', 'カート番号', '配送方法', '商品名'], parsed.otherMethod.map(x => [x.orderNo, x.cart, x.value || '（空）', x.productName]), 'warn');
+  renderRakutenWarningSection(qResults, 'q-warn-overseas',
+    `⚠ 国家が日本以外のため除外（手動対応してください）: ${parsed.overseas.length}件`,
+    ['注文番号', 'カート番号', '国家', '商品名'], parsed.overseas.map(x => [x.orderNo, x.cart, x.value, x.productName]), 'error');
+  renderRakutenWarningSection(qResults, 'q-warn-badrow',
+    `⚠ 注文番号かカート番号が空の行（読み飛ばしました）: ${parsed.badRow.length}件`,
+    ['行（見出しを1として）', '注文番号', 'カート番号', '商品名'], parsed.badRow.map(x => [x.recNo, x.orderNo, x.cart, x.productName]), 'warn');
+  renderRakutenWarningSection(qResults, 'q-warn-mixed',
+    `⚠ Qoo10：同じカートに出荷対象外の注文が混ざっています（同梱の確認）。対象の注文だけで送り状を作ります: ${parsed.mixedCart.length}件`,
+    ['お客様管理番号', '対象の注文番号', '対象外の注文番号（理由）'], parsed.mixedCart.map(x => [x.orderNumber, x.targets, x.excluded]), 'error');
+  renderRakutenWarningSection(qResults, 'q-warn-noshipplan',
+    `⚠ Qoo10：発送予定日が未入力（購入者がキャンセルできる状態です。QSM で入力してください）: ${parsed.noShipPlan.length}件`,
+    ['お客様管理番号', '注文番号', '商品名'], parsed.noShipPlan.map(x => [x.orderNumber, x.orderNo, x.productName]), 'error');
+  renderRakutenWarningSection(qResults, 'q-warn-baddate',
+    `⚠ Qoo10：お届け希望日を解釈できないため本日扱いにしました（B2 の「お届け予定日」は空欄）: ${parsed.badDate.length}件`,
+    ['お客様管理番号', 'お届け希望日（生値）', '商品名'], parsed.badDate.map(x => [x.orderNumber, x.raw, x.productName]), 'warn');
+  const delayedOrders = data.orders.filter(o => o.delayed);
+  const lastChanceOrders = data.orders.filter(o => o.isLastChance);
+  renderRakutenWarningSection(qResults, 'q-warn-delayed',
+    `⚠ 遅延：お届け希望日を過ぎています（最優先で出荷してください）: ${delayedOrders.length}件`,
+    ['お客様管理番号', 'お届け希望日', '商品名'], delayedOrders.map(o => [o.orderNumber, o.desiredDeliveryRaw || '', firstName(o)]), 'error');
+  renderRakutenWarningSection(qResults, 'q-warn-lastchance',
+    `⏰ 本日中に出荷が必要（お届け希望日 = 本日+3日 ＝ 最終出荷日): ${lastChanceOrders.length}件`,
+    ['お客様管理番号', 'お届け希望日', '商品名'], lastChanceOrders.map(o => [o.orderNumber, o.desiredDeliveryRaw || '', firstName(o)]), 'orange');
+  renderRakutenWarningSection(qResults, 'q-warn-multidest',
+    `⚠ Qoo10：配送先が複数のカート（手動対応）。ピッキングには含めますが、B2・クリックポストからは除外します: ${parsed.multiDest.length}件`,
+    ['お客様管理番号', '商品名'], parsed.multiDest.map(x => [x.orderNumber, x.productName]), 'error');
+  renderRakutenWarningSection(qResults, 'q-warn-nopref',
+    `⚠ Qoo10：住所の先頭に都道府県が無いカート（手動対応）。ピッキングには含めますが、B2・クリックポストからは除外します: ${parsed.noPref.length}件`,
+    ['お客様管理番号', '住所', '商品名'], parsed.noPref.map(x => [x.orderNumber, x.address, x.productName]), 'error');
+  renderRakutenWarningSection(qResults, 'q-warn-check',
+    `⚠ 要確認（対象には含めています）: ${parsed.needsCheck.length}件`,
+    ['お客様管理番号', '内容', '商品名'], parsed.needsCheck.map(x => [x.orderNumber, x.memo, x.productName]), 'warn');
+  renderRakutenWarningSection(qResults, 'q-warn-scheduled',
+    `📅 予定：お届け希望日が先のため本日のピッキング対象外です: ${data.scheduled.length}件`,
+    ['お客様管理番号', 'お届け希望日', '商品名'], data.scheduled.map(o => [o.orderNumber, o.desiredDeliveryRaw || '', firstName(o)]), 'warn');
+
+  if (!parsed.orders.length) return;
+  if (!data.orders.length) {
+    const noPick = document.createElement('div');
+    noPick.className = 'result-item';
+    noPick.style.cssText = 'display:block;background:#f4f4f4;border:1px solid #ddd;color:#555;';
+    noPick.textContent = '本日出荷対象の注文はありません（全件が予定分です）';
+    qResults.appendChild(noPick);
+    return;
+  }
+
+  const sec = document.createElement('div');
+  sec.id = 'q-picking-list';
+  sec.style.marginTop = '14px';
+  const screenTotal = [...data.total, ...(data.multiTotal || [])];
+  // 並び・色・開閉の規則はメルカリと同じ（複数個口の候補を先頭 → 遅延 → 不明 → ネコポス以外 → ネコポス）
+  const qtySum = o => o.lines.reduce((a, l) => a + (Number(l.quantity) || 0), 0);
+  const isCand = o => qtySum(o) >= 2;
+  const orderGroup = o => o.delayed ? 0 : qoo10IsUnknownMethod(o) ? 1 : qoo10ResolvedMethod(o) !== QOO10_NEKOPOS ? 2 : 3;
+  const displayOrders = data.orders.map((o, i) => ({ o, c: isCand(o) ? 0 : 1, k: orderGroup(o), i }))
+    .sort((a, b) => a.c - b.c || a.k - b.k || a.i - b.i).map(x => x.o);
+  const rowBg = o => o.delayed ? '#fef2f2' : o.isLastChance ? '#fff7ed'
+    : qoo10IsUnknownMethod(o) ? '#fef2f2'
+    : (qoo10ResolvedMethod(o) !== QOO10_NEKOPOS || qoo10NekoposDateConflict(o)) ? '#fffbeb' : '';
+  const DT_WARN = '⚠ 日時指定があります。ネコポスは日時指定に対応していません';
+  const orderRows = displayOrders.map(o => {
+    const cur = qoo10ResolvedMethod(o);
+    const unknownOpt = qoo10HasUnknownOption(o);
+    const opts = (unknownOpt ? [QOO10_UNKNOWN_OPTION] : []).concat(QOO10_METHOD_OPTIONS);
+    const curVal = qoo10IsUnknownMethod(o) ? '' : cur;
+    const shipSelect = `<select class="qcp-ship" data-order="${esc(o.orderNumber)}">${
+        opts.map(([v, label]) => `<option value="${esc(v)}"${v === curVal ? ' selected' : ''}>${esc(label)}</option>`).join('')
+      }</select>`;
+    const shipExtra = unknownOpt ? `<div class="qcp-unknown">配送方法：${esc(o.shipMethodRaw || '（空）')}</div>` : '';
+    let alertLine = '';
+    if (o.delayed) alertLine = `<div class="qcp-alert-delayed">⚠ 遅延：お届け希望日 ${esc(o.desiredDeliveryRaw)} を過ぎています</div>`;
+    else if (o.isLastChance) alertLine = `<div class="qcp-alert-last">本日中に出荷が必要（お届け希望日 ${esc(o.desiredDeliveryRaw)}）</div>`;
+    else if (o.desiredDeliveryRaw) alertLine = `<div class="qcp-dd">📅 お届け希望日 ${esc(o.desiredDeliveryRaw)}</div>`;
+    const orderNosLine = `<div class="qcp-dd">注文番号：${esc(o.orderNos.join(' / '))}</div>`;
+    const multiDestLine = o.multiDest ? '<div class="qcp-alert-delayed">⚠ 配送先が複数のカートです（B2・クリックポストに出しません。手動対応）</div>' : '';
+    const noPrefLine = o.noPref ? '<div class="qcp-alert-delayed">⚠ 住所の先頭に都道府県がありません（B2・クリックポストに出しません。手動対応）</div>' : '';
+    const dtWarn = `<div class="qcp-alert-dt" style="display:${qoo10NekoposDateConflict(o) ? 'block' : 'none'};">${DT_WARN}</div>`;
+    const parcelSelect = `<select class="qcp-parcel" data-order="${esc(o.orderNumber)}"${qoo10NoParcel(cur) ? ' disabled' : ''}>${
+      parcelOptionsHtml(qoo10NoParcel(cur) ? 1 : (qoo10ParcelChoice.get(o.orderNumber) || 1))}</select>`;
+    return shipListOrderHtml({
+      orderId: o.orderNumber,
+      storeLabel: `Qoo10（${QOO10_STORE_NAME}）`,
+      badges: shipListParcelHint(qtySum(o)),
+      alerts: orderNosLine + alertLine + multiDestLine + noPrefLine + dtWarn,
+      lines: o.lines,
+      shipSelect, parcelSelect, shipExtra,
+      bg: rowBg(o),
+    });
+  }).join('');
+
+  sec.innerHTML = `
+    <style>${SHIP_LIST_CSS}
+      #q-picking-list .qcp-unknown { font-weight:600; color:#991b1b; font-size:12px; padding-top:2px; }
+      #q-picking-list .qcp-alert-delayed { color:#b91c1c; font-weight:700; padding:2px 0; }
+      #q-picking-list .qcp-alert-last { color:#c2410c; font-weight:700; padding:2px 0; }
+      #q-picking-list .qcp-alert-dt { color:#92400e; font-weight:700; padding:2px 0; }
+      #q-picking-list .qcp-dd { color:#555; font-size:12px; padding:2px 0; }
+      #q-picking-list h3 { font-size:14px; margin:10px 0 6px; }
+    </style>
+    <h3>📋 発送方法の確認・変更（カート別明細）</h3>
+    <div id="q-ship-head" class="result-item"></div>
+    <div id="q-ship-dtwarn" class="result-item" style="display:none;background:#fffbeb;border:1px solid #fcd34d;color:#92400e;margin-top:6px;"></div>
+    <button type="button" id="q-ship-toggle" class="btn-aux" style="margin-top:6px;"></button>
+    <div id="q-ship-redo" class="result-item" style="display:none;background:#fffbeb;border:1px solid #fcd34d;color:#92400e;margin:8px 0;">⚠ 出力後に配送方法・個口数を変更しました。B2取込CSVを作り直してください</div>
+    <div id="q-ship-list" style="margin-top:8px;">
+      <table class="qcp-list ship-list">${orderRows}</table>
+    </div>`;
+  qArea.appendChild(sec);
+
+  const shipHead = sec.querySelector('#q-ship-head');
+  const shipDtWarn = sec.querySelector('#q-ship-dtwarn');
+  const refreshShipHead = () => {
+    const n = m => data.orders.filter(o => qoo10ResolvedMethod(o) === m).length;
+    const unknown  = data.orders.filter(qoo10IsUnknownMethod).length;
+    const switched = data.orders.filter(o => qoo10ResolvedMethod(o) !== qoo10InitialMethod(o)).length;
+    shipHead.className = 'result-item ' + (unknown ? 'error' : 'success');
+    shipHead.textContent = (unknown ? '⚠ ' : '✓ ')
+      + `発送方法：ネコポス ${n(QOO10_NEKOPOS)}／宅急便コンパクト ${n(QOO10_COMPACT)}／クリックポスト ${n(QOO10_CLICKPOST)}`
+      + `／宅急便 ${n(QOO10_TAKKYUBIN)}／送り状なし ${n(QOO10_NONE)}／本日出荷しない ${n(QOO10_SKIP)}`
+      + (unknown ? `／不明 ${unknown}` : '')
+      + parcelHeadText(data.orders.filter(o => !qoo10NoParcel(qoo10ResolvedMethod(o))).map(qoo10ParcelCount))
+      + (switched ? `／判定から変更 ${switched}件` : '')
+      + (unknown ? '。不明のカートはB2から除外されます。発送方法を選んでください' : '');
+    const dt = data.orders.filter(qoo10NekoposDateConflict).length;
+    shipDtWarn.style.display = dt ? 'block' : 'none';
+    shipDtWarn.textContent = `${DT_WARN}：${dt}件（B2には日付をそのまま出します）`;
+  };
+  refreshShipHead();
+
+  const shipList = sec.querySelector('#q-ship-list');
+  const shipToggle = sec.querySelector('#q-ship-toggle');
+  const setShipOpen = open => {
+    qoo10ShipListOpen = open;
+    shipList.style.display = open ? 'block' : 'none';
+    shipToggle.setAttribute('aria-expanded', open ? 'true' : 'false');
+    shipToggle.textContent = open ? '発送方法の一覧を隠す' : '発送方法の一覧を表示';
+  };
+  const hits = data.orders.filter(o => qoo10IsUnknownMethod(o) || isCand(o)).map(o => o.orderNumber);
+  const newHit = hits.some(id => !qoo10ShipAutoSeen.has(id));
+  setShipOpen(qoo10ShipListOpen === null ? hits.length > 0 : (qoo10ShipListOpen || newHit));
+  qoo10ShipAutoSeen = new Set(hits);
+  shipToggle.addEventListener('click', () => setShipOpen(shipList.style.display === 'none'));
+
+  rRenderShipRedo();
+
+  sec.querySelectorAll('.qcp-ship').forEach(sel => {
+    sel.addEventListener('change', () => {
+      const id = sel.getAttribute('data-order');
+      if (sel.value) qoo10ShipChoice.set(id, sel.value);
+      else qoo10ShipChoice.delete(id);
+      const o = data.orders.find(x => x.orderNumber === id);
+      const tb = sel.closest('tbody.sl-order');
+      if (o && tb) {
+        tb.style.background = rowBg(o);
+        const w = tb.querySelector('.qcp-alert-dt');
+        if (w) w.style.display = qoo10NekoposDateConflict(o) ? 'block' : 'none';
+        if (qoo10IsUnknownMethod(o) || isCand(o)) qoo10ShipAutoSeen.add(id); else qoo10ShipAutoSeen.delete(id);
+        const pSel = tb.querySelector('.qcp-parcel');
+        if (pSel) {
+          pSel.disabled = qoo10NoParcel(qoo10ResolvedMethod(o));
+          pSel.value = String(pSel.disabled ? 1 : (qoo10ParcelChoice.get(id) || 1));
+        }
+      }
+      if (s1OutputDone || s1ShipChoiceStale) {
+        s1ShipChoiceStale = true;
+        s1OutputDone = false;
+      }
+      refreshShipHead();
+      rRenderShipRedo();
+      updateS1ConvertLabel();
+    });
+  });
+  sec.querySelectorAll('.qcp-parcel').forEach(sel => {
+    sel.addEventListener('change', () => {
+      const id = sel.getAttribute('data-order');
+      const n = parseInt(sel.value, 10) || 1;
+      if (n > 1) qoo10ParcelChoice.set(id, n); else qoo10ParcelChoice.delete(id);
+      if (s1OutputDone || s1ShipChoiceStale) {
+        s1ShipChoiceStale = true;
+        s1OutputDone = false;
+      }
+      refreshShipHead();
+      rRenderShipRedo();
+      updateS1ConvertLabel();
+    });
+  });
+
+  // 画像URL登録UI（キーは Qoo10 の販売者商品コード。空なら 商品番号（:オプションコード）で、画像は出ない＝正常）
+  renderImageRegisterSection({ total: screenTotal }, qArea, 'q-img-register-wrap');
+}
+
+// STEP1（Qoo10 ペイン）のファイル読み込み。1ファイル。判定・必須列に合わないファイルは受け付けずエラー表示
+// （前に読み込んだファイルも取り消す＝古いファイルのまま進めない）
+const qDropzone  = document.getElementById('q-dropzone');
+const qFileInput = document.getElementById('q-fileInput');
+function qRenderFileState() {
+  const el = document.getElementById('q-file-order');
+  if (el) {
+    const f = s1Qoo10File;
+    el.textContent = f ? `✓ 配送管理ファイル：${f.name}（${f.encoding === 'utf8' ? 'UTF-8' : 'Shift_JIS'}）` : '配送管理ファイル：未読込';
+    el.style.color = f ? '#166534' : '#888';
+    el.style.fontWeight = f ? '700' : '400';
+  }
+  if (qDropzone) qDropzone.classList.toggle('has-file', !!s1Qoo10Parsed);
+}
+function qShowError(message) {
+  const item = document.createElement('div');
+  item.className = 'result-item error';
+  item.textContent = `⚠ ${message}`;
+  document.getElementById('q-results').appendChild(item);
+}
+function qRefreshView(error) {
+  document.getElementById('q-results').innerHTML = '';
+  document.getElementById('q-picking-area').innerHTML = '';
+  // 読み込み内容が変わった＝前回の変換で作った印刷ボタンは中身が古い（メルカリの mRefreshView と同じ）
+  const oldBtn = document.getElementById('picking-print-wrap');
+  if (oldBtn) oldBtn.remove();
+  qRenderFileState();
+  if (s1Qoo10Parsed) renderQoo10Results(s1Qoo10Parsed);
+  else { qoo10ShipChoice.clear(); qoo10ParcelChoice.clear(); }
+  if (error) qShowError(error);
+}
+function qLoadFile(file) {
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = e => {
+    const buffer = e.target.result;
+    let error = null;
+    try {
+      const dec = qoo10Decode(buffer);
+      const parsed = parseQoo10File(dec.text);
+      s1Qoo10File = { name: file.name, buffer, text: dec.text, encoding: dec.encoding, bom: dec.bom };
+      s1Qoo10Parsed = parsed;
+      essSaveAndReport('s1', 'in_qoo10_delivery', 'Qoo10', new Uint8Array(buffer), file.name);
+    } catch (err) {
+      s1Qoo10File = null; s1Qoo10Parsed = null;
+      error = `${file.name}：${err.message}`;
+    }
+    qRefreshView(error);
+    rAfterLoad();   // 変換ボタン・出力済み・照合の押し直しの扱いは楽天・メルカリの読み込みと同じ
+  };
+  reader.onerror = () => { s1Qoo10File = null; s1Qoo10Parsed = null; qRefreshView(`${file.name}：ファイルを読めません`); rAfterLoad(); };
+  reader.readAsArrayBuffer(file);
+}
+if (qDropzone && qFileInput) {
+  qDropzone.addEventListener('click', () => qFileInput.click());
+  qDropzone.addEventListener('dragover', e => { e.preventDefault(); qDropzone.classList.add('drag-over'); });
+  qDropzone.addEventListener('dragleave', () => qDropzone.classList.remove('drag-over'));
+  qDropzone.addEventListener('drop', e => {
+    e.preventDefault(); qDropzone.classList.remove('drag-over');
+    qLoadFile(e.dataTransfer.files[0]);
+  });
+  qFileInput.addEventListener('change', e => { qLoadFile(e.target.files[0]); e.target.value = ''; });
+  qRenderFileState();
+}
+
+// ---- STEP2：一括発送用CSV ----
+// セルの生のバイト（[s, e)）を元の文字コードで読む。引用符を外し、前後の空白と先頭の BOM を除く（列名・注文番号を見るためだけ）
+function qoo10TextCell(u8, span, encoding) {
+  const sub = u8.subarray(span.s, span.e);
+  let t = encoding === 'utf8' ? new TextDecoder('utf-8').decode(sub)
+    : Encoding.codeToString(Encoding.convert(sub, { to: 'UNICODE', from: 'SJIS', type: 'array' }));
+  t = t.replace(/^﻿/, '').trim();
+  if (t.length >= 2 && t[0] === '"' && t[t.length - 1] === '"') t = t.slice(1, -1).replace(/""/g, '"');
+  return t.trim();
+}
+// 出荷予定日（B2 の '2026/10/25' 等）→ 'YYYYMMDD'。読めなければ null
+function qoo10ShipDateYmd(raw) {
+  const m = /^(\d{4})\/(\d{1,2})\/(\d{1,2})$/.exec(String(raw == null ? '' : raw).trim());
+  if (!m) return null;
+  const mi = parseInt(m[2], 10), di = parseInt(m[3], 10);
+  if (mi < 1 || mi > 12 || di < 1 || di > 31) return null;
+  return `${m[1]}${String(mi).padStart(2, '0')}${String(di).padStart(2, '0')}`;
+}
+
+// B2発行済データ（とクリックポスト）の Qoo10 の行 → 一括発送用CSV（バイト列）。
+// rows   … [{ orderNumber（＝qoo10-{カート番号}）, trackingRaw, shipDateRaw, invoiceType?, carrier?, partial? }]
+//           （B2 の行は invoiceType＝送り状種類、クリックポストの行だけ carrier＝QOO10_CARRIER_CLICKPOST）
+// file   … STEP 1 で読み込んだ配送管理ファイル（s1Qoo10File：{ buffer, encoding }）
+// parsed … STEP 1 の判定結果（s1Qoo10Parsed：fileCarts・cartTargets・excludedReason・orders）
+// 作り方：元のバイト列から、今回伝票が出たカートの出荷対象の注文番号の行だけを元の順で残す。1行目（列名）・列の順・他のセルの値・
+// 文字コード・BOM・改行コード・引用符の付け方は元のまま。配送会社・送り状番号・発送日の3つのセルだけを書き換える。
+// 同じカートの全行に同じ値を入れる。2個口以上のカートは1つ目の伝票番号だけを入れて警告（Qoo10 に複数の番号を入れられるかは未確認）。
+// 除外して警告：一部の個口だけ伝票番号が入ったカート（partial）・STEP 1 のデータに無いカート・STEP 1 で出荷対象から外したカート・
+// 送り状種類が分からない行・出荷予定日が読めない行
+function buildQoo10BulkShip(rows, file, parsed, today) {
+  const byCart = new Map();   // カート番号 → { orderNumber, tracks:[番号]（重複なし・出てきた順）, carrierName, ymd, partial, badType, badDate }
+  for (const r of (rows || [])) {
+    if (!r.orderNumber || !r.trackingRaw) continue;
+    const cart = String(r.orderNumber).replace(/^qoo10-/, '');
+    const isCp = r.carrier === QOO10_CARRIER_CLICKPOST;
+    // 伝票番号の正規化は Amazon の出荷通知と同じ（B2 は数値化して .0 を落とす。クリックポストは12桁の数字をそのまま）
+    const number = isCp ? String(r.trackingRaw)
+      : (n => isNaN(n) ? String(r.trackingRaw) : String(n))(parseInt(String(r.trackingRaw).replace(/\.0+$/, ''), 10));
+    if (!byCart.has(cart)) byCart.set(cart, { orderNumber: r.orderNumber, tracks: [], carrierName: null, ymd: null,
+                                              partial: null, badType: null, badDate: null });
+    const e = byCart.get(cart);
+    if (!e.tracks.includes(number)) e.tracks.push(number);
+    if (r.partial) e.partial = r.partial;
+    if (e.carrierName === null && !e.badType) {
+      const method = isCp ? QOO10_CLICKPOST : SHIP_METHOD_MAP[String(r.invoiceType == null ? '' : r.invoiceType).trim()];
+      if (method && QOO10_CARRIER_NAMES[method]) e.carrierName = QOO10_CARRIER_NAMES[method];
+      else e.badType = String(r.invoiceType == null ? '' : r.invoiceType) || '（空）';
+    }
+    if (e.ymd === null && !e.badDate) {
+      const ymd = qoo10ShipDateYmd(r.shipDateRaw);
+      if (ymd) e.ymd = ymd; else e.badDate = String(r.shipDateRaw == null ? '' : r.shipDateRaw) || '（空）';
+    }
+  }
+  const multiParcel = [], multiFirst = [], notInStep1 = [], excluded = [], badType = [], badDate = [];
+  const keep = new Map();   // 注文番号 → { carrierName, tracking, ymd }
+  const keptCarts = new Set();
+  for (const [cart, e] of byCart) {
+    const joined = e.tracks.join(' / ');
+    if (e.partial) { multiParcel.push({ orderNumber: e.orderNumber, trackings: joined, partial: e.partial }); continue; }
+    if (!parsed.fileCarts.has(cart)) { notInStep1.push({ orderNumber: e.orderNumber, trackings: joined }); continue; }
+    if (!parsed.cartTargets.has(cart)) {
+      const reasons = ((parsed.cartExcluded && parsed.cartExcluded.get(cart)) || []).map(x => `${x.orderNo}（${x.reason}）`);
+      excluded.push({ orderNumber: e.orderNumber, reason: reasons.join(' / ') || '出荷対象外', trackings: joined }); continue;
+    }
+    if (e.badType) { badType.push({ orderNumber: e.orderNumber, value: e.badType, trackings: joined }); continue; }
+    if (e.badDate) { badDate.push({ orderNumber: e.orderNumber, value: e.badDate, trackings: joined }); continue; }
+    if (e.tracks.length > 1) multiFirst.push({ orderNumber: e.orderNumber, first: e.tracks[0], rest: e.tracks.slice(1).join(' / ') });
+    for (const no of parsed.cartTargets.get(cart)) keep.set(no, { carrierName: e.carrierName, tracking: e.tracks[0], ymd: e.ymd });
+    keptCarts.add(cart);
+  }
+
+  // 元のバイト列から組み立てる（区切りの見つけ方はメルカリと同じ。UTF-8・cp932 のどちらでも '"'・','・CR・LF はバイトのまま割れる）
+  const u8 = new Uint8Array(file.buffer);
+  const recs = mercariSplitRecordBytes(u8);
+  const enc = file.encoding === 'utf8' ? (t => new TextEncoder().encode(t)) : toSjisUint8;
+  const cellBytes = v => enc(/[",\r\n]/.test(v) ? '"' + v.replace(/"/g, '""') + '"' : v);   // 引用符は必要なセルだけ（元と同じ）
+  const parts = [];
+  let rowCount = 0;
+  if (recs.length) {
+    const head = recs[0];
+    const names = mercariCellSpans(u8, head.start, head.bodyEnd).map(sp => qoo10TextCell(u8, sp, file.encoding));
+    const iNo = names.indexOf(QOO10_COL_ORDER);
+    const iRep = [[names.indexOf(QOO10_COL_CARRIER), 'carrierName'], [names.indexOf(QOO10_COL_TRACKING), 'tracking'],
+                  [names.indexOf(QOO10_COL_SHIPDATE), 'ymd']].filter(([i]) => i >= 0).sort((a, b) => a[0] - b[0]);
+    parts.push(u8.subarray(head.start, head.end));   // 1行目（列名）は元のまま（BOM も含む）
+    for (let k = 1; k < recs.length; k++) {
+      const rec = recs[k];
+      if (rec.bodyEnd <= rec.start) continue;   // 空行
+      const spans = mercariCellSpans(u8, rec.start, rec.bodyEnd);
+      const no = spans[iNo] ? qoo10Unquote(qoo10TextCell(u8, spans[iNo], file.encoding)) : '';
+      const v = keep.get(no);
+      if (!v) continue;
+      let pos = rec.start;
+      for (const [i, key] of iRep) {
+        const sp = spans[i];
+        if (!sp) continue;
+        parts.push(u8.subarray(pos, sp.s), cellBytes(v[key]));
+        pos = sp.e;
+      }
+      parts.push(u8.subarray(pos, rec.end));
+      rowCount++;
+    }
+  }
+  const total = parts.reduce((a, p) => a + p.length, 0);
+  const bytes = new Uint8Array(total);
+  let off = 0;
+  for (const p of parts) { bytes.set(p, off); off += p.length; }
+
+  // 出荷漏れの候補（メルカリと同じ考え方）：STEP 1 の出荷対象で B2・クリックポストに出したはずのカートに伝票が無い
+  const notShipped = [];
+  for (const o of buildQoo10PickingData(parsed.orders || [], today || essToday()).orders) {
+    if (qoo10InvoiceCode(o) === '' || o.multiDest || o.noPref) continue;
+    if (!byCart.has(o.cartNo)) notShipped.push({ orderNumber: o.orderNumber });
+  }
+  return { bytes, orderCount: keptCarts.size, rowCount, multiParcel, multiFirst, notInStep1, excluded, badType, badDate, notShipped };
+}
+
+// Qoo10 分の警告（STEP2 の結果エリア）。出力0件でも警告は出す（なぜ0件だったのか分かるように）
+function renderQoo10ShipWarnings(container, rep) {
+  renderRakutenWarningSection(container, 'qs-warn-multifirst',
+    `⚠ Qoo10：2個口以上のカート（2つ目以降の送り状番号は QSM で手入力）。一括発送用CSV には1つ目の送り状番号だけを入れました: ${rep.multiFirst.length}件`,
+    ['お客様管理番号', '入れた送り状番号', '手入力する送り状番号'], rep.multiFirst.map(x => [x.orderNumber, x.first, x.rest]), 'error');
+  renderRakutenWarningSection(container, 'qs-warn-multi',
+    `⚠ Qoo10：複数個口の伝票番号が一部しか入っていません（自動処理から除外）。全部入れてから作り直してください: ${rep.multiParcel.length}件`,
+    ['お客様管理番号', '伝票番号'],
+    rep.multiParcel.map(x => [x.orderNumber, x.trackings
+      + (x.partial ? `（一部未入力：${x.partial.parcels}個口のうち${x.partial.filled}本）` : '')]), 'error');
+  renderRakutenWarningSection(container, 'qs-warn-notinstep1',
+    `⚠ Qoo10：STEP 1 で読み込んだ配送管理ファイルに無いカートのため除外（そのカートを含むファイルを STEP 1 で読み込み直してください）: ${rep.notInStep1.length}件`,
+    ['お客様管理番号', '伝票番号'], rep.notInStep1.map(x => [x.orderNumber, x.trackings]), 'error');
+  renderRakutenWarningSection(container, 'qs-warn-excluded',
+    `⚠ Qoo10：STEP 1 で出荷対象から外したカートのため除外（手動で確認してください）: ${rep.excluded.length}件`,
+    ['お客様管理番号', '外した理由', '伝票番号'], rep.excluded.map(x => [x.orderNumber, x.reason, x.trackings]), 'error');
+  renderRakutenWarningSection(container, 'qs-warn-badtype',
+    `⚠ Qoo10：送り状種類から配送会社を決められないため除外（手動対応してください）: ${rep.badType.length}件`,
+    ['お客様管理番号', '送り状種類', '伝票番号'], rep.badType.map(x => [x.orderNumber, x.value, x.trackings]), 'error');
+  renderRakutenWarningSection(container, 'qs-warn-baddate',
+    `⚠ Qoo10：出荷予定日が不正なため除外（手動対応してください）: ${rep.badDate.length}件`,
+    ['お客様管理番号', '出荷予定日の値', '伝票番号'], rep.badDate.map(x => [x.orderNumber, x.value, x.trackings]), 'error');
+  renderRakutenWarningSection(container, 'qs-warn-notshipped',
+    `📦 Qoo10：STEP 1の出荷対象のうち、今回の発行済みデータに伝票が無いカート（出荷漏れの可能性）: ${rep.notShipped.length}件`,
+    ['お客様管理番号'], rep.notShipped.map(x => [x.orderNumber]), 'warn');
+}
+// ==== QOO10 (Qoo10) — END ====
 
 
 // ============================================================
