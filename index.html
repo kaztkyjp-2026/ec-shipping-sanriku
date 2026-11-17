@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>EC出荷オペレーションツール - Amazon FBM / 楽天市場 / ヤフショ / メルカリ / Qoo10 × ヤマトB2クラウド</title>
+  <title>EC出荷オペレーションツール - Amazon FBM / 楽天市場 / Yahoo!ショッピング / メルカリShops / Qoo10 × ヤマトB2クラウド</title>
   <script>
   // ==== 定数（ルート・/preview/ 共通） ====
   // Google OAuth クライアントID（drive.file スコープのトークンモデル用。秘密情報ではない）。
@@ -17,7 +17,7 @@
   <link rel="icon" type="image/png" id="app-icon">
   <script>document.getElementById('app-icon').href = ASSET_BASE + 'assets/icon.png';</script>
   <script src="https://accounts.google.com/gsi/client" async></script>
-  <meta name="description" content="Amazon FBM（自己発送）・楽天市場・ヤフショ（Yahoo!ショッピング）・メルカリShops・Qoo10の出荷業務を支援するブラウザツール。ヤマトB2クラウド取込CSV・クリックポスト用CSV・ピッキングリスト・Amazon出荷通知TXT・楽天市場発送完了報告CSV・ヤフショ注文処理実績アップロード用CSV・メルカリShops一括発送通知用CSV・Qoo10一括発送用CSVを生成します。処理はブラウザ内で行い、Google にログインしているときは入力・出力ファイルの控えを利用者自身の Google ドライブ（EC出荷記録）に保存します。">
+  <meta name="description" content="Amazon FBM（自己発送）・楽天市場・Yahoo!ショッピング・メルカリShops・Qoo10の出荷業務を支援するブラウザツール。ヤマトB2クラウド取込CSV・クリックポスト用CSV・ピッキングリスト・Amazon出荷通知TXT・楽天市場発送完了報告CSV・Yahoo!ショッピング注文処理実績アップロード用CSV・メルカリShops一括発送通知用CSV・Qoo10一括発送用CSVを生成します。処理はブラウザ内で行い、Google にログインしているときは入力・出力ファイルの控えを利用者自身の Google ドライブ（EC出荷記録）に保存します。">
   <script src="https://cdn.jsdelivr.net/npm/encoding-japanese@2/encoding.min.js"></script>
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
@@ -379,10 +379,10 @@
 <div class="container">
 
   <div class="app-header">
-    <div class="app-logo">Amazon FBM ＋ 楽天市場 ＋ ヤフショ ＋ メルカリ ＋ Qoo10 出荷オペレーション</div>
+    <div class="app-logo">Amazon FBM ＋ 楽天市場 ＋ Yahoo!ショッピング ＋ メルカリShops ＋ Qoo10 出荷オペレーション</div>
     <div class="app-title">EC出荷オペレーションツール</div>
     <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-top:10px;">
-      <div class="security-badge">🔒 データはブラウザ内で処理。入力・出力ファイルを、Google にログインしているときだけ、ご自身の Google ドライブ（EC出荷記録）に保存します（STEP 2 で作る出荷通知TXT・発送完了報告CSV・ヤフショの注文処理実績アップロード用CSV・メルカリの一括発送通知用CSV・Qoo10の一括発送用CSVは保存しません）。</div>
+      <div class="security-badge">🔒 データはブラウザ内で処理。入力・出力ファイルを、Google にログインしているときだけ、ご自身の Google ドライブ（EC出荷記録）に保存します（STEP 2 で作る出荷通知TXT・発送完了報告CSV・Yahoo!ショッピングの注文処理実績アップロード用CSV・メルカリShopsの一括発送通知用CSV・Qoo10の一括発送用CSVは保存しません）。</div>
       <a id="manual-link" target="_blank" style="font-size:13px;font-weight:700;color:#fff;background:#e77a1a;border-radius:8px;padding:5px 14px;text-decoration:none;letter-spacing:0.03em;">📖 使い方マニュアル</a>
       <script>document.getElementById('manual-link').href = ASSET_BASE + 'manual.html';</script>
     </div>
@@ -430,22 +430,22 @@
       注文者と送付先が異なる注文（RMSの送付先一致フラグが0）は、ご依頼主欄に注文者を入れます。請求先顧客コード・運賃管理番号は常にこの設定の値を使います。
     </div>
     <div id="rakuten-settings-card"></div>
-    <div class="section-label" style="margin-top:18px;">ヤフショ（Yahoo!ショッピング・B2依頼主・1店舗）</div>
+    <div class="section-label" style="margin-top:18px;">Yahoo!ショッピング（B2依頼主・1店舗）</div>
     <div class="info-box" style="margin-bottom:10px;">
-      ヤフショ分のB2クラウド取込CSVの<strong>ご依頼主</strong>に使われます。Amazon・楽天市場の設定とは独立です。<br>
+      Yahoo!ショッピング分のB2クラウド取込CSVの<strong>ご依頼主</strong>に使われます。Amazon・楽天市場の設定とは独立です。<br>
       お届け先と注文者の氏名・郵便番号・住所・電話のどれかが違う注文（ギフト等）は、ご依頼主欄に注文者を入れます。請求先顧客コード・運賃管理番号は常にこの設定の値を使います。<br>
-      <strong>ストアアカウント</strong>は注文番号の先頭（例 mampukudo-10000001 の mampukudo）です。STEP 2 で発行済データからヤフショの注文を見分けるのに使います。
+      <strong>ストアアカウント</strong>は注文番号の先頭（例 mampukudo-10000001 の mampukudo）です。STEP 2 で発行済データからYahoo!ショッピングの注文を見分けるのに使います。
     </div>
     <div id="yahoo-settings-card"></div>
-    <div class="section-label" style="margin-top:18px;">メルカリ（メルカリShops・B2依頼主・1店舗）</div>
+    <div class="section-label" style="margin-top:18px;">メルカリShops（B2依頼主・1店舗）</div>
     <div class="info-box" style="margin-bottom:10px;">
-      メルカリ分のB2クラウド取込CSVの<strong>ご依頼主</strong>に使われます。Amazon・楽天市場・ヤフショの設定とは独立です（他のモールの設定で代わりに出すことはありません）。<br>
-      メルカリの注文データの請求先はお届け先の写しで注文者を表さないため、ご依頼主は<strong>常にこの設定</strong>（店舗名）です。請求先顧客コード・運賃管理番号も常にこの設定の値を使います。
+      メルカリShops分のB2クラウド取込CSVの<strong>ご依頼主</strong>に使われます。Amazon・楽天市場・Yahoo!ショッピングの設定とは独立です（他のモールの設定で代わりに出すことはありません）。<br>
+      メルカリShopsの注文データの請求先はお届け先の写しで注文者を表さないため、ご依頼主は<strong>常にこの設定</strong>（店舗名）です。請求先顧客コード・運賃管理番号も常にこの設定の値を使います。
     </div>
     <div id="mercari-settings-card"></div>
     <div class="section-label" style="margin-top:18px;">Qoo10（B2依頼主・1店舗）</div>
     <div class="info-box" style="margin-bottom:10px;">
-      Qoo10分のB2クラウド取込CSVの<strong>ご依頼主</strong>に使われます。Amazon・楽天市場・ヤフショ・メルカリの設定とは独立です（他のモールの設定で代わりに出すことはありません）。<br>
+      Qoo10分のB2クラウド取込CSVの<strong>ご依頼主</strong>に使われます。Amazon・楽天市場・Yahoo!ショッピング・メルカリShopsの設定とは独立です（他のモールの設定で代わりに出すことはありません）。<br>
       Qoo10 の配送管理ファイルには注文者の住所が無いため、ご依頼主は<strong>常にこの設定</strong>（店舗名）です。請求先顧客コード・運賃管理番号も常にこの設定の値を使います。
     </div>
     <div id="qoo10-settings-card"></div>
@@ -456,7 +456,7 @@
   <!-- ============ STEP1 ============ -->
   <div class="tab-content" id="tab-step1">
     <p style="font-size:13px;color:#666;margin-bottom:20px;line-height:1.6;">
-      Amazonの未出荷注文レポート・楽天市場の通常購入データCSV・ヤフショの注文データ（注文情報・商品情報）・メルカリの注文データ・Qoo10の配送管理ファイルを<br>
+      Amazonの未出荷注文レポート・楽天市場の通常購入データCSV・Yahoo!ショッピングの注文データ（注文情報・商品情報）・メルカリShopsの注文データ・Qoo10の配送管理ファイルを<br>
       ヤマトB2クラウド取込用CSV（1ファイル）に変換します。どれか1つのモールだけでも変換できます。<br>
       クリックポストを選んだ注文があれば、クリックポスト用CSVも出力します。変換後にピッキングリスト・梱包発送明細を印刷できます。<br>
       出力の前に、直近7日の Drive の記録と照合し、発行済み・出力済みの注文を除外します。
@@ -478,8 +478,8 @@
     <div class="mall-switch" id="s1-mall-switch">
       <button type="button" class="mall-amazon active" data-mall="amazon">Amazon</button>
       <button type="button" class="mall-rakuten" data-mall="rakuten">楽天市場</button>
-      <button type="button" class="mall-yahoo" data-mall="yahoo">ヤフショ</button>
-      <button type="button" class="mall-mercari" data-mall="mercari">メルカリ</button>
+      <button type="button" class="mall-yahoo" data-mall="yahoo">Yahoo!ショッピング</button>
+      <button type="button" class="mall-mercari" data-mall="mercari">メルカリShops</button>
       <button type="button" class="mall-qoo10" data-mall="qoo10">Qoo10</button>
     </div>
     <div id="s1-pane-amazon">
@@ -507,7 +507,7 @@
       <div id="r-picking-area"></div>
     </div>
     <div id="s1-pane-yahoo" style="display:none;">
-      <div class="section-label">ヤフショ 注文データ（注文情報・商品情報の2ファイル・必須）</div>
+      <div class="section-label">Yahoo!ショッピング 注文データ（注文情報・商品情報の2ファイル・必須）</div>
       <div class="dropzone drop-purple" id="y-dropzone" style="margin-bottom:8px;">
         <div class="dropzone-icon">🛍</div>
         <div class="dropzone-text" id="y-dropzone-text">注文情報と商品情報の2ファイルをドロップ<br>またはクリックして選択（順不同・同時に選択可）</div>
@@ -522,7 +522,7 @@
       <div id="y-picking-area"></div>
     </div>
     <div id="s1-pane-mercari" style="display:none;">
-      <div class="section-label">メルカリ 注文データ（1ファイル・必須）</div>
+      <div class="section-label">メルカリShops 注文データ（1ファイル・必須）</div>
       <div class="dropzone drop-teal" id="m-dropzone" style="margin-bottom:8px;">
         <div class="dropzone-icon">🧺</div>
         <div class="dropzone-text" id="m-dropzone-text">注文データCSVをドロップ<br>またはクリックして選択</div>
@@ -557,7 +557,7 @@
     <hr class="divider">
     <div class="section-label">出力ファイル</div>
     <div class="info-box">
-      B2用CSV: <strong>b2cloud_{出荷予定日YYYYMMDD}_HHMMSS.csv</strong>（Amazon全店舗＋楽天市場＋ヤフショ＋メルカリ＋Qoo10 統合・1ファイル、Amazon分→楽天市場分→ヤフショ分→メルカリ分→Qoo10分の順。照合なしで出力したときは末尾に _照合なし）<br>
+      B2用CSV: <strong>b2cloud_{出荷予定日YYYYMMDD}_HHMMSS.csv</strong>（Amazon全店舗＋楽天市場＋Yahoo!ショッピング＋メルカリShops＋Qoo10 統合・1ファイル、Amazon分→楽天市場分→Yahoo!ショッピング分→メルカリShops分→Qoo10分の順。照合なしで出力したときは末尾に _照合なし）<br>
       クリックポスト用CSV: <strong>clickpost_{出荷予定日YYYYMMDD}_HHMMSS.csv</strong>（クリックポストの注文があるときだけ。40行ごとに _1・_2… に分けます（N個口の注文は同じ行を N 行出します）。照合なしで出力したときは末尾に _照合なし）<br>
       B2の対象が0件でクリックポストだけのときは、b2cloud_… は出力しません。<br>
       出力の前に Drive の記録（直近7日）と照合します。出力後は Drive の EC出荷記録/{作業日}/02_B2用CSV・06_クリックポスト に控えを保存します。<br>
@@ -571,8 +571,8 @@
   <div class="tab-content" id="tab-step2">
     <p style="font-size:13px;color:#666;margin-bottom:16px;line-height:1.6;">
       ヤマトB2クラウドの「発行済みデータ」CSVを読み込み、<br>
-      Amazonの出荷通知ファイル（.txt）・楽天市場の発送完了報告データ（.csv）・ヤフショの注文処理実績アップロード用ファイル（.csv・2つ）・メルカリの一括発送通知用ファイル（.csv）・Qoo10の一括発送用ファイル（.csv）を生成します。<br>
-      1つのファイルにAmazon分・楽天市場分・ヤフショ分・メルカリ分・Qoo10分が混在していても、注文番号の形式で自動的に振り分けます（ヤフショは依頼主設定のストアアカウントで、メルカリは注文番号「order_…」、Qoo10 は「qoo10-…」の形で見分けます）。
+      Amazonの出荷通知ファイル（.txt）・楽天市場の発送完了報告データ（.csv）・Yahoo!ショッピングの注文処理実績アップロード用ファイル（.csv・2つ）・メルカリShopsの一括発送通知用ファイル（.csv）・Qoo10の一括発送用ファイル（.csv）を生成します。<br>
+      1つのファイルにAmazon分・楽天市場分・Yahoo!ショッピング分・メルカリShops分・Qoo10分が混在していても、注文番号の形式で自動的に振り分けます（Yahoo!ショッピングは依頼主設定のストアアカウントで、メルカリShopsは注文番号「order_…」、Qoo10 は「qoo10-…」の形で見分けます）。
     </p>
     <div class="warning">
       ⚠️ <strong>取り違え注意</strong>：B2クラウドへの「取込用CSV」ではなく、ラベル発行後にエクスポートする
@@ -584,8 +584,8 @@
       楽天市場分を出力するには、<strong>STEP 1 で通常購入データCSVを読み込んでおく必要があります</strong>
       （発送完了報告に必要な<strong>送付先ID</strong>をそこから取得するため）。STEP 1 の読み込みは、この画面を開いている間だけ有効です（ページを再読み込みすると消えます）。<br>
       RMSの発送完了報告用テンプレートCSVは、STEP 2 では不要です。<br>
-      ヤフショ分は STEP 1 の読み込みが無くても出力できます（STEP 1 で読み込んでいれば、出荷漏れの可能性がある注文も知らせます）。<br>
-      メルカリ分を出力するには、<strong>STEP 1 でメルカリの注文データを読み込んでおく必要があります</strong>（一括発送通知用のファイルは、その注文データから今回発送した注文だけを残して作るため）。<br>
+      Yahoo!ショッピング分は STEP 1 の読み込みが無くても出力できます（STEP 1 で読み込んでいれば、出荷漏れの可能性がある注文も知らせます）。<br>
+      メルカリShops分を出力するには、<strong>STEP 1 でメルカリShopsの注文データを読み込んでおく必要があります</strong>（一括発送通知用のファイルは、その注文データから今回発送した注文だけを残して作るため）。<br>
       Qoo10分を出力するには、<strong>STEP 1 で Qoo10 の配送管理ファイルを読み込んでおく必要があります</strong>（一括発送用のファイルは、その配送管理ファイルから今回発送したカートの行だけを残して作るため）。<br>
       出荷通知ファイルを作る前に、読み込んだ発行済データを Drive（EC出荷記録/{作業日}/03_発行済データ）に保存します（クリックポストの伝票番号は 06_クリックポスト）。保存できないときは出荷通知ファイルを作りません。
     </div>
@@ -607,8 +607,8 @@
     <div class="info-box">
       Amazon: <strong>{店舗名}_amazon_shipment_confirm_{出荷予定日YYYYMMDD}_HHMMSS.txt</strong>（読み込んだ発行済データのファイルごと・店舗ごとに1ファイル。同じ名前になるときは末尾に _2・_3…）<br>
       楽天市場: <strong>rakuten_shipping_report_{作成日YYYYMMDD}_HHMMSS.csv</strong>（1ファイル）<br>
-      ヤフショ: <strong>yahoo_odstats_ship_{作成日YYYYMMDD}_HHMMSS.csv</strong>（①出荷完了）と <strong>yahoo_odstats_complete_{作成日YYYYMMDD}_HHMMSS.csv</strong>（②注文の完了）。ストアクリエイターPro の［注文管理］→［注文処理実績アップロード］で、①を上げて反映を確かめてから②を上げてください。<br>
-      メルカリ: <strong>mercari_bulk_ship_{作成日YYYYMMDD}_HHMMSS.csv</strong>（1ファイル）。ショップ管理画面の［注文］→［CSV一括機能］→［一括発送通知］で上げてください。<br>
+      Yahoo!ショッピング: <strong>yahoo_odstats_ship_{作成日YYYYMMDD}_HHMMSS.csv</strong>（①出荷完了）と <strong>yahoo_odstats_complete_{作成日YYYYMMDD}_HHMMSS.csv</strong>（②注文の完了）。ストアクリエイターPro の［注文管理］→［注文処理実績アップロード］で、①を上げて反映を確かめてから②を上げてください。<br>
+      メルカリShops: <strong>mercari_bulk_ship_{作成日YYYYMMDD}_HHMMSS.csv</strong>（1ファイル）。ショップ管理画面の［注文］→［CSV一括機能］→［一括発送通知］で上げてください。<br>
       Qoo10: <strong>qoo10_bulk_ship_{作成日YYYYMMDD}_HHMMSS.csv</strong>（1ファイル）。QSM［配送管理］→ 下の［発送処理(一括発送)］タブ →［注文番号でExcel一括発送(ポップアップ)］で上げてください。<br>
       ブラウザのダウンロードとして直接保存されます（フォルダ選択なし）。<br>
       ※複数ファイル時にブラウザが「複数ファイルのダウンロード許可」を求めた場合は許可してください。
@@ -1937,9 +1937,9 @@ function renderCombinedPickingHTML(amazon, rakuten, seq, load, yahoo, mercari, q
     if (!s) return '';
     return RAKUTEN_BADGE_ORDER.filter(m => s.has(m)).map(rakutenMethodBadge).join('');
   };
-  const yahooTotalSection = !yahoo ? emptySection('商品別集計', 'ヤフショ', yahooBandName, null)
-    : !yPick ? emptySection('商品別集計', 'ヤフショ', yahooBandName, 0, skipNote(ySkip)) : `
-  ${band(mallHead('商品別集計', 'ヤフショ', yahooBandName, yPick))}
+  const yahooTotalSection = !yahoo ? emptySection('商品別集計', 'Yahoo!ショッピング', yahooBandName, null)
+    : !yPick ? emptySection('商品別集計', 'Yahoo!ショッピング', yahooBandName, 0, skipNote(ySkip)) : `
+  ${band(mallHead('商品別集計', 'Yahoo!ショッピング', yahooBandName, yPick))}
   <table class="total">
     ${TOTAL_COLGROUP}
     ${totalHead('商品名（商品コード）')}
@@ -1948,7 +1948,7 @@ function renderCombinedPickingHTML(amazon, rakuten, seq, load, yahoo, mercari, q
       return `<tr><td class="thumb-cell">${thumbInner(t.sku)}</td><td class="num">${esc(t.num)}</td><td class="${qtyCellCls(t.totalQty, parcels)}">${esc(t.totalQty)}</td><td class="cnt">${cntInner(parcels, t.orderCount)}</td><td class="name">${rakutenNameCell(t.name, t.skuInfo, t.sku)}${t.dupWarning ? RAKUTEN_DUP_BADGE : ''}${yahooShipBadges(t.clusterKey)}</td></tr>`;
     }).join('')}${multiGroupRows(seq.yahooGroups)}</tbody>
   </table>${skipNote(ySkip)}
-  ${mallEnd('ヤフショ', yPick)}`;
+  ${mallEnd('Yahoo!ショッピング', yPick)}`;
 
   // メルカリ：楽天・ヤフショと同じ作り（商品キー＝クラスタキー（variant_id）、印の並び・色、複数商品注文の集約行）。
   // 配送方法の値は楽天と同じ文字列（MERCARI_* ＝ RAKUTEN_*）のため、印は rakutenMethodBadge をそのまま使う。
@@ -1966,9 +1966,9 @@ function renderCombinedPickingHTML(amazon, rakuten, seq, load, yahoo, mercari, q
     if (!s) return '';
     return RAKUTEN_BADGE_ORDER.filter(m => s.has(m)).map(rakutenMethodBadge).join('');
   };
-  const mercariTotalSection = !mercari ? emptySection('商品別集計', 'メルカリ', mercariBandName, null)
-    : !mPick ? emptySection('商品別集計', 'メルカリ', mercariBandName, 0, skipNote(mSkip)) : `
-  ${band(mallHead('商品別集計', 'メルカリ', mercariBandName, mPick))}
+  const mercariTotalSection = !mercari ? emptySection('商品別集計', 'メルカリShops', mercariBandName, null)
+    : !mPick ? emptySection('商品別集計', 'メルカリShops', mercariBandName, 0, skipNote(mSkip)) : `
+  ${band(mallHead('商品別集計', 'メルカリShops', mercariBandName, mPick))}
   <table class="total">
     ${TOTAL_COLGROUP}
     ${totalHead('商品名（商品コード）')}
@@ -1977,7 +1977,7 @@ function renderCombinedPickingHTML(amazon, rakuten, seq, load, yahoo, mercari, q
       return `<tr><td class="thumb-cell">${thumbInner(t.sku)}</td><td class="num">${esc(t.num)}</td><td class="${qtyCellCls(t.totalQty, parcels)}">${esc(t.totalQty)}</td><td class="cnt">${cntInner(parcels, t.orderCount)}</td><td class="name">${rakutenNameCell(t.name, t.skuInfo, t.sku)}${t.dupWarning ? RAKUTEN_DUP_BADGE : ''}${mercariShipBadges(t.clusterKey)}</td></tr>`;
     }).join('')}${multiGroupRows(seq.mercariGroups)}</tbody>
   </table>${skipNote(mSkip)}
-  ${mallEnd('メルカリ', mPick)}`;
+  ${mallEnd('メルカリShops', mPick)}`;
 
   // Qoo10：メルカリと同じ作り（商品キー＝クラスタキー（販売者商品コード、空なら 商品番号:オプションコード）、印の並び・色、複数商品の集約行）。
   // 配送方法の値は楽天と同じ文字列（QOO10_* ＝ RAKUTEN_*）のため、印は rakutenMethodBadge をそのまま使う。
@@ -2046,9 +2046,9 @@ function renderCombinedPickingHTML(amazon, rakuten, seq, load, yahoo, mercari, q
   ${mallEnd('楽天市場', rOrders)}`;
 
   // ヤフショ：楽天と同じ作り。置き配の指定がある注文は見出しに「置き配：{EazyDeliveryName}」の印（.okihai-tag）を足す
-  const yahooDetailSection = !yahoo ? emptySection('梱包・発送明細', 'ヤフショ', yahooBandName, null)
-    : !yOrders ? emptySection('梱包・発送明細', 'ヤフショ', yahooBandName, 0) : `
-  ${band(mallHead('梱包・発送明細', 'ヤフショ', yahooBandName, yOrders))}
+  const yahooDetailSection = !yahoo ? emptySection('梱包・発送明細', 'Yahoo!ショッピング', yahooBandName, null)
+    : !yOrders ? emptySection('梱包・発送明細', 'Yahoo!ショッピング', yahooBandName, 0) : `
+  ${band(mallHead('梱包・発送明細', 'Yahoo!ショッピング', yahooBandName, yOrders))}
   <div class="detail-cols">${(yahoo.orders || []).map(o => {
     const rows = o.lines.map(l =>
       `<tr><td class="thumb-cell">${thumbInner(l.sku)}</td><td class="num">${esc(l.num)}</td><td class="qty">${esc(l.quantity)}</td><td class="name">${esc(l.name)}${l.skuInfo ? ` <span class="skuinfo">${esc(l.skuInfo)}</span>` : ''}</td></tr>`
@@ -2060,12 +2060,12 @@ function renderCombinedPickingHTML(amazon, rakuten, seq, load, yahoo, mercari, q
       <table>${detailHead}<tbody>${rows}</tbody></table>
     </section>`;
   }).join('')}</div>
-  ${mallEnd('ヤフショ', yOrders)}`;
+  ${mallEnd('Yahoo!ショッピング', yOrders)}`;
 
   // メルカリ：楽天・ヤフショと同じ作り
-  const mercariDetailSection = !mercari ? emptySection('梱包・発送明細', 'メルカリ', mercariBandName, null)
-    : !mOrders ? emptySection('梱包・発送明細', 'メルカリ', mercariBandName, 0) : `
-  ${band(mallHead('梱包・発送明細', 'メルカリ', mercariBandName, mOrders))}
+  const mercariDetailSection = !mercari ? emptySection('梱包・発送明細', 'メルカリShops', mercariBandName, null)
+    : !mOrders ? emptySection('梱包・発送明細', 'メルカリShops', mercariBandName, 0) : `
+  ${band(mallHead('梱包・発送明細', 'メルカリShops', mercariBandName, mOrders))}
   <div class="detail-cols">${(mercari.orders || []).map(o => {
     const rows = o.lines.map(l =>
       `<tr><td class="thumb-cell">${thumbInner(l.sku)}</td><td class="num">${esc(l.num)}</td><td class="qty">${esc(l.quantity)}</td><td class="name">${esc(l.name)}${l.skuInfo ? ` <span class="skuinfo">${esc(l.skuInfo)}</span>` : ''}</td></tr>`
@@ -2076,7 +2076,7 @@ function renderCombinedPickingHTML(amazon, rakuten, seq, load, yahoo, mercari, q
       <table>${detailHead}<tbody>${rows}</tbody></table>
     </section>`;
   }).join('')}</div>
-  ${mallEnd('メルカリ', mOrders)}`;
+  ${mallEnd('メルカリShops', mOrders)}`;
 
   // Qoo10：メルカリと同じ作り。見出しはお客様管理番号（qoo10-カート番号）と、そのカートの注文番号の一覧
   const qoo10DetailSection = !qoo10 ? emptySection('梱包・発送明細', 'Qoo10', qoo10BandName, null)
@@ -2096,16 +2096,19 @@ function renderCombinedPickingHTML(amazon, rakuten, seq, load, yahoo, mercari, q
   ${mallEnd('Qoo10', qOrders)}`;
 
   // ---- 配送方法別内訳（1表）----
-  // 以前の2表（ヤマト集荷依頼 申告数／モール別内訳）を1表にまとめた。列は Amazon・楽天市場・ヤフショ・メルカリ・Qoo10・合計・個口数（常に5モール）。
+  // 以前の2表（ヤマト集荷依頼 申告数／モール別内訳）を1表にまとめた。列は Amazon・楽天市場・ヤフショ・メルショ・Qoo10・合計・個口数（常に5モール）。
+  // 列見出しだけは略称（ヤフショ＝Yahoo!ショッピング、メルショ＝メルカリShops。表の幅を変えないため。Kaz 指示 2026-11-17）
   const ship = buildShipMethodSummary(amazon, rakuten, yahoo, mercari, qoo10);
   // 未読込のモールの列は見出しに「（未読込）」を添え、数値は「—」。合計・個口数は読込済みの分だけ（未読込のデータは空）
   const shipCols = [['Amazon', ship.amazon, aLoaded], ['楽天市場', ship.rakuten, rLoaded], ['ヤフショ', ship.yahoo, yLoaded],
-    ['メルカリ', ship.mercari, mLoaded], ['Qoo10', ship.qoo10, qLoaded], ['合計', ship.all, true]];
+    ['メルショ', ship.mercari, mLoaded], ['Qoo10', ship.qoo10, qLoaded], ['合計', ship.all, true]];
   // 合計（注文数）＝梱包・発送明細の「合計 N注文」。同じ値（ship.all.orders）から組む＝ずれない
   const allOrders = ship.all.orders;
-  const detailSummary = `合計 ${allOrders}注文`
-    + `（Amazon ${aLoaded ? aOrders : '未読込'} ／ 楽天市場 ${rLoaded ? rOrders : '未読込'} ／ ヤフショ ${yLoaded ? yOrders : '未読込'}`
-    + ` ／ メルカリ ${mLoaded ? mOrders : '未読込'} ／ Qoo10 ${qLoaded ? qOrders : '未読込'}）`;
+  // 読み込んだモールだけを並べる（0件で読み込んだモールは「楽天市場 0」として出す）。何も読み込んでいなければ「合計 0注文」だけ。
+  // 未読込のモールは各モールの黒帯に「未読込」と出るため、ここでは重ねない（見出しを1行に収めるため。Kaz 指示 2026-11-17 案A）
+  const sumParts = [['Amazon', aLoaded, aOrders], ['楽天市場', rLoaded, rOrders], ['Yahoo!ショッピング', yLoaded, yOrders],
+    ['メルカリShops', mLoaded, mOrders], ['Qoo10', qLoaded, qOrders]].filter(([, ld]) => ld).map(([m, , n]) => `${m} ${n}`);
+  const detailSummary = `合計 ${allOrders}注文` + (sumParts.length ? `（${sumParts.join(' ／ ')}）` : '');
   // ヤマトへの申告は配送方法の種類ごとに個口数で行う（Kaz 確定 2026-10-29）。実際の数を埋め込む
   const sp = ship.all.parcels;
   const shipNote = `※ヤマトへの集荷依頼は、配送方法の種類ごとに「個口数」の数で申告してください（宅急便 ${sp.takkyubin}口・宅急便コンパクト ${sp.compact}口・ネコポス ${sp.nekopos}口）。`
@@ -2266,6 +2269,11 @@ function renderCombinedPickingHTML(amazon, rakuten, seq, load, yahoo, mercari, q
   .head-row { display:flex; align-items:flex-end; justify-content:space-between; gap:6mm; }
   .head-row h1 { margin:0; }
   .head-row .staff-field, .head-row .summary { margin:0; white-space:nowrap; }
+  /* 見出し（h1）は折らない。右側の集計が同じ行に収まらないときは、集計を見出しの下の行（右寄せ）に回す
+     （5モールを読み込んだ日の梱包・発送明細。字の大きさは変えない。2026-11-17） */
+  .head-row { flex-wrap:wrap; row-gap:1mm; }
+  .head-row h1 { white-space:nowrap; }
+  .head-row .summary { margin-left:auto; }
   /* 同じ行に収めるぶん下線は短くする（記入幅としては十分。字は小さくしない） */
   .head-row .staff-line { width:50mm; }
 
@@ -2469,8 +2477,8 @@ function renderPickingOrderList(seq, rakuten, yahoo, mercari, qoo10) {
   const stores = loadStores();
   const mallStore = r => r.mall === 'amazon'
     ? `Amazon（${essStoreShort((stores[r.storeIndex] || {}).name)}）`
-    : r.mall === 'yahoo' ? `ヤフショ${yahoo && yahoo.storeName ? `（${yahoo.storeName}）` : ''}`
-    : r.mall === 'mercari' ? `メルカリ${mercari && mercari.storeName ? `（${mercari.storeName}）` : ''}`
+    : r.mall === 'yahoo' ? `Yahoo!ショッピング${yahoo && yahoo.storeName ? `（${yahoo.storeName}）` : ''}`
+    : r.mall === 'mercari' ? `メルカリShops${mercari && mercari.storeName ? `（${mercari.storeName}）` : ''}`
     : r.mall === 'qoo10' ? `Qoo10${qoo10 && qoo10.storeName ? `（${qoo10.storeName}）` : ''}`
     : `楽天市場${rakuten && rakuten.storeName ? `（${rakuten.storeName}）` : ''}`;
   const det = document.createElement('details');
@@ -2679,7 +2687,7 @@ function renderYahooSenderCard() {
   card.id = 'yahoo-sender-card';
   card.innerHTML = `
     <div class="store-card-header">
-      <span class="store-card-title">ヤフショ（B2依頼主）</span>
+      <span class="store-card-title">Yahoo!ショッピング（B2依頼主）</span>
     </div>
     <div class="store-card-grid">
       <div class="field full">
@@ -2737,7 +2745,7 @@ function renderMercariSenderCard() {
   card.id = 'mercari-sender-card';
   card.innerHTML = `
     <div class="store-card-header">
-      <span class="store-card-title">メルカリ（B2依頼主）</span>
+      <span class="store-card-title">メルカリShops（B2依頼主）</span>
     </div>
     <div class="store-card-grid">
       <div class="field full">
@@ -3053,9 +3061,9 @@ async function s1ClickpostOutput(cpRecs, dateStr, hms, opts = {}) {
   const ok = built.filter(x => x.r.ok), ng = built.filter(x => !x.r.ok);
   renderRakutenWarningSection(s1Results, 's1-cp-ng',
     `⛔ クリックポスト用CSVに出せない注文（手動で対応してください）: ${ng.length}件`,
-    ['注文番号', '店舗', '理由'], ng.map(x => [x.rec.orderId, x.rec.storeName, x.r.reason]), 'error');
+    ['注文番号', '店舗', '理由'], ng.map(x => [x.rec.orderId, essMallLabel(x.rec.storeName), x.r.reason]), 'error');
   const warns = [];
-  for (const x of ok) for (const w of x.r.warnings) warns.push([x.rec.orderId, x.rec.storeName, w]);
+  for (const x of ok) for (const w of x.r.warnings) warns.push([x.rec.orderId, essMallLabel(x.rec.storeName), w]);
   renderRakutenWarningSection(s1Results, 's1-cp-warn',
     `⚠ クリックポスト用CSV：確認してください（出力はしています）: ${warns.length}件`,
     ['注文番号', '店舗', '内容'], warns, 'warn');
@@ -3220,6 +3228,11 @@ const ESS_SETTINGS_NAMES_MAX = 5;   // 1行に出す店舗名の数
 const CP_TRK_MANUAL_SUFFIX = 'クリックポスト伝票手入力.csv';
 
 // 店舗名（設定の依頼主名）→ ファイル名・一覧に出す短い名前
+// クリックポストの記録の「店舗」（cpRecs の storeName）の表示名。保存値（06 の出力記録に入る 'ヤフショ'・'メルカリ'）は
+// 照合・既存の控えとそろえるため変えず、画面に出すときだけ正式名にする（2026-11-17）
+function essMallLabel(s) {
+  return s === 'ヤフショ' ? 'Yahoo!ショッピング' : s === 'メルカリ' ? 'メルカリShops' : s;
+}
 function essStoreShort(name) {
   const n = String(name || '');
   if (n.includes('萬福堂')) return '萬福堂';
@@ -3586,7 +3599,7 @@ function essSettingsPickLabel(obj) {
   const ys = obj.yahooSender ? `あり（${obj.yahooSender.name}）` : 'なし';
   const ms = obj.mercariSender ? `あり（${obj.mercariSender.name}）` : 'なし';
   const qs = obj.qoo10Sender ? `あり（${obj.qoo10Sender.name}）` : 'なし';
-  return `${obj.savedAt} ／ Amazon 店舗 ${n}件：${names} ／ 楽天依頼主：${rs} ／ ヤフショ依頼主：${ys} ／ メルカリ依頼主：${ms}`
+  return `${obj.savedAt} ／ Amazon 店舗 ${n}件：${names} ／ 楽天依頼主：${rs} ／ Yahoo!ショッピング依頼主：${ys} ／ メルカリShops依頼主：${ms}`
     + ` ／ Qoo10依頼主：${qs}`;
 }
 // ストアが設定の控えの3つの口を持つか（ハーネスが未対応のテスト用ストアでは偽）
@@ -3871,8 +3884,8 @@ function essRowStore(row) {
   if (RAKUTEN_ORDER_ID_RE.test(row[0])) return '楽天';
   if (QOO10_ORDER_ID_RE.test(row[0])) return 'Qoo10';
   const yre = yahooOrderIdRe();
-  if (yre && yre.test(row[0])) return 'ヤフショ';
-  if (MERCARI_ORDER_ID_RE.test(row[0])) return 'メルカリ';
+  if (yre && yre.test(row[0])) return 'Yahoo!ショッピング';
+  if (MERCARI_ORDER_ID_RE.test(row[0])) return 'メルカリShops';
   return essStoreShort(row[24]);
 }
 
@@ -4564,10 +4577,10 @@ function updateS1ConvertLabel() {
   if (yk === 'partial') {
     s1Convert.textContent = 'B2取込CSVを作る';
     addNote(s1YahooOrderFile && s1YahooItemFile
-      ? '⛔ ヤフショの注文情報と商品情報を結合できません。ヤフショ欄の表示を確認し、2つのファイルを落とし直してください'
+      ? '⛔ Yahoo!ショッピングの注文情報と商品情報を結合できません。Yahoo!ショッピング欄の表示を確認し、2つのファイルを落とし直してください'
       : s1YahooOrderFile
-        ? '⛔ ヤフショの「商品情報」（テンプレート「出荷ツール_商品全項目」）が未読込です。商品が分からないため変換できません'
-        : '⛔ ヤフショの「注文情報」（テンプレート「出荷ツール_全項目」）が未読込です。お届け先が分からないため変換できません', 'error');
+        ? '⛔ Yahoo!ショッピングの「商品情報」（テンプレート「出荷ツール_商品全項目」）が未読込です。商品が分からないため変換できません'
+        : '⛔ Yahoo!ショッピングの「注文情報」（テンプレート「出荷ツール_全項目」）が未読込です。お届け先が分からないため変換できません', 'error');
     return;
   }
 
@@ -4582,8 +4595,8 @@ function updateS1ConvertLabel() {
   // 読み込んでいないモールを知らせる（1モールでも読み込んでいるとき）。文言はモールごと
   if (!hasAmazon) addNote('⚠ Amazonの未出荷レポートが未読込です。Amazon分は含まれません', 'warn');
   if (!hasRakuten) addNote('⚠ 楽天市場のCSVが未読込です。楽天分は含まれません', 'warn');
-  if (!hasYahoo) addNote('⚠ ヤフショの注文データが未読込です。ヤフショ分は含まれません', 'warn');
-  if (!hasMercari) addNote('⚠ メルカリの注文データが未読込です。メルカリ分は含まれません', 'warn');
+  if (!hasYahoo) addNote('⚠ Yahoo!ショッピングの注文データが未読込です。Yahoo!ショッピング分は含まれません', 'warn');
+  if (!hasMercari) addNote('⚠ メルカリShopsの注文データが未読込です。メルカリShops分は含まれません', 'warn');
   if (!hasQoo10) addNote('⚠ Qoo10の配送管理ファイルが未読込です。Qoo10分は含まれません', 'warn');
 }
 
@@ -4795,7 +4808,7 @@ async function s1ConvertRun(auth) {
       }
       yahooCp = yData.orders.filter(isCpY);
       const sender = getYahooSenderStore();
-      if (!sender) throw new Error('ヤフショの依頼主設定が未入力です（依頼主設定タブで登録してください）'
+      if (!sender) throw new Error('Yahoo!ショッピングの依頼主設定が未入力です（依頼主設定タブで登録してください）'
         + `／未入力: ${yahooSenderMissingFields().join('・')}`);
       const isNone = o => yahooResolvedMethod(o) === YAHOO_NONE;
       const isSkip = o => yahooResolvedMethod(o) === YAHOO_SKIP;
@@ -4807,71 +4820,71 @@ async function s1ConvertRun(auth) {
       const kijiIssues = [];   // 記事欄に置き配の印が収まらなかった注文
       yahooB2Rows = usable.flatMap(o => parcelRows(buildYahooB2Row(o, shipDate, sender, addrIssues, kijiIssues), yahooParcelCount(o)));
       item.className = 'result-item success';
-      item.textContent = `✓ ヤフショ：${usable.length}件`
+      item.textContent = `✓ Yahoo!ショッピング：${usable.length}件`
         + (yahooB2Rows.length !== usable.length ? `（B2 CSV ${yahooB2Rows.length}行）` : '')
         + `（依頼主: ${sender.name}）`;
       s1Results.appendChild(item);
       const firstName = o => (o.lines[0] ? o.lines[0].name : '') + (o.lines.length > 1 ? ` 他${o.lines.length - 1}点` : '');
       renderRakutenWarningSection(s1Results, 's1-yh-scheduled',
-        `📅 ヤフショ：お届け希望日が先（本日+4日以降）のためB2から除外（予定分）: ${yData.scheduled.length}件`,
+        `📅 Yahoo!ショッピング：お届け希望日が先（本日+4日以降）のためB2から除外（予定分）: ${yData.scheduled.length}件`,
         ['注文番号', 'お届け希望日', '商品名'],
         yData.scheduled.map(o => [o.orderNumber, o.desiredDeliveryRaw || '', firstName(o)]), 'warn');
       // お届け希望日・時間帯を B2 の形に直せない注文：その欄を空欄で出力済み
       // （desiredDeliveryDate は yahooNormalizeDate で直せたときだけ入る＝生値があって空なら解釈できなかった）
       const badDate = usable.filter(o => o.desiredDeliveryRaw && !o.desiredDeliveryDate);
       renderRakutenWarningSection(s1Results, 's1-yh-baddate',
-        `⚠ ヤフショ：お届け希望日（ShipRequestDate）を解釈できないため「お届け予定日」を空欄で出力しました: ${badDate.length}件`,
+        `⚠ Yahoo!ショッピング：お届け希望日（ShipRequestDate）を解釈できないため「お届け予定日」を空欄で出力しました: ${badDate.length}件`,
         ['注文番号', 'お届け希望日（生値）'],
         badDate.map(o => [o.orderNumber, o.desiredDeliveryRaw]), 'warn');
       const badTime = usable.filter(o => o.desiredTimeRaw && yahooB2TimeCode(o.desiredTimeRaw) === null);
       renderRakutenWarningSection(s1Results, 's1-yh-badtime',
-        `⚠ ヤフショ：お届け時間帯（ShipRequestTime）を解釈できないため「配達時間帯」を空欄（指定なし）で出力しました: ${badTime.length}件`,
+        `⚠ Yahoo!ショッピング：お届け時間帯（ShipRequestTime）を解釈できないため「配達時間帯」を空欄（指定なし）で出力しました: ${badTime.length}件`,
         ['注文番号', 'お届け時間帯（生値）'],
         badTime.map(o => [o.orderNumber, o.desiredTimeRaw]), 'warn');
       renderRakutenWarningSection(s1Results, 's1-yh-none',
-        `📦 ヤフショ：「送り状なし（同梱・手渡し）」を選んだためB2から除外: ${none.length}件`,
+        `📦 Yahoo!ショッピング：「送り状なし（同梱・手渡し）」を選んだためB2から除外: ${none.length}件`,
         ['注文番号', '商品名'], none.map(o => [o.orderNumber, firstName(o)]), 'warn');
       renderRakutenWarningSection(s1Results, 's1-yh-skip',
-        `📦 ヤフショ：「本日出荷しない（MCF等）」を選んだためB2・ピッキングから除外（梱包・発送明細には載せます）: ${skip.length}件`,
+        `📦 Yahoo!ショッピング：「本日出荷しない（MCF等）」を選んだためB2・ピッキングから除外（梱包・発送明細には載せます）: ${skip.length}件`,
         ['注文番号', '商品名'], skip.map(o => [o.orderNumber, firstName(o)]), 'warn');
       renderRakutenWarningSection(s1Results, 's1-yh-cp',
-        `📮 ヤフショ：クリックポストを選んだためB2から除外（クリックポスト用CSVに出力）: ${yahooCp.length}件`,
+        `📮 Yahoo!ショッピング：クリックポストを選んだためB2から除外（クリックポスト用CSVに出力）: ${yahooCp.length}件`,
         ['注文番号', '商品名'], yahooCp.map(o => [o.orderNumber, firstName(o)]), 'warn');
       renderRakutenWarningSection(s1Results, 's1-yh-unknown',
-        `⚠ ヤフショ：配送方法が不明のためB2から除外（手動対応してください）: ${noCode.length}件`,
+        `⚠ Yahoo!ショッピング：配送方法が不明のためB2から除外（手動対応してください）: ${noCode.length}件`,
         ['注文番号', '配送方法（ShipMethod）'], noCode.map(o => [o.orderNumber, o.shipMethodRaw || '（空）']), 'error');
       const hasIssue = k => addrIssues.filter(x => x.issues.includes(k));
       const issueRow = x => [x.orderNumber, x.party || 'お届け先', x.fullAddress, fullwidthCharLength(x.fullAddress),
                              x.building, fullwidthCharLength(x.building)];
       const issueCols = ['注文番号', '対象', '住所欄', '住所（全角換算）', '建物名欄', '建物名（全角換算）'];
       renderRakutenWarningSection(s1Results, 's1-yh-addr-bldgused',
-        `⚠ 要確認（ヤフショ）：住所文字数超過・建物名欄使用中のため自動振り分け不可（全角${B2_ADDRESS_LIMIT}文字上限）: ${hasIssue('addrOverflowBuildingUsed').length}件`,
+        `⚠ 要確認（Yahoo!ショッピング）：住所文字数超過・建物名欄使用中のため自動振り分け不可（全角${B2_ADDRESS_LIMIT}文字上限）: ${hasIssue('addrOverflowBuildingUsed').length}件`,
         issueCols, hasIssue('addrOverflowBuildingUsed').map(issueRow), 'error');
       renderRakutenWarningSection(s1Results, 's1-yh-addr-unresolved',
-        `⚠ 要確認（ヤフショ）：住所文字数超過（自動対応不可）: ${hasIssue('addrOverflowUnresolved').length}件`,
+        `⚠ 要確認（Yahoo!ショッピング）：住所文字数超過（自動対応不可）: ${hasIssue('addrOverflowUnresolved').length}件`,
         issueCols, hasIssue('addrOverflowUnresolved').map(issueRow), 'error');
       renderRakutenWarningSection(s1Results, 's1-yh-bldg-over',
-        `⚠ 要確認（ヤフショ）：建物名欄が文字数上限超過（全角${B2_BUILDING_LIMIT}文字上限・そのまま出力しています）: ${hasIssue('buildingOverflow').length}件`,
+        `⚠ 要確認（Yahoo!ショッピング）：建物名欄が文字数上限超過（全角${B2_BUILDING_LIMIT}文字上限・そのまま出力しています）: ${hasIssue('buildingOverflow').length}件`,
         issueCols, hasIssue('buildingOverflow').map(issueRow), 'warn');
       renderRakutenWarningSection(s1Results, 's1-yh-addr-split',
-        `📍 ヤフショ：住所が全角${B2_ADDRESS_LIMIT}文字を超えたため建物名欄へ自動振り分けしました（番地の途中で割れる場合があります。印字内容を確認してください）: ${hasIssue('addrSplit').length}件`,
+        `📍 Yahoo!ショッピング：住所が全角${B2_ADDRESS_LIMIT}文字を超えたため建物名欄へ自動振り分けしました（番地の途中で割れる場合があります。印字内容を確認してください）: ${hasIssue('addrSplit').length}件`,
         issueCols, hasIssue('addrSplit').map(issueRow), 'warn');
       renderRakutenWarningSection(s1Results, 's1-yh-kiji',
-        `⚠ ヤフショ：B2の記事欄（全角22文字）に置き配の印が収まらないため、印を付けずに出力しました（梱包・発送明細には印があります）: ${kijiIssues.length}件`,
+        `⚠ Yahoo!ショッピング：B2の記事欄（全角22文字）に置き配の印が収まらないため、印を付けずに出力しました（梱包・発送明細には印があります）: ${kijiIssues.length}件`,
         ['注文番号', '記事欄', '置き配'], kijiIssues.map(x => [x.orderNumber, x.kiji, x.okihai]), 'warn');
       const joinName = p => [p.lastName, p.firstName].filter(Boolean).join(' ');
       const senderOrderer = usable.filter(o => yahooSenderSource(o) === 'orderer');
       renderRakutenWarningSection(s1Results, 's1-yh-sender-orderer',
-        `ご依頼主を注文者にした注文（ヤフショ・注文者≠お届け先）：${senderOrderer.length}件`,
+        `ご依頼主を注文者にした注文（Yahoo!ショッピング・注文者≠お届け先）：${senderOrderer.length}件`,
         ['注文番号', '注文者名', 'お届け先名'],
         senderOrderer.map(o => [o.orderNumber, joinName(o.orderer), joinName(o.recipient || {})]), 'warn');
       const senderFallback = usable.filter(o => yahooSenderSource(o) === 'fallback');
       renderRakutenWarningSection(s1Results, 's1-yh-sender-fallback',
-        `⚠ 要確認（ヤフショ）：注文者≠お届け先ですが注文者の氏名が空のため、ご依頼主を店舗設定で出力しました: ${senderFallback.length}件`,
+        `⚠ 要確認（Yahoo!ショッピング）：注文者≠お届け先ですが注文者の氏名が空のため、ご依頼主を店舗設定で出力しました: ${senderFallback.length}件`,
         ['注文番号', 'お届け先名'], senderFallback.map(o => [o.orderNumber, joinName(o.recipient || {})]), 'error');
     } catch(e) {
       item.className = 'result-item error';
-      item.textContent = `⚠ ヤフショ：${e.message}`;
+      item.textContent = `⚠ Yahoo!ショッピング：${e.message}`;
       s1Results.appendChild(item);
     }
   }
@@ -4894,7 +4907,7 @@ async function s1ConvertRun(auth) {
       const multiDest = mData.orders.filter(o => o.multiDest);
       mercariCp = mData.orders.filter(o => isCpM(o) && !o.multiDest);
       const sender = getMercariSenderStore();
-      if (!sender) throw new Error('メルカリの依頼主設定が未入力です（依頼主設定タブで登録してください）'
+      if (!sender) throw new Error('メルカリShopsの依頼主設定が未入力です（依頼主設定タブで登録してください）'
         + `／未入力: ${mercariSenderMissingFields().join('・')}`);
       const isNone = o => mercariResolvedMethod(o) === MERCARI_NONE;
       const isSkip = o => mercariResolvedMethod(o) === MERCARI_SKIP;
@@ -4905,65 +4918,65 @@ async function s1ConvertRun(auth) {
       const addrIssues = [];   // 住所欄・建物名欄の上限超過（楽天と同じ。出力は止めず警告のみ）
       mercariB2Rows = usable.flatMap(o => parcelRows(buildMercariB2Row(o, shipDate, sender, addrIssues), mercariParcelCount(o)));
       item.className = 'result-item success';
-      item.textContent = `✓ メルカリ：${usable.length}件`
+      item.textContent = `✓ メルカリShops：${usable.length}件`
         + (mercariB2Rows.length !== usable.length ? `（B2 CSV ${mercariB2Rows.length}行）` : '')
         + `（依頼主: ${sender.name}）`;
       s1Results.appendChild(item);
       const firstName = o => (o.lines[0] ? o.lines[0].name : '') + (o.lines.length > 1 ? ` 他${o.lines.length - 1}点` : '');
       renderRakutenWarningSection(s1Results, 's1-mc-scheduled',
-        `📅 メルカリ：お届け希望日が先（本日+4日以降）のためB2から除外（予定分）: ${mData.scheduled.length}件`,
+        `📅 メルカリShops：お届け希望日が先（本日+4日以降）のためB2から除外（予定分）: ${mData.scheduled.length}件`,
         ['注文番号', 'お届け希望日', '商品名'],
         mData.scheduled.map(o => [o.orderNumber, o.desiredDeliveryRaw || '', firstName(o)]), 'warn');
       const badDate = usable.filter(o => o.desiredDeliveryRaw && !o.desiredDeliveryDate);
       renderRakutenWarningSection(s1Results, 's1-mc-baddate',
-        `⚠ メルカリ：お届け希望日（requested_delivery_date）を解釈できないため「お届け予定日」を空欄で出力しました: ${badDate.length}件`,
+        `⚠ メルカリShops：お届け希望日（requested_delivery_date）を解釈できないため「お届け予定日」を空欄で出力しました: ${badDate.length}件`,
         ['注文番号', 'お届け希望日（生値）'],
         badDate.map(o => [o.orderNumber, o.desiredDeliveryRaw]), 'warn');
       const badTime = usable.filter(o => o.desiredTimeRaw && mercariB2TimeCode(o.desiredTimeRaw) === null);
       renderRakutenWarningSection(s1Results, 's1-mc-badtime',
-        `⚠ メルカリ：お届け時間帯（requested_delivery_time）を解釈できないため「配達時間帯」を空欄（指定なし）で出力しました: ${badTime.length}件`,
+        `⚠ メルカリShops：お届け時間帯（requested_delivery_time）を解釈できないため「配達時間帯」を空欄（指定なし）で出力しました: ${badTime.length}件`,
         ['注文番号', 'お届け時間帯（生値）'],
         badTime.map(o => [o.orderNumber, o.desiredTimeRaw]), 'warn');
       renderRakutenWarningSection(s1Results, 's1-mc-multidest',
-        `⚠ メルカリ：配送先が複数の注文（手動対応）。B2・クリックポストから除外しました（ピッキング・梱包・発送明細には載せます）: ${multiDest.length}件`,
+        `⚠ メルカリShops：配送先が複数の注文（手動対応）。B2・クリックポストから除外しました（ピッキング・梱包・発送明細には載せます）: ${multiDest.length}件`,
         ['注文番号', '商品名'], multiDest.map(o => [o.orderNumber, firstName(o)]), 'error');
       renderRakutenWarningSection(s1Results, 's1-mc-none',
-        `📦 メルカリ：「送り状なし（同梱・手渡し）」を選んだためB2から除外: ${none.length}件`,
+        `📦 メルカリShops：「送り状なし（同梱・手渡し）」を選んだためB2から除外: ${none.length}件`,
         ['注文番号', '商品名'], none.map(o => [o.orderNumber, firstName(o)]), 'warn');
       renderRakutenWarningSection(s1Results, 's1-mc-skip',
-        `📦 メルカリ：「本日出荷しない（MCF等）」を選んだためB2・ピッキングから除外（梱包・発送明細には載せます）: ${skip.length}件`,
+        `📦 メルカリShops：「本日出荷しない（MCF等）」を選んだためB2・ピッキングから除外（梱包・発送明細には載せます）: ${skip.length}件`,
         ['注文番号', '商品名'], skip.map(o => [o.orderNumber, firstName(o)]), 'warn');
       renderRakutenWarningSection(s1Results, 's1-mc-cp',
-        `📮 メルカリ：クリックポストを選んだためB2から除外（クリックポスト用CSVに出力）: ${mercariCp.length}件`,
+        `📮 メルカリShops：クリックポストを選んだためB2から除外（クリックポスト用CSVに出力）: ${mercariCp.length}件`,
         ['注文番号', '商品名'], mercariCp.map(o => [o.orderNumber, firstName(o)]), 'warn');
       renderRakutenWarningSection(s1Results, 's1-mc-unknown',
-        `⚠ メルカリ：配送方法が不明のためB2から除外（手動対応してください）: ${noCode.length}件`,
+        `⚠ メルカリShops：配送方法が不明のためB2から除外（手動対応してください）: ${noCode.length}件`,
         ['注文番号', '配送方法'], noCode.map(o => [o.orderNumber, mercariResolvedMethod(o) || '（空）']), 'error');
       const hasIssue = k => addrIssues.filter(x => x.issues.includes(k));
       const issueRow = x => [x.orderNumber, x.party || 'お届け先', x.fullAddress, fullwidthCharLength(x.fullAddress),
                              x.building, fullwidthCharLength(x.building)];
       const issueCols = ['注文番号', '対象', '住所欄', '住所（全角換算）', '建物名欄', '建物名（全角換算）'];
       renderRakutenWarningSection(s1Results, 's1-mc-addr-bldgused',
-        `⚠ 要確認（メルカリ）：住所文字数超過・建物名欄使用中のため自動振り分け不可（全角${B2_ADDRESS_LIMIT}文字上限）: ${hasIssue('addrOverflowBuildingUsed').length}件`,
+        `⚠ 要確認（メルカリShops）：住所文字数超過・建物名欄使用中のため自動振り分け不可（全角${B2_ADDRESS_LIMIT}文字上限）: ${hasIssue('addrOverflowBuildingUsed').length}件`,
         issueCols, hasIssue('addrOverflowBuildingUsed').map(issueRow), 'error');
       renderRakutenWarningSection(s1Results, 's1-mc-addr-unresolved',
-        `⚠ 要確認（メルカリ）：住所文字数超過（自動対応不可）: ${hasIssue('addrOverflowUnresolved').length}件`,
+        `⚠ 要確認（メルカリShops）：住所文字数超過（自動対応不可）: ${hasIssue('addrOverflowUnresolved').length}件`,
         issueCols, hasIssue('addrOverflowUnresolved').map(issueRow), 'error');
       renderRakutenWarningSection(s1Results, 's1-mc-bldg-over',
-        `⚠ 要確認（メルカリ）：建物名欄が文字数上限超過（全角${B2_BUILDING_LIMIT}文字上限・そのまま出力しています）: ${hasIssue('buildingOverflow').length}件`,
+        `⚠ 要確認（メルカリShops）：建物名欄が文字数上限超過（全角${B2_BUILDING_LIMIT}文字上限・そのまま出力しています）: ${hasIssue('buildingOverflow').length}件`,
         issueCols, hasIssue('buildingOverflow').map(issueRow), 'warn');
       renderRakutenWarningSection(s1Results, 's1-mc-addr-split',
-        `📍 メルカリ：住所が全角${B2_ADDRESS_LIMIT}文字を超えたため建物名欄へ自動振り分けしました（番地の途中で割れる場合があります。印字内容を確認してください）: ${hasIssue('addrSplit').length}件`,
+        `📍 メルカリShops：住所が全角${B2_ADDRESS_LIMIT}文字を超えたため建物名欄へ自動振り分けしました（番地の途中で割れる場合があります。印字内容を確認してください）: ${hasIssue('addrSplit').length}件`,
         issueCols, hasIssue('addrSplit').map(issueRow), 'warn');
       // お届け先と請求先が違う注文：ご依頼主は店舗のまま（請求先には切り替えない）。確認用の一覧
       const billingDiff = usable.filter(o => o.billingDiff);
       renderRakutenWarningSection(s1Results, 's1-mc-billing-diff',
-        `メルカリ：お届け先と請求先が違う注文（ご依頼主は店舗名で出しています）: ${billingDiff.length}件`,
+        `メルカリShops：お届け先と請求先が違う注文（ご依頼主は店舗名で出しています）: ${billingDiff.length}件`,
         ['注文番号', 'お届け先名', '請求先名'],
         billingDiff.map(o => [o.orderNumber, (o.recipient || {}).lastName || '', (o.billing || {}).name || '']), 'warn');
     } catch(e) {
       item.className = 'result-item error';
-      item.textContent = `⚠ メルカリ：${e.message}`;
+      item.textContent = `⚠ メルカリShops：${e.message}`;
       s1Results.appendChild(item);
     }
   }
@@ -5127,7 +5140,7 @@ async function s1ConvertRun(auth) {
   if (!amazonRows.length && !rakutenB2Rows.length && !yahooB2Rows.length && !mercariB2Rows.length && !qoo10B2Rows.length && !cpRecs.length) {
     const el = document.createElement('div');
     el.className = 'result-item error'; el.style.marginTop = '6px';
-    el.textContent = '⚠ B2 CSVに出力する注文がありません（別発行・送り状なし・本日出荷しない・配送方法不明の注文だけ、または楽天市場・ヤフショ・メルカリ・Qoo10の依頼主が未設定など。上の表示を確認してください）。'
+    el.textContent = '⚠ B2 CSVに出力する注文がありません（別発行・送り状なし・本日出荷しない・配送方法不明の注文だけ、または楽天市場・Yahoo!ショッピング・メルカリShops・Qoo10の依頼主が未設定など。上の表示を確認してください）。'
       + 'ピッキングリスト・梱包発送明細は印刷できます';
     s1Results.appendChild(el);
     return;
@@ -5286,7 +5299,7 @@ function s2RenderCp() {
     wrap.className = 'cp-wrap';
     const show = r => r ? `〒${r.postal}　${r.name}　${r.address}　${r.content}` : '';
     const rowsHtml = s1CpOutput.rows.map((r, i) => `<tr>
-        <td>${i + 1}</td><td>${esc(r.storeName)}</td><td class="cp-oid">${esc(r.orderId)}</td>
+        <td>${i + 1}</td><td>${esc(essMallLabel(r.storeName))}</td><td class="cp-oid">${esc(r.orderId)}</td>
         <td>${esc(r.cells[1])}</td><td>${esc(r.cells[0])}</td>
         <td><input type="text" class="cp-trk" inputmode="numeric" data-idx="${i}" data-order="${esc(r.orderId)}" value="${esc(r.tracking || '')}"></td>
         <td class="cp-match">${r.trackingSrc === 'report' && r.report
@@ -5396,8 +5409,8 @@ function s2DuplicateTrackings() {
         const yre = yahooOrderIdRe();
         const store = AMAZON_ORDER_ID_RE.test(orderId) ? essStoreShort(sender)
           : RAKUTEN_ORDER_ID_RE.test(orderId) ? '楽天市場' : QOO10_ORDER_ID_RE.test(orderId) ? 'Qoo10'
-          : (yre && yre.test(orderId)) ? 'ヤフショ'
-          : MERCARI_ORDER_ID_RE.test(orderId) ? 'メルカリ' : sender;
+          : (yre && yre.test(orderId)) ? 'Yahoo!ショッピング'
+          : MERCARI_ORDER_ID_RE.test(orderId) ? 'メルカリShops' : sender;
         byOrder.set(orderId, { store, trackings: new Set() });
       }
       byOrder.get(orderId).trackings.add(tracking);
@@ -5500,7 +5513,7 @@ async function s2ConvertRun(auth) {
     s2CpValidate();
     renderRakutenWarningSection(s2Results, 's2-cp-bad',
       `⛔ クリックポストの伝票番号に誤りがあります（12桁でない・同じ番号が2行以上）: ${cpBad.size}件 — 出荷通知ファイルはまだ作っていません`,
-      ['注文番号', '店舗', '伝票番号'], cpAll.filter(r => cpBad.has(r)).map(r => [r.orderId, r.storeName, r.tracking]), 'error');
+      ['注文番号', '店舗', '伝票番号'], cpAll.filter(r => cpBad.has(r)).map(r => [r.orderId, essMallLabel(r.storeName), r.tracking]), 'error');
     return;
   }
 
@@ -5585,14 +5598,14 @@ async function s2ConvertRun(auth) {
     const blank = [...cpByOrder.values()].filter(rs => rs.every(r => !s2CpDigits(r.tracking)));
     renderRakutenWarningSection(s2Results, 's2-cp-blank',
       `📮 クリックポスト：伝票番号が未入力のため出荷通知に出していない注文: ${blank.length}件`,
-      ['注文番号', '店舗', '個口数'], blank.map(rs => [rs[0].orderId, rs[0].storeName, rs.length]), 'warn');
+      ['注文番号', '店舗', '個口数'], blank.map(rs => [rs[0].orderId, essMallLabel(rs[0].storeName), rs.length]), 'warn');
     // 同じ注文番号が読み込み済みの 03 にもある＝二重発送の疑い。その注文のクリックポストの行は出さない
     const issuedIds = s2IssuedOrderIds();
     const filled = cpAll.filter(r => s2CpDigits(r.tracking).length === 12);
     const dbl = filled.filter(r => issuedIds.has(r.orderId));
     renderRakutenWarningSection(s2Results, 's2-cp-double',
       `⛔ B2 の発行済データにもある注文（二重発送の疑い）: ${dbl.length}件 — クリックポストの行は出荷通知に出していません`,
-      ['注文番号', '店舗', 'クリックポストの伝票番号'], dbl.map(r => [r.orderId, r.storeName, s2CpDigits(r.tracking)]), 'error');
+      ['注文番号', '店舗', 'クリックポストの伝票番号'], dbl.map(r => [r.orderId, essMallLabel(r.storeName), s2CpDigits(r.tracking)]), 'error');
     const targets = filled.filter(r => !issuedIds.has(r.orderId));
     const shipDate = s1CpOutput.shipDate;   // 'YYYY-MM-DD'（STEP1 の出荷日）
     // Amazon：店舗ごとに、今回の出荷通知ファイルの末尾へ足す（無ければ同じ命名で作る）
@@ -5699,12 +5712,12 @@ async function s2ConvertRun(auth) {
     item.id = 's2-yahoo-result';
     item.className = rep.orderCount ? 'result-item success' : 'result-item error';
     item.textContent = rep.orderCount
-      ? `✓ ヤフショ：${rep.orderCount}件（①出荷完了 ${rep.shipRows}行・②完了 ${rep.completeRows}行`
+      ? `✓ Yahoo!ショッピング：${rep.orderCount}件（①出荷完了 ${rep.shipRows}行・②完了 ${rep.completeRows}行`
         + (rep.multiParcelCount ? `・うち複数個口 ${rep.multiParcelCount}件` : '') + '）'
-      : '⚠ ヤフショ：出力対象が0件のため、ファイルは生成していません';
+      : '⚠ Yahoo!ショッピング：出力対象が0件のため、ファイルは生成していません';
     s2Results.appendChild(item);
     if (rep.orderCount) {
-      const order = essResultItem('', 'ヤフショ：ストアクリエイターPro の［注文管理］→［注文処理実績アップロード］で、'
+      const order = essResultItem('', 'Yahoo!ショッピング：ストアクリエイターPro の［注文管理］→［注文処理実績アップロード］で、'
         + '①出荷完了（yahoo_odstats_ship_…）を上げて反映を確かめてから、②完了（yahoo_odstats_complete_…）を上げてください');
       order.id = 's2-yahoo-order';
       order.style.cssText = 'display:block;margin-top:6px;background:#fffbeb;border:1px solid #fcd34d;color:#92400e;font-weight:700;';
@@ -5725,8 +5738,8 @@ async function s2ConvertRun(auth) {
       const need = document.createElement('div');
       need.id = 's2-mercari-result';
       need.className = 'result-item error';
-      need.textContent = `⚠ メルカリの注文が${new Set(allMercari.map(r => r.orderNumber)).size}件ありますが、一括発送通知用のファイルを作れません。`
-        + 'STEP 1 でメルカリの注文データを読み込んでください（他のモールの出力は続行します）';
+      need.textContent = `⚠ メルカリShopsの注文が${new Set(allMercari.map(r => r.orderNumber)).size}件ありますが、一括発送通知用のファイルを作れません。`
+        + 'STEP 1 でメルカリShopsの注文データを読み込んでください（他のモールの出力は続行します）';
       s2Results.appendChild(need);
     } else {
       const rep = buildMercariBulkShip(allMercari, s1MercariFile, s1MercariParsed, essToday());
@@ -5734,12 +5747,12 @@ async function s2ConvertRun(auth) {
       item.id = 's2-mercari-result';
       item.className = rep.orderCount ? 'result-item success' : 'result-item error';
       item.textContent = rep.orderCount
-        ? `✓ メルカリ：${rep.orderCount}件（一括発送通知 ${rep.rowCount}行`
+        ? `✓ メルカリShops：${rep.orderCount}件（一括発送通知 ${rep.rowCount}行`
           + (rep.multiParcelCount ? `・うち複数個口 ${rep.multiParcelCount}件` : '') + '）'
-        : '⚠ メルカリ：出力対象が0件のため、ファイルは生成していません';
+        : '⚠ メルカリShops：出力対象が0件のため、ファイルは生成していません';
       s2Results.appendChild(item);
       if (rep.orderCount) {
-        const where = essResultItem('', 'メルカリ：ショップ管理画面の［注文］→［CSV一括機能］→［一括発送通知］で、'
+        const where = essResultItem('', 'メルカリShops：ショップ管理画面の［注文］→［CSV一括機能］→［一括発送通知］で、'
           + '一括発送通知用のファイル（mercari_bulk_ship_…）を上げてください');
         where.id = 's2-mercari-where';
         where.style.cssText = 'display:block;margin-top:6px;background:#fffbeb;border:1px solid #fcd34d;color:#92400e;font-weight:700;';
@@ -6113,7 +6126,7 @@ function renderNonAmazonExcludedSection(excluded) {
 
   const head = document.createElement('div');
   head.className = 'result-item error';
-  head.textContent = `⚠ Amazon・楽天市場・ヤフショ・メルカリ・Qoo10のいずれの注文番号形式でもないため除外: ${excluded.length}件`;
+  head.textContent = `⚠ Amazon・楽天市場・Yahoo!ショッピング・メルカリShops・Qoo10のいずれの注文番号形式でもないため除外: ${excluded.length}件`;
 
   const toggle = document.createElement('button');
   toggle.type = 'button';
@@ -7669,7 +7682,7 @@ function yahooReadFile(text) {
   const kind = (yahooHas(t, 'OrderId') && yahooHas(t, 'ShipMethod')) ? 'order'
     : (yahooHas(t, 'OrderId') && yahooHas(t, 'LineId')) ? 'item' : null;
   if (!kind) {
-    throw new Error('ヤフショの注文データ（注文情報・商品情報）ではありません。\n'
+    throw new Error('Yahoo!ショッピングの注文データ（注文情報・商品情報）ではありません。\n'
       + 'ストアクリエイターPro の［注文管理］→［注文検索］→［注文データダウンロード］で、テンプレート'
       + '「出荷ツール_全項目」（注文情報）と「出荷ツール_商品全項目」（商品情報）を選んで落とし直してください');
   }
@@ -7677,7 +7690,7 @@ function yahooReadFile(text) {
   const missing = req.filter(c => !yahooHas(t, c));
   if (missing.length) {
     const tpl = kind === 'order' ? '「出荷ツール_全項目」' : '「出荷ツール_商品全項目」';
-    throw new Error(`ヤフショの${kind === 'order' ? '注文情報' : '商品情報'}に必要な列がありません（${missing.join('・')}）。\n`
+    throw new Error(`Yahoo!ショッピングの${kind === 'order' ? '注文情報' : '商品情報'}に必要な列がありません（${missing.join('・')}）。\n`
       + `ストアクリエイターPro の注文データダウンロードで、テンプレート${tpl}を選んで落とし直してください`);
   }
   return { kind, table: t };
@@ -7724,7 +7737,7 @@ function yahooTimeRequested(raw) { return yahooB2TimeCode(raw) !== ''; }
 // 商品キー：sku＝SubCode（空なら ItemId。画像の引きキーを兼ねる）、itemMgmtNo＝ItemId（楽天の商品管理番号と同じ役割）
 function parseYahooFiles(orderText, itemText) {
   const ot = yahooReadFile(orderText), it = yahooReadFile(itemText);
-  if (ot.kind !== 'order' || it.kind !== 'item') throw new Error('ヤフショの注文情報と商品情報の組み合わせではありません');
+  if (ot.kind !== 'order' || it.kind !== 'item') throw new Error('Yahoo!ショッピングの注文情報と商品情報の組み合わせではありません');
   const O = ot.table, I = it.table;
   // 商品情報：OrderId → 明細（LineId の順）
   const itemsBy = new Map();
@@ -7925,13 +7938,13 @@ function renderYahooResults(parsed) {
   const firstName = o => (o.lines[0] ? o.lines[0].name : '') + (o.lines.length > 1 ? ` 他${o.lines.length - 1}点` : '');
   const okItem = document.createElement('div');
   okItem.className = 'result-item success';
-  okItem.textContent = `✓ ヤフショ：${parsed.orders.length}注文 ／ ${lineCount}明細を読み込みました`
+  okItem.textContent = `✓ Yahoo!ショッピング：${parsed.orders.length}注文 ／ ${lineCount}明細を読み込みました`
     + (parsed.shipped.length ? `（出荷済み ${parsed.shipped.length}注文を除外。伝票番号あり）` : '')
     + (data.scheduled.length ? `（うち予定 ${data.scheduled.length}注文は本日のピッキング対象外）` : '');
   yResults.appendChild(okItem);
 
   renderRakutenWarningSection(yResults, 'y-warn-shipped',
-    `⚠ 出荷済み（ヤフショのデータに伝票番号あり）のため除外: ${parsed.shipped.length}件`,
+    `⚠ 出荷済み（Yahoo!ショッピングのデータに伝票番号あり）のため除外: ${parsed.shipped.length}件`,
     ['注文番号', '伝票番号', '商品名'], parsed.shipped.map(x => [x.orderNumber, x.invoice, x.productName]), 'warn');
   renderRakutenWarningSection(yResults, 'y-warn-orderonly',
     `⚠ 注文情報にだけあり商品情報に無い注文（除外。2つのファイルを同じ条件で落とし直してください）: ${parsed.orderOnly.length}件`,
@@ -8005,7 +8018,7 @@ function renderYahooResults(parsed) {
       parcelOptionsHtml(yahooNoParcel(cur) ? 1 : (yahooParcelChoice.get(o.orderNumber) || 1))}</select>`;
     return shipListOrderHtml({
       orderId: o.orderNumber,
-      storeLabel: `ヤフショ（${YAHOO_STORE_NAME}）`,
+      storeLabel: `Yahoo!ショッピング（${YAHOO_STORE_NAME}）`,
       badges: shipListParcelHint(qtySum(o)) + okihai,
       alerts: alertLine + dtWarn,
       lines: o.lines,
@@ -8270,22 +8283,22 @@ function buildYahooShipReport(rows, account, orders, today) {
 // ヤフショ分の警告（STEP2 の結果エリア）。出力0件でも警告は出す（なぜ0件だったのか分かるように）
 function renderYahooReportWarnings(container, rep) {
   renderRakutenWarningSection(container, 'ys-warn-toomany',
-    `⚠ ヤフショ：伝票が3本以上の注文（3本目以降は登録されません。手動対応）: ${rep.tooMany.length}件`,
+    `⚠ Yahoo!ショッピング：伝票が3本以上の注文（3本目以降は登録されません。手動対応）: ${rep.tooMany.length}件`,
     ['注文番号', '伝票数', '伝票番号（3本目以降は未登録）'],
     rep.tooMany.map(x => [x.orderNumber, `${x.trackings.length}本`, x.trackings.join(' / ')]), 'error');
   renderRakutenWarningSection(container, 'ys-warn-multi',
-    `⚠ ヤフショ：複数個口の伝票番号が一部しか入っていません（自動処理から除外）。全部入れてから作り直してください: ${rep.multiParcel.length}件`,
+    `⚠ Yahoo!ショッピング：複数個口の伝票番号が一部しか入っていません（自動処理から除外）。全部入れてから作り直してください: ${rep.multiParcel.length}件`,
     ['注文番号', '伝票番号'],
     rep.multiParcel.map(x => [x.orderNumber, x.trackings.join(' / ')
       + (x.partial ? `（一部未入力：${x.partial.parcels}個口のうち${x.partial.filled}本）` : '')]), 'error');
   renderRakutenWarningSection(container, 'ys-warn-baddate',
-    `⚠ ヤフショ：出荷予定日が不正なため除外（手動対応してください）: ${rep.invalidShipDate.length}件`,
+    `⚠ Yahoo!ショッピング：出荷予定日が不正なため除外（手動対応してください）: ${rep.invalidShipDate.length}件`,
     ['注文番号', '出荷予定日の値'], rep.invalidShipDate.map(x => [x.orderNumber, x.shipDateRaw || '（空）']), 'error');
   renderRakutenWarningSection(container, 'ys-warn-badid',
-    `⚠ ヤフショ：注文番号から注文ID（OrderId）を取り出せないため除外（依頼主設定のストアアカウントを確認してください）: ${rep.badId.length}件`,
+    `⚠ Yahoo!ショッピング：注文番号から注文ID（OrderId）を取り出せないため除外（依頼主設定のストアアカウントを確認してください）: ${rep.badId.length}件`,
     ['注文番号'], rep.badId.map(x => [x.orderNumber]), 'error');
   renderRakutenWarningSection(container, 'ys-warn-notshipped',
-    `📦 ヤフショ：STEP 1の出荷対象のうち、今回の発行済みデータに伝票が無い注文（出荷漏れの可能性）: ${rep.notShipped.length}件`,
+    `📦 Yahoo!ショッピング：STEP 1の出荷対象のうち、今回の発行済みデータに伝票が無い注文（出荷漏れの可能性）: ${rep.notShipped.length}件`,
     ['注文番号'], rep.notShipped.map(x => [x.orderNumber]), 'warn');
 }
 // ==== YAHOO (ヤフショ) — END ====
@@ -8371,7 +8384,7 @@ function mercariReadFile(text) {
   }
   const missing = MERCARI_REQUIRED.filter(c => !mercariHas(t, c));
   if (missing.length) {
-    throw new Error(`メルカリの注文データに必要な列がありません（${missing.join('・')}）。\n`
+    throw new Error(`メルカリShopsの注文データに必要な列がありません（${missing.join('・')}）。\n`
       + '新旧フォーマット「まとめ買い対応版（新フォーマット）」を選んで落とし直してください');
   }
   return t;
@@ -8591,13 +8604,13 @@ function renderMercariResults(parsed) {
   const firstName = o => (o.lines[0] ? o.lines[0].name : '') + (o.lines.length > 1 ? ` 他${o.lines.length - 1}点` : '');
   const okItem = document.createElement('div');
   okItem.className = 'result-item success';
-  okItem.textContent = `✓ メルカリ：${parsed.orders.length}注文 ／ ${lineCount}明細を読み込みました`
+  okItem.textContent = `✓ メルカリShops：${parsed.orders.length}注文 ／ ${lineCount}明細を読み込みました`
     + (parsed.shipped.length ? `（出荷済み ${parsed.shipped.length}注文を除外。追跡情報あり）` : '')
     + (data.scheduled.length ? `（うち予定 ${data.scheduled.length}注文は本日のピッキング対象外）` : '');
   mResults.appendChild(okItem);
 
   renderRakutenWarningSection(mResults, 'm-warn-shipped',
-    `⚠ 出荷済み（メルカリのデータに追跡情報あり）のため除外: ${parsed.shipped.length}件`,
+    `⚠ 出荷済み（メルカリShopsのデータに追跡情報あり）のため除外: ${parsed.shipped.length}件`,
     ['注文番号', '追跡情報', '商品名'], parsed.shipped.map(x => [x.orderNumber, x.tracking, x.productName]), 'warn');
   renderRakutenWarningSection(mResults, 'm-warn-notpaid',
     `⚠ 支払い待ち（payment_date が空）のため除外（支払いが済むまで発送できません）: ${parsed.notPaid.length}件`,
@@ -8606,7 +8619,7 @@ function renderMercariResults(parsed) {
     `⚠ 注文の種類（order_type）が「${MERCARI_ORDER_TYPE_NORMAL}」以外のため除外（予約など。手動対応してください）: ${parsed.notNormal.length}件`,
     ['注文番号', '注文の種類（order_type）', '商品名'], parsed.notNormal.map(x => [x.orderNumber, x.value || '（空）', x.productName]), 'error');
   renderRakutenWarningSection(mResults, 'm-warn-method',
-    `⚠ 配送方法（shipping_method）が「${MERCARI_SHIP_METHOD_SELLER}」以外のため除外（メルカリ便等は送り状がメルカリ側。B2 に出すと二重になります）: ${parsed.otherMethod.length}件`,
+    `⚠ 配送方法（shipping_method）が「${MERCARI_SHIP_METHOD_SELLER}」以外のため除外（メルカリ便等は送り状がメルカリShops 側。B2 に出すと二重になります）: ${parsed.otherMethod.length}件`,
     ['注文番号', '配送方法（shipping_method）', '商品名'], parsed.otherMethod.map(x => [x.orderNumber, x.value || '（空）', x.productName]), 'error');
   renderRakutenWarningSection(mResults, 'm-warn-orderonly',
     `⚠ 注文の行（type=order）だけで商品の行（type=product）が無い注文（除外。落とし直してください）: ${parsed.orderOnly.length}件`,
@@ -8626,10 +8639,10 @@ function renderMercariResults(parsed) {
     `⏰ 本日中に出荷が必要（お届け希望日 = 本日+3日 ＝ 最終出荷日): ${lastChanceOrders.length}件`,
     ['注文番号', 'お届け希望日', '商品名'], lastChanceOrders.map(o => [o.orderNumber, o.desiredDeliveryRaw || '', firstName(o)]), 'orange');
   renderRakutenWarningSection(mResults, 'm-warn-multidest',
-    `⚠ メルカリ：配送先が複数の注文（手動対応）。ピッキングには含めますが、B2・クリックポストからは除外します: ${parsed.multiDest.length}件`,
+    `⚠ メルカリShops：配送先が複数の注文（手動対応）。ピッキングには含めますが、B2・クリックポストからは除外します: ${parsed.multiDest.length}件`,
     ['注文番号', '商品名'], parsed.multiDest.map(x => [x.orderNumber, x.productName]), 'error');
   renderRakutenWarningSection(mResults, 'm-warn-billing',
-    `メルカリ：お届け先と請求先が違う注文（ご依頼主は店舗名で出しています）: ${parsed.billingDiff.length}件`,
+    `メルカリShops：お届け先と請求先が違う注文（ご依頼主は店舗名で出しています）: ${parsed.billingDiff.length}件`,
     ['注文番号', 'お届け先名', '請求先名'], parsed.billingDiff.map(x => [x.orderNumber, x.shipName, x.billName]), 'warn');
   renderRakutenWarningSection(mResults, 'm-warn-check',
     `⚠ 要確認（対象には含めています）: ${parsed.needsCheck.length}件`,
@@ -8683,7 +8696,7 @@ function renderMercariResults(parsed) {
       parcelOptionsHtml(mercariNoParcel(cur) ? 1 : (mercariParcelChoice.get(o.orderNumber) || 1))}</select>`;
     return shipListOrderHtml({
       orderId: o.orderNumber,
-      storeLabel: `メルカリ（${MERCARI_STORE_NAME}）`,
+      storeLabel: `メルカリShops（${MERCARI_STORE_NAME}）`,
       badges: shipListParcelHint(qtySum(o)),
       alerts: alertLine + multiDestLine + dtWarn,
       lines: o.lines,
@@ -8984,18 +8997,18 @@ function buildMercariBulkShip(rows, file, parsed, today) {
 // メルカリ分の警告（STEP2 の結果エリア）。出力0件でも警告は出す（なぜ0件だったのか分かるように）
 function renderMercariShipWarnings(container, rep) {
   renderRakutenWarningSection(container, 'ms-warn-multi',
-    `⚠ メルカリ：複数個口の伝票番号が一部しか入っていません（自動処理から除外）。全部入れてから作り直してください: ${rep.multiParcel.length}件`,
+    `⚠ メルカリShops：複数個口の伝票番号が一部しか入っていません（自動処理から除外）。全部入れてから作り直してください: ${rep.multiParcel.length}件`,
     ['注文番号', '伝票番号'],
     rep.multiParcel.map(x => [x.orderNumber, x.trackings
       + (x.partial ? `（一部未入力：${x.partial.parcels}個口のうち${x.partial.filled}本）` : '')]), 'error');
   renderRakutenWarningSection(container, 'ms-warn-notinstep1',
-    `⚠ メルカリ：STEP 1 で読み込んだ注文データに無い注文のため除外（その注文を含む注文データを STEP 1 で読み込み直してください）: ${rep.notInStep1.length}件`,
+    `⚠ メルカリShops：STEP 1 で読み込んだ注文データに無い注文のため除外（その注文を含む注文データを STEP 1 で読み込み直してください）: ${rep.notInStep1.length}件`,
     ['注文番号', '伝票番号'], rep.notInStep1.map(x => [x.orderNumber, x.trackings]), 'error');
   renderRakutenWarningSection(container, 'ms-warn-excluded',
-    `⚠ メルカリ：STEP 1 で出荷対象から外した注文のため除外（手動で確認してください）: ${rep.excluded.length}件`,
+    `⚠ メルカリShops：STEP 1 で出荷対象から外した注文のため除外（手動で確認してください）: ${rep.excluded.length}件`,
     ['注文番号', '外した理由', '伝票番号'], rep.excluded.map(x => [x.orderNumber, x.reason, x.trackings]), 'error');
   renderRakutenWarningSection(container, 'ms-warn-notshipped',
-    `📦 メルカリ：STEP 1の出荷対象のうち、今回の発行済みデータに伝票が無い注文（出荷漏れの可能性）: ${rep.notShipped.length}件`,
+    `📦 メルカリShops：STEP 1の出荷対象のうち、今回の発行済みデータに伝票が無い注文（出荷漏れの可能性）: ${rep.notShipped.length}件`,
     ['注文番号'], rep.notShipped.map(x => [x.orderNumber]), 'warn');
 }
 // ==== MERCARI (メルカリ) — END ====
