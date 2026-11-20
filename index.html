@@ -16,6 +16,8 @@
   </script>
   <link rel="icon" type="image/png" id="app-icon">
   <script>document.getElementById('app-icon').href = ASSET_BASE + 'assets/icon.png';</script>
+  <!-- B2送り状の住所の切り分け（R1）に使う市区町村名の一覧（総務省 全国地方公共団体コード）。読めないときは住所の検査で全件を手入力に回す -->
+  <script>document.write('<script src="' + ASSET_BASE + 'assets/b2-municipalities.js"><\/script>');</script>
   <script src="https://accounts.google.com/gsi/client" async></script>
   <meta name="description" content="Amazon FBM（自己発送）・楽天市場・Yahoo!ショッピング・メルカリShops・Qoo10の出荷業務を支援するブラウザツール。ヤマトB2クラウド取込CSV・クリックポスト用CSV・ピッキングリスト・Amazon出荷通知TXT・楽天市場発送完了報告CSV・Yahoo!ショッピング注文処理実績アップロード用CSV・メルカリShops一括発送通知用CSV・Qoo10一括発送用CSVを生成します。処理はブラウザ内で行い、Google にログインしているときは入力・出力ファイルの控えを利用者自身の Google ドライブ（EC出荷記録）に保存します。">
   <script src="https://cdn.jsdelivr.net/npm/encoding-japanese@2/encoding.min.js"></script>
@@ -1030,6 +1032,10 @@ function parseAmazonTsvGroups(tsvText) {
         phone: gc(cols,'buyer-phone-number'),
         postal: gc(cols,'ship-postal-code'),
         fullAddress, building, products:[], quantities:[], itemIds:[], skus:[],
+        // B2 の住所欄・建物名欄の元（addrfit）。モールの建物の欄＝buildAddress が建物名にする欄（address-3、
+        // address-3 が空なら数字で始まらない address-2）。fullAddress・building（クリックポスト・帳票）は変えない
+        addrParts: amazonAddrParts(gc(cols,'ship-state'), gc(cols,'ship-city'),
+          gc(cols,'ship-address-1'), gc(cols,'ship-address-2'), gc(cols,'ship-address-3')),
         initialMethod: null   // 発送方法の判定値（確定値は amazonResolvedMethod で解決する）
       });
     }
@@ -1046,19 +1052,30 @@ function parseAmazonTsvGroups(tsvText) {
   return Array.from(groups.values());
 }
 
+// Amazon の住所の欄 → b2FitAddress に渡す形（buildAddress と同じ分け方で「住所」と「建物の欄」を決める）
+function amazonAddrParts(state, city, addr1, addr2, addr3) {
+  const isNum = /^[\d０-９]/.test(addr2);
+  if (addr3)           return { pref: state, city, addr: addr1 + addr2, bldg: addr3 };
+  if (!addr2 || isNum) return { pref: state, city, addr: addr1 + addr2, bldg: '' };
+  return { pref: state, city, addr: addr1, bldg: addr2 };
+}
+
 // 単一注文 group → B2クラウド1行。convertToB2 の内側ループを抽出（列・値は不変）。
+// 住所欄・建物名欄は b2FitAddress で B2 の上限に収める（addrfit）。ご依頼主は店舗設定のまま
 function buildB2Row(g, shipDate, invoiceType, store) {
   const row = new Array(95).fill('');
   row[0]=g.orderId; row[1]=invoiceType; row[4]=shipDate;
   // 購入者電話番号が国際表記（+81始まり）で来るとB2が受け付けないため国内形式へ正規化。
   // 楽天側（buildRakutenB2Row の row[8]）と同じ扱い。依頼主 row[19] には適用しない。
-  row[8]=normalizeJapanesePhone(g.phone); row[10]=g.postal; row[11]=g.fullAddress; row[12]=g.building;
+  const fTo = b2FitAddress(g.addrParts || { pref: '', city: '', addr: g.fullAddress, bldg: g.building });
+  row[8]=normalizeJapanesePhone(g.phone); row[10]=g.postal; row[11]=fTo.address; row[12]=fTo.building;
   row[15]=g.recipientName; row[19]=store.tel; row[21]=store.postal;
   row[22]=store.address; row[23]=store.building; row[24]=store.name;
   row[27]=(g.products[0]||'').slice(0,25).trimEnd();
   row[32]=(g.itemIds[0]||'')+' ';
   row[38]=String(g.quantities.reduce((a,v)=>a+v,0));
   row[39]=store.customerCode; row[41]=store.fareCode;
+  b2NoteAddrSrc(row[0], fTo, null);
   return row;
 }
 
@@ -1644,6 +1661,8 @@ function renderCombinedPickingHTML(amazon, rakuten, seq, load, yahoo, mercari, q
   const amazonSkuBadge = m => m === AMAZON_NEKOPOS ? '' : amazonMethodBadge(m);
   // 2個口以上の注文の印（梱包・発送明細の注文番号の横）。配送方法の表記・複数商品の札（.multi-tag）と見分けられる二重線の丸札
   const parcelTag = n => n >= 2 ? `<span class="parcel-tag">${n}個口</span>` : '';
+  // 出力前の検査で B2用CSV に入れなかった注文（b2ManualOrders）の印。送り状を B2 で手入力する（赤の .mp-badge）
+  const b2ManualTag = id => b2ManualOrders.has(id) ? `<span class="mp-badge">⚠ B2 手入力</span>` : '';
 
   // 商品別集計（ピッキング）の対象。「本日出荷しない」の注文は当日ピッキングしないため除く
   // （梱包・発送明細には載せる＝aOrders／rOrders・行番号 seq は全注文のまま）。
@@ -2034,7 +2053,7 @@ function renderCombinedPickingHTML(amazon, rakuten, seq, load, yahoo, mercari, q
     // 本日出荷しない注文は表記の代わりに赤い札「⚠ 本日出荷しない」。2個口以上の注文は「N個口」の印も出す。
     // ※ G番号は分けない（商品別合計との突合が壊れるため。冒頭の再発防止コメント参照）。
     return `<section class="order">
-      <h2>${detailNo('amazon', o.orderId)}${esc(o.orderId)}${amazonMethodBadge(amazonResolvedMethod(o))}${parcelTag(amazonParcelCount(o))}${detailMulti('amazon', o.orderId)}</h2>
+      <h2>${detailNo('amazon', o.orderId)}${esc(o.orderId)}${amazonMethodBadge(amazonResolvedMethod(o))}${parcelTag(amazonParcelCount(o))}${b2ManualTag(o.orderId)}${detailMulti('amazon', o.orderId)}</h2>
       <table>${detailHead}<tbody>${rows}</tbody></table>
     </section>`;
   }).join('')}</div>
@@ -2051,7 +2070,7 @@ function renderCombinedPickingHTML(amazon, rakuten, seq, load, yahoo, mercari, q
     // 選択肢のどれでもない（不明）ときは今までどおり黒枠に生の配送方法。本日出荷しないは赤い札。2個口以上は「N個口」の印も出す。
     const rm = rakutenResolvedMethod(o);
     return `<section class="order">
-      <h2>${detailNo('rakuten', o.orderNumber)}${esc(o.orderNumber)}${rakutenMethodBadge(rm)}${parcelTag(rakutenParcelCount(o))}${detailMulti('rakuten', o.orderNumber)}</h2>
+      <h2>${detailNo('rakuten', o.orderNumber)}${esc(o.orderNumber)}${rakutenMethodBadge(rm)}${parcelTag(rakutenParcelCount(o))}${b2ManualTag(o.orderNumber)}${detailMulti('rakuten', o.orderNumber)}</h2>
       <table>${detailHead}<tbody>${rows}</tbody></table>
     </section>`;
   }).join('')}</div>
@@ -2068,7 +2087,7 @@ function renderCombinedPickingHTML(amazon, rakuten, seq, load, yahoo, mercari, q
     const ym = yahooResolvedMethod(o);
     const okihai = o.okihai ? `<span class="okihai-tag">置き配：${esc(o.okihai)}</span>` : '';
     return `<section class="order">
-      <h2>${detailNo('yahoo', o.orderNumber)}${esc(o.orderNumber)}${rakutenMethodBadge(ym)}${parcelTag(yahooParcelCount(o))}${detailMulti('yahoo', o.orderNumber)}${okihai}</h2>
+      <h2>${detailNo('yahoo', o.orderNumber)}${esc(o.orderNumber)}${rakutenMethodBadge(ym)}${parcelTag(yahooParcelCount(o))}${b2ManualTag(o.orderNumber)}${detailMulti('yahoo', o.orderNumber)}${okihai}</h2>
       <table>${detailHead}<tbody>${rows}</tbody></table>
     </section>`;
   }).join('')}</div>
@@ -2084,7 +2103,7 @@ function renderCombinedPickingHTML(amazon, rakuten, seq, load, yahoo, mercari, q
     ).join('');
     const mm = mercariResolvedMethod(o);
     return `<section class="order">
-      <h2>${detailNo('mercari', o.orderNumber)}${esc(o.orderNumber)}${rakutenMethodBadge(mm)}${parcelTag(mercariParcelCount(o))}${detailMulti('mercari', o.orderNumber)}</h2>
+      <h2>${detailNo('mercari', o.orderNumber)}${esc(o.orderNumber)}${rakutenMethodBadge(mm)}${parcelTag(mercariParcelCount(o))}${b2ManualTag(o.orderNumber)}${detailMulti('mercari', o.orderNumber)}</h2>
       <table>${detailHead}<tbody>${rows}</tbody></table>
     </section>`;
   }).join('')}</div>
@@ -2100,7 +2119,7 @@ function renderCombinedPickingHTML(amazon, rakuten, seq, load, yahoo, mercari, q
     ).join('');
     const qm = qoo10ResolvedMethod(o);
     return `<section class="order">
-      <h2>${detailNo('qoo10', o.orderNumber)}${esc(o.orderNumber)}${rakutenMethodBadge(qm)}${parcelTag(qoo10ParcelCount(o))}${detailMulti('qoo10', o.orderNumber)}</h2>
+      <h2>${detailNo('qoo10', o.orderNumber)}${esc(o.orderNumber)}${rakutenMethodBadge(qm)}${parcelTag(qoo10ParcelCount(o))}${b2ManualTag(o.orderNumber)}${detailMulti('qoo10', o.orderNumber)}</h2>
       <div class="q-orders">注文番号：${esc((o.orderNos || []).join(' ／ '))}</div>
       <table>${detailHead}<tbody>${rows}</tbody></table>
     </section>`;
@@ -3009,7 +3028,7 @@ function buildClickpostRow(cpRec) {
     const r = src.recipient || {};
     postalRaw = String(r.postal1 || '') + String(r.postal2 || '');
     name = r.firstName ? `${r.lastName || ''}　${r.firstName}` : String(r.lastName || '');
-    // buildRakutenAddress と同じ規則（splitAddressAtSpace）：空白は消し、番地の直後の空白だけで住所と建物名に分ける。
+    // splitAddressAtSpace の規則：空白は消し、番地の直後の空白だけで住所と建物名に分ける（B2 は addrfit で b2FitAddress に替えた）。
     // 建物名は下の「建物名があれば新しい行から」で住所の次の行に入る。照合キー（clickpostKey）は住所1〜4行目を
     // 連結して空白を消すため、分けても分けなくても同じ値になる（過去の記録との照合を壊さない）
     const a = splitAddressAtSpace(r.pref, r.city, r.rest);
@@ -4651,6 +4670,8 @@ async function s1ConvertRun(auth) {
   const loadedStoreNames = [];   // 統合ピッキング帳票のモール帯に出す店舗名
   s1ShipChoiceStale = false;     // この変換の内容と画面の選択は一致している
   rRenderShipRedo();             // 楽天ペインの「作り直してください」も消す
+  b2AddrSrc.clear();             // B2 行の住所の元（出力前の検査に使う）は変換ごとに作り直す
+  b2ManualOrders = new Set();    // 出力前の検査で外した注文（梱包・発送明細の「B2 手入力」の印）
 
   stores.forEach((store, storeIndex) => {
     if (!s1Buffers[store.name]) return;
@@ -4732,9 +4753,8 @@ async function s1ConvertRun(auth) {
       const skip   = rData.orders.filter(o => isSkip(o));
       const usable = rData.orders.filter(o => rakutenInvoiceCode(o) !== '' && !isNone(o) && !isSkip(o) && !isCp(o));
       const noCode = rData.orders.filter(o => rakutenInvoiceCode(o) === '' && !isNone(o) && !isSkip(o) && !isCp(o));
-      const addrIssues = [];   // 住所欄・建物名欄の上限超過（出力は止めず警告のみ）
       // N個口の注文は同じ行を N 行出す（行は1回だけ組む＝住所の警告も1注文1回）
-      rakutenB2Rows = usable.flatMap(o => parcelRows(buildRakutenB2Row(o, shipDate, sender, addrIssues), rakutenParcelCount(o)));
+      rakutenB2Rows = usable.flatMap(o => parcelRows(buildRakutenB2Row(o, shipDate, sender), rakutenParcelCount(o)));
       item.className = 'result-item success';
       // 件数は注文数。個口で行数が増えるときは B2用CSV の行数も併記する
       item.textContent = `✓ 楽天市場：${usable.length}件`
@@ -4771,27 +4791,6 @@ async function s1ConvertRun(auth) {
         `⚠ 楽天市場：配送方法が不明のためB2から除外（手動対応してください）: ${noCode.length}件`,
         ['注文番号', '配送方法'],
         noCode.map(o => [o.orderNumber, o.shipMethodRaw || '（空）']), 'error');
-      // 住所欄・建物名欄の上限超過（B2へは出力済み。RMS側の住所を短縮するか手動で調整する）
-      const hasIssue = k => addrIssues.filter(x => x.issues.includes(k));
-      // 対象：お届け先住所か、注文者をご依頼主にした注文のご依頼主住所か（party）
-      const issueRow = x => [x.orderNumber, x.party || 'お届け先', x.fullAddress, fullwidthCharLength(x.fullAddress),
-                             x.building, fullwidthCharLength(x.building)];
-      const issueCols = ['注文番号', '対象', '住所欄', '住所（全角換算）', '建物名欄', '建物名（全角換算）'];
-      renderRakutenWarningSection(s1Results, 's1-rk-addr-bldgused',
-        `⚠ 要確認：住所文字数超過・建物名欄使用中のため自動振り分け不可（全角${B2_ADDRESS_LIMIT}文字上限）: ${hasIssue('addrOverflowBuildingUsed').length}件`,
-        issueCols, hasIssue('addrOverflowBuildingUsed').map(issueRow), 'error');
-      renderRakutenWarningSection(s1Results, 's1-rk-addr-unresolved',
-        `⚠ 要確認：住所文字数超過（自動対応不可）: ${hasIssue('addrOverflowUnresolved').length}件`,
-        issueCols, hasIssue('addrOverflowUnresolved').map(issueRow), 'error');
-      renderRakutenWarningSection(s1Results, 's1-rk-bldg-over',
-        `⚠ 要確認：建物名欄が文字数上限超過（全角${B2_BUILDING_LIMIT}文字上限・そのまま出力しています）: ${hasIssue('buildingOverflow').length}件`,
-        issueCols, hasIssue('buildingOverflow').map(issueRow), 'warn');
-      renderRakutenWarningSection(s1Results, 's1-rk-addr-split',
-        `📍 住所が全角${B2_ADDRESS_LIMIT}文字を超えたため建物名欄へ自動振り分けしました（番地の途中で割れる場合があります。印字内容を確認してください）: ${hasIssue('addrSplit').length}件`,
-        issueCols, hasIssue('addrSplit').map(issueRow), 'warn');
-      renderRakutenWarningSection(s1Results, 's1-rk-addr-space',
-        `📍 ${ADDR_SPLIT_AT_SPACE_TEXT}（それ以外の空白は消しています。印字内容を確認してください）: ${hasIssue('addrSplitAtSpace').length}件`,
-        issueCols, hasIssue('addrSplitAtSpace').map(issueRow), 'warn');
       // ご依頼主を注文者にした注文（送付先一致フラグ '0'）。B2へは出力済み・確認用の一覧。
       const joinName = p => [p.lastName, p.firstName].filter(Boolean).join(' ');
       const senderOrderer = usable.filter(o => rakutenSenderSource(o) === 'orderer');
@@ -4835,9 +4834,8 @@ async function s1ConvertRun(auth) {
       const skip   = yData.orders.filter(o => isSkip(o));
       const usable = yData.orders.filter(o => yahooInvoiceCode(o) !== '' && !isNone(o) && !isSkip(o) && !isCpY(o));
       const noCode = yData.orders.filter(o => yahooInvoiceCode(o) === '' && !isNone(o) && !isSkip(o) && !isCpY(o));
-      const addrIssues = [];   // 住所欄・建物名欄の上限超過（楽天と同じ。出力は止めず警告のみ）
       const kijiIssues = [];   // 記事欄に置き配の印が収まらなかった注文
-      yahooB2Rows = usable.flatMap(o => parcelRows(buildYahooB2Row(o, shipDate, sender, addrIssues, kijiIssues), yahooParcelCount(o)));
+      yahooB2Rows = usable.flatMap(o => parcelRows(buildYahooB2Row(o, shipDate, sender, null, kijiIssues), yahooParcelCount(o)));
       item.className = 'result-item success';
       item.textContent = `✓ Yahoo!ショッピング：${usable.length}件`
         + (yahooB2Rows.length !== usable.length ? `（B2 CSV ${yahooB2Rows.length}行）` : '')
@@ -4872,25 +4870,6 @@ async function s1ConvertRun(auth) {
       renderRakutenWarningSection(s1Results, 's1-yh-unknown',
         `⚠ Yahoo!ショッピング：配送方法が不明のためB2から除外（手動対応してください）: ${noCode.length}件`,
         ['注文番号', '配送方法（ShipMethod）'], noCode.map(o => [o.orderNumber, o.shipMethodRaw || '（空）']), 'error');
-      const hasIssue = k => addrIssues.filter(x => x.issues.includes(k));
-      const issueRow = x => [x.orderNumber, x.party || 'お届け先', x.fullAddress, fullwidthCharLength(x.fullAddress),
-                             x.building, fullwidthCharLength(x.building)];
-      const issueCols = ['注文番号', '対象', '住所欄', '住所（全角換算）', '建物名欄', '建物名（全角換算）'];
-      renderRakutenWarningSection(s1Results, 's1-yh-addr-bldgused',
-        `⚠ 要確認（Yahoo!ショッピング）：住所文字数超過・建物名欄使用中のため自動振り分け不可（全角${B2_ADDRESS_LIMIT}文字上限）: ${hasIssue('addrOverflowBuildingUsed').length}件`,
-        issueCols, hasIssue('addrOverflowBuildingUsed').map(issueRow), 'error');
-      renderRakutenWarningSection(s1Results, 's1-yh-addr-unresolved',
-        `⚠ 要確認（Yahoo!ショッピング）：住所文字数超過（自動対応不可）: ${hasIssue('addrOverflowUnresolved').length}件`,
-        issueCols, hasIssue('addrOverflowUnresolved').map(issueRow), 'error');
-      renderRakutenWarningSection(s1Results, 's1-yh-bldg-over',
-        `⚠ 要確認（Yahoo!ショッピング）：建物名欄が文字数上限超過（全角${B2_BUILDING_LIMIT}文字上限・そのまま出力しています）: ${hasIssue('buildingOverflow').length}件`,
-        issueCols, hasIssue('buildingOverflow').map(issueRow), 'warn');
-      renderRakutenWarningSection(s1Results, 's1-yh-addr-split',
-        `📍 Yahoo!ショッピング：住所が全角${B2_ADDRESS_LIMIT}文字を超えたため建物名欄へ自動振り分けしました（番地の途中で割れる場合があります。印字内容を確認してください）: ${hasIssue('addrSplit').length}件`,
-        issueCols, hasIssue('addrSplit').map(issueRow), 'warn');
-      renderRakutenWarningSection(s1Results, 's1-yh-addr-space',
-        `📍 Yahoo!ショッピング：${ADDR_SPLIT_AT_SPACE_TEXT}（それ以外の空白は消しています。印字内容を確認してください）: ${hasIssue('addrSplitAtSpace').length}件`,
-        issueCols, hasIssue('addrSplitAtSpace').map(issueRow), 'warn');
       renderRakutenWarningSection(s1Results, 's1-yh-kiji',
         `⚠ Yahoo!ショッピング：B2の記事欄（全角22文字）に置き配の印が収まらないため、印を付けずに出力しました（梱包・発送明細には印があります）: ${kijiIssues.length}件`,
         ['注文番号', '記事欄', '置き配'], kijiIssues.map(x => [x.orderNumber, x.kiji, x.okihai]), 'warn');
@@ -4937,8 +4916,7 @@ async function s1ConvertRun(auth) {
       const skip   = mData.orders.filter(o => isSkip(o));
       const usable = mData.orders.filter(o => mercariInvoiceCode(o) !== '' && !isNone(o) && !isSkip(o) && !isCpM(o) && !o.multiDest);
       const noCode = mData.orders.filter(o => mercariInvoiceCode(o) === '' && !isNone(o) && !isSkip(o) && !isCpM(o) && !o.multiDest);
-      const addrIssues = [];   // 住所欄・建物名欄の上限超過（楽天と同じ。出力は止めず警告のみ）
-      mercariB2Rows = usable.flatMap(o => parcelRows(buildMercariB2Row(o, shipDate, sender, addrIssues), mercariParcelCount(o)));
+      mercariB2Rows = usable.flatMap(o => parcelRows(buildMercariB2Row(o, shipDate, sender), mercariParcelCount(o)));
       item.className = 'result-item success';
       item.textContent = `✓ メルカリShops：${usable.length}件`
         + (mercariB2Rows.length !== usable.length ? `（B2 CSV ${mercariB2Rows.length}行）` : '')
@@ -4974,25 +4952,6 @@ async function s1ConvertRun(auth) {
       renderRakutenWarningSection(s1Results, 's1-mc-unknown',
         `⚠ メルカリShops：配送方法が不明のためB2から除外（手動対応してください）: ${noCode.length}件`,
         ['注文番号', '配送方法'], noCode.map(o => [o.orderNumber, mercariResolvedMethod(o) || '（空）']), 'error');
-      const hasIssue = k => addrIssues.filter(x => x.issues.includes(k));
-      const issueRow = x => [x.orderNumber, x.party || 'お届け先', x.fullAddress, fullwidthCharLength(x.fullAddress),
-                             x.building, fullwidthCharLength(x.building)];
-      const issueCols = ['注文番号', '対象', '住所欄', '住所（全角換算）', '建物名欄', '建物名（全角換算）'];
-      renderRakutenWarningSection(s1Results, 's1-mc-addr-bldgused',
-        `⚠ 要確認（メルカリShops）：住所文字数超過・建物名欄使用中のため自動振り分け不可（全角${B2_ADDRESS_LIMIT}文字上限）: ${hasIssue('addrOverflowBuildingUsed').length}件`,
-        issueCols, hasIssue('addrOverflowBuildingUsed').map(issueRow), 'error');
-      renderRakutenWarningSection(s1Results, 's1-mc-addr-unresolved',
-        `⚠ 要確認（メルカリShops）：住所文字数超過（自動対応不可）: ${hasIssue('addrOverflowUnresolved').length}件`,
-        issueCols, hasIssue('addrOverflowUnresolved').map(issueRow), 'error');
-      renderRakutenWarningSection(s1Results, 's1-mc-bldg-over',
-        `⚠ 要確認（メルカリShops）：建物名欄が文字数上限超過（全角${B2_BUILDING_LIMIT}文字上限・そのまま出力しています）: ${hasIssue('buildingOverflow').length}件`,
-        issueCols, hasIssue('buildingOverflow').map(issueRow), 'warn');
-      renderRakutenWarningSection(s1Results, 's1-mc-addr-split',
-        `📍 メルカリShops：住所が全角${B2_ADDRESS_LIMIT}文字を超えたため建物名欄へ自動振り分けしました（番地の途中で割れる場合があります。印字内容を確認してください）: ${hasIssue('addrSplit').length}件`,
-        issueCols, hasIssue('addrSplit').map(issueRow), 'warn');
-      renderRakutenWarningSection(s1Results, 's1-mc-addr-space',
-        `📍 メルカリShops：${ADDR_SPLIT_AT_SPACE_TEXT}（それ以外の空白は消しています。印字内容を確認してください）: ${hasIssue('addrSplitAtSpace').length}件`,
-        issueCols, hasIssue('addrSplitAtSpace').map(issueRow), 'warn');
       // お届け先と請求先が違う注文：ご依頼主は店舗のまま（請求先には切り替えない）。確認用の一覧
       const billingDiff = usable.filter(o => o.billingDiff);
       renderRakutenWarningSection(s1Results, 's1-mc-billing-diff',
@@ -5034,8 +4993,7 @@ async function s1ConvertRun(auth) {
       const skip   = qData.orders.filter(o => isSkip(o));
       const usable = qData.orders.filter(o => qoo10InvoiceCode(o) !== '' && !isNone(o) && !isSkip(o) && !isCpQ(o) && !manual(o));
       const noCode = qData.orders.filter(o => qoo10InvoiceCode(o) === '' && !isNone(o) && !isSkip(o) && !isCpQ(o) && !manual(o));
-      const addrIssues = [];   // 住所欄・建物名欄の上限超過（楽天と同じ。出力は止めず警告のみ）
-      qoo10B2Rows = usable.flatMap(o => parcelRows(buildQoo10B2Row(o, shipDate, sender, addrIssues), qoo10ParcelCount(o)));
+      qoo10B2Rows = usable.flatMap(o => parcelRows(buildQoo10B2Row(o, shipDate, sender), qoo10ParcelCount(o)));
       item.className = 'result-item success';
       item.textContent = `✓ Qoo10：${usable.length}件`
         + (qoo10B2Rows.length !== usable.length ? `（B2 CSV ${qoo10B2Rows.length}行）` : '')
@@ -5069,25 +5027,6 @@ async function s1ConvertRun(auth) {
       renderRakutenWarningSection(s1Results, 's1-qo-unknown',
         `⚠ Qoo10：配送方法が不明のためB2から除外（手動対応してください）: ${noCode.length}件`,
         ['お客様管理番号', '配送方法'], noCode.map(o => [o.orderNumber, qoo10ResolvedMethod(o) || '（空）']), 'error');
-      const hasIssue = k => addrIssues.filter(x => x.issues.includes(k));
-      const issueRow = x => [x.orderNumber, x.party || 'お届け先', x.fullAddress, fullwidthCharLength(x.fullAddress),
-                             x.building, fullwidthCharLength(x.building)];
-      const issueCols = ['お客様管理番号', '対象', '住所欄', '住所（全角換算）', '建物名欄', '建物名（全角換算）'];
-      renderRakutenWarningSection(s1Results, 's1-qo-addr-bldgused',
-        `⚠ 要確認（Qoo10）：住所文字数超過・建物名欄使用中のため自動振り分け不可（全角${B2_ADDRESS_LIMIT}文字上限）: ${hasIssue('addrOverflowBuildingUsed').length}件`,
-        issueCols, hasIssue('addrOverflowBuildingUsed').map(issueRow), 'error');
-      renderRakutenWarningSection(s1Results, 's1-qo-addr-unresolved',
-        `⚠ 要確認（Qoo10）：住所文字数超過（自動対応不可）: ${hasIssue('addrOverflowUnresolved').length}件`,
-        issueCols, hasIssue('addrOverflowUnresolved').map(issueRow), 'error');
-      renderRakutenWarningSection(s1Results, 's1-qo-bldg-over',
-        `⚠ 要確認（Qoo10）：建物名欄が文字数上限超過（全角${B2_BUILDING_LIMIT}文字上限・そのまま出力しています）: ${hasIssue('buildingOverflow').length}件`,
-        issueCols, hasIssue('buildingOverflow').map(issueRow), 'warn');
-      renderRakutenWarningSection(s1Results, 's1-qo-addr-split',
-        `📍 Qoo10：住所が全角${B2_ADDRESS_LIMIT}文字を超えたため建物名欄へ自動振り分けしました（番地の途中で割れる場合があります。印字内容を確認してください）: ${hasIssue('addrSplit').length}件`,
-        issueCols, hasIssue('addrSplit').map(issueRow), 'warn');
-      renderRakutenWarningSection(s1Results, 's1-qo-addr-space',
-        `📍 Qoo10：${ADDR_SPLIT_AT_SPACE_TEXT}（それ以外の空白は消しています。印字内容を確認してください）: ${hasIssue('addrSplitAtSpace').length}件`,
-        issueCols, hasIssue('addrSplitAtSpace').map(issueRow), 'warn');
     } catch(e) {
       item.className = 'result-item error';
       item.textContent = `⚠ Qoo10：${e.message}`;
@@ -5141,6 +5080,13 @@ async function s1ConvertRun(auth) {
     renderImageRegisterSection(pickingData);
   }
 
+  // 出力の直前の検査（R4。addrfit）：B2用CSV の全行（全モール・お届け先とご依頼主）を b2CheckAddressRow にかけ、
+  // 外れた注文は B2用CSV に入れず赤の警告で手入力に回す。ピッキングリスト・梱包・発送明細には載せたまま、
+  // 明細の見出しに「B2 手入力」の印を付ける（b2ManualOrders。印刷ボタンを組む前に決める）。
+  const b2Gate = b2GateRows([...amazonRows, ...rakutenB2Rows, ...yahooB2Rows, ...mercariB2Rows, ...qoo10B2Rows]);
+  b2ManualOrders = b2Gate.manual;
+  renderB2ManualSection(s1Results, b2Gate.failed);
+
   // ピッキング帳票の印刷ボタン（Amazon＋楽天市場＋ヤフショ＋メルカリ＋Qoo10で1つ）。帳票には常に5モールを出す（0件・未読込も）。
   // B2 CSVの保存可否とは独立に常に出す。
   renderCombinedPickingButton(amazonPicking, rakutenPicking, pickLoad, yahooPicking, mercariPicking, qoo10Picking);
@@ -5165,10 +5111,10 @@ async function s1ConvertRun(auth) {
   // B2行が1本も無い場合はヘッダだけのCSVを保存しない（全件がマケプレ配送のときに起きる）。
   // ピッキングリスト・梱包発送明細の印刷ボタンは上で生成済みなので、そのまま使える。
   // クリックポストがあれば、B2用CSVは出さずにクリックポスト用CSVだけを出す（essB2Output の中で分岐する）。
-  if (!amazonRows.length && !rakutenB2Rows.length && !yahooB2Rows.length && !mercariB2Rows.length && !qoo10B2Rows.length && !cpRecs.length) {
+  if (!b2Gate.rows.length && !cpRecs.length) {
     const el = document.createElement('div');
     el.className = 'result-item error'; el.style.marginTop = '6px';
-    el.textContent = '⚠ B2 CSVに出力する注文がありません（別発行・送り状なし・本日出荷しない・配送方法不明の注文だけ、または楽天市場・Yahoo!ショッピング・メルカリShops・Qoo10の依頼主が未設定など。上の表示を確認してください）。'
+    el.textContent = '⚠ B2 CSVに出力する注文がありません（別発行・送り状なし・本日出荷しない・配送方法不明・B2 手入力の注文だけ、または楽天市場・Yahoo!ショッピング・メルカリShops・Qoo10の依頼主が未設定など。上の表示を確認してください）。'
       + 'ピッキングリスト・梱包発送明細は印刷できます';
     s1Results.appendChild(el);
     return;
@@ -5179,7 +5125,7 @@ async function s1ConvertRun(auth) {
   // 照合で除外した注文は、ピッキングリスト＋梱包・発送明細の対象からも外す（照合なしで出力のときは全件のまま）。
   // ヤフショ・メルカリ・Qoo10 のピッキングデータは楽天と同じ形のため、照合の除外は essPickingRakutenExcluding で行う
   // （Qoo10 の照合キーはお客様管理番号 qoo10-カート番号＝B2行の1列目）
-  await essB2Output([...amazonRows, ...rakutenB2Rows, ...yahooB2Rows, ...mercariB2Rows, ...qoo10B2Rows], dateStr, exclude => renderCombinedPickingButton(
+  await essB2Output(b2Gate.rows, dateStr, exclude => renderCombinedPickingButton(
     essPickingAmazonExcluding(amazonPickSrc, exclude), essPickingRakutenExcluding(rakutenPicking, exclude), pickLoad,
     essPickingRakutenExcluding(yahooPicking, exclude), essPickingRakutenExcluding(mercariPicking, exclude),
     essPickingRakutenExcluding(qoo10Picking, exclude)), cpRecs);
@@ -5506,6 +5452,88 @@ s2Convert.addEventListener('click', async () => {
   }
 });
 
+// ============================================================
+// R5：毎日の答え合わせ（addrfit・Kaz 決定 2026-11-20）
+// STEP 2 で読み込んだ発行済データを、同じ作業日の 02_B2用CSV（発行時刻より前のもの）とお客様管理番号で照らし、
+// B2 で住所欄・建物名欄が（空白の違いを除いて）変えられた／建物名欄が空にされた注文を赤の一覧に出す。
+// 住所の中身は出さない（注文番号・どの欄・前後の字数）。照らせないとき（Google 未ログイン・Drive 未設定・
+// その日の 02 が無い）は黄色で知らせる。出荷通知ファイルの作成は止めない。
+// ============================================================
+// ファイル名の時刻（発行済データ YYYYMMDDHHMMSS_… ／ Drive の YYYYMMDD_HHMMSS_…）→ 'YYYYMMDDHHMMSS'。無ければ ''
+function b2NameStamp(name) {
+  const m = /(\d{8})_?(\d{6})/.exec(String(name || ''));
+  return m ? m[1] + m[2] : '';
+}
+// 純関数。issuedFiles・b2Files：[{ name, bytes }]（発行済データ・02）。
+// 発行済データ1本ごとに、発行時刻より前の 02 を新しい順に見て、その注文を含む最初の 02 と照らす
+// （発行時刻が名前から読めないときは全部の 02 が対象）。
+// 戻り値 { diffs: [{ orderId, party, field, kind, before, after }], compared: 照らした注文数, notFound: 02 に無い注文数 }
+function b2AnswerCheck(issuedFiles, b2Files) {
+  const ns = b2StripSpaces, u = fullwidthCharLength;
+  const sent = (b2Files || []).map(f => ({ stamp: b2NameStamp(f.name), rows: essCsvRows(f.bytes) }))
+    .sort((a, b) => b.stamp.localeCompare(a.stamp));
+  const diffs = [], seen = new Set();
+  let compared = 0, notFound = 0;
+  for (const f of issuedFiles || []) {
+    const recs = splitCsvRecords(decodeBuffer(f.bytes)).filter(l => l.trim()).map(parseCsvLine);
+    if (!recs.length) continue;
+    const head = recs[0].map(h => h.trim());
+    const ix = n => head.indexOf(n);
+    const ik = ix('お客様管理番号');
+    const cols = [['お届け先', ix('お届け先住所'), ix('お届け先住所（アパートマンション名）'), 11, 12],
+                  ['ご依頼主', ix('ご依頼主住所'), ix('ご依頼主住所（アパートマンション名）'), 22, 23]];
+    if (ik < 0 || cols[0][1] < 0) continue;
+    const st = b2NameStamp(f.name);
+    const cands = sent.filter(x => !st || (x.stamp && x.stamp < st));
+    for (const r of recs.slice(1)) {
+      const id = (r[ik] || '').trim();
+      if (!id || seen.has(id)) continue;   // 同じ注文の2行目以降（複数個口）は1回だけ
+      seen.add(id);
+      let row = null;
+      for (const c of cands) { row = c.rows.find(x => (x[0] || '').trim() === id) || null; if (row) break; }
+      if (!row) { notFound++; continue; }
+      compared++;
+      for (const [party, ia, ib, sa, sb] of cols) {
+        if (ia < 0) continue;
+        const A0 = row[sa] || '', B0 = row[sb] || '', A1 = r[ia] || '', B1 = ib >= 0 ? (r[ib] || '') : '';
+        if (ns(A0) !== ns(A1)) diffs.push({ orderId: id, party, field: '住所欄', kind: '変えられた', before: u(A0), after: u(A1) });
+        if (ns(B0) && !ns(B1)) diffs.push({ orderId: id, party, field: '建物名欄', kind: '空にされた', before: u(B0), after: 0 });
+        else if (ns(B0) !== ns(B1)) diffs.push({ orderId: id, party, field: '建物名欄', kind: '変えられた', before: u(B0), after: u(B1) });
+      }
+    }
+  }
+  return { diffs, compared, notFound };
+}
+// STEP 2 の画面に答え合わせの結果を出す（s2ConvertRun が 03 の保存の後に呼ぶ）。失敗しても例外を投げない
+async function s2AddrAnswerRun(authResult) {
+  const isIssued = f => {
+    try {
+      const head = parseCsvLine(splitCsvRecords(decodeBuffer(f.buffer)).find(l => l.trim()) || '').map(h => h.trim());
+      return head[0] === B2_HEADER[0] && head.includes('お届け先住所');
+    } catch (_) { return false; }
+  };
+  const issued = s2Files.filter(isIssued).map(f => ({ name: f.name, bytes: new Uint8Array(f.buffer) }));
+  if (!issued.length) return;
+  const skip = reason => renderRakutenWarningSection(s2Results, 's2-addr-answer-skip',
+    `⚠ 住所の答え合わせ（B2 で住所欄・建物名欄が変えられた注文の確認）ができませんでした — 出荷通知ファイルは作ります`,
+    ['理由'], [[reason]], 'warn');
+  if (authResult === 'failed') { skip('Google にログインしていないため、Drive の 02_B2用CSV を読めません'); return; }
+  let b2Files;
+  try {
+    const date = essWorkStamp().date;
+    b2Files = (await essStore().listHistory(date, date)).filter(f => f.kind === 'b2csv');
+    if (!b2Files.length) { skip(`作業日（${date}）の 02_B2用CSV が Drive にありません`); return; }
+  } catch (e) { skip(`Drive の 02_B2用CSV を読めません（${e.message}）`); return; }
+  let res;
+  try { res = b2AnswerCheck(issued, b2Files); }
+  catch (e) { skip(`照らす途中で失敗しました（${e.message}）`); return; }
+  const ids = new Set(res.diffs.map(d => d.orderId));
+  renderRakutenWarningSection(s2Results, 's2-addr-answer',
+    `🔴 B2 で住所欄・建物名欄が変えられた／建物名欄が空にされた注文（02_B2用CSV と照合。部屋番号の抜けなどがないか伝票を確認してください）: ${ids.size}件`,
+    ['注文番号', '対象', '欄', '内容', '02 の字数（u）', '発行済の字数（u）'],
+    res.diffs.map(d => [d.orderId, d.party, d.field, d.kind, d.before, d.after]), 'error');
+}
+
 // 03（発行済データ）の保存がすべて済んでから出荷通知ファイルを作る。
 // 03 が無いと、翌日以降の照合（A）でその日の注文が「出力済み・発行記録なし」になる（2026-10-20 に発生）。
 async function s2ConvertRun(auth) {
@@ -5533,6 +5561,10 @@ async function s2ConvertRun(auth) {
     }
     s2Convert.textContent = '出荷通知ファイルを作る';
   }
+
+  // ---- 住所の答え合わせ（R5。addrfit）：B2 で住所欄・建物名欄が変えられた注文を赤で出す。出荷通知は止めない ----
+  essBusyShow('s2-busy', '住所の答え合わせ中（Drive の 02_B2用CSV と照合）…');
+  await s2AddrAnswerRun(authResult);
 
   // ---- クリックポスト：伝票番号の検証（12桁でない・重複が残っていたら何も作らない） ----
   const cpAll = (s1CpOutput && s1CpOutput.rows) || [];
@@ -6869,14 +6901,9 @@ function normalizeJapanesePhone(raw) {
   return digits;
 }
 
-// B2クラウド送り状発行データレイアウト（ヤマト運輸公式）の欄長上限。
-// お届け先住所＝全角32文字、建物名＝全角16文字。
-const B2_ADDRESS_LIMIT  = 32;
-const B2_BUILDING_LIMIT = 16;
-
-// 全角換算の文字数。半角（ASCII・半角カナ）を1、それ以外を2として数える。
-// cp932ByteLength（CP932実バイト数の概算）とは別関数として持つ。上限が実バイト数ではなく
-// 公式仕様の「全角32文字」という文字数ベースで定義されているため。
+// 全角換算の文字数。半角（ASCII・半角カナ）を1、それ以外を2として数える（この単位を u と呼ぶ）。
+// cp932ByteLength（CP932実バイト数の概算）とは別関数として持つ。B2 の上限が実バイト数ではなく
+// 全角の字数（半角は 0.5 字）で決まっているため（B2_PREF_LIMIT_U など）。
 function fullwidthCharLength(str) {
   let n = 0;
   for (const ch of String(str == null ? '' : str)) {
@@ -6886,16 +6913,228 @@ function fullwidthCharLength(str) {
   return n;
 }
 
-// 全角換算で limit を超えない最長の前半と、その残りに分割する。
-// サロゲートペアを壊さないよう、コードポイント単位で走査して ch.length 分だけ進める。
-function splitByFullwidthLength(str, limit) {
-  let n = 0, i = 0;
-  for (const ch of str) {
-    const w = fullwidthCharLength(ch);
-    if (n + w > limit) break;
-    n += w; i += ch.length;
+// ============================================================
+// B2送り状の住所欄・建物名欄（addrfit・Kaz 決定 2026-11-20）
+// B2 は CSV の「お届け先住所」を 都道府県・市区郡町村・町・番地 に分けて取り込み、どれかが上限を超えるとエラーにする。
+// 上限は全角の字数（半角は 0.5 字）：都道府県 全角4・市区郡町村 全角12・町・番地 全角16・建物名 全角16。
+// ここでは fullwidthCharLength の単位（全角2・半角1＝u）で持つ。
+// 規則は1つだけ：住所を切れ目で「住所欄」と「建物名欄」に分けて4つの上限に収める（b2FitAddress）。
+// 出力の直前に全行を b2CheckAddressRow で検査し、外れた注文は B2用CSV に入れず赤の警告で手入力に回す。
+// ============================================================
+const B2_PREF_LIMIT_U = 8;    // 都道府県 全角4
+const B2_CITY_LIMIT_U = 24;   // 市区郡町村 全角12
+const B2_TOWN_LIMIT_U = 32;   // 町・番地 全角16
+const B2_BLDG_LIMIT_U = 32;   // 建物名 全角16
+const B2_PREFECTURES = ['北海道', '青森県', '岩手県', '宮城県', '秋田県', '山形県', '福島県', '茨城県', '栃木県', '群馬県',
+  '埼玉県', '千葉県', '東京都', '神奈川県', '新潟県', '富山県', '石川県', '福井県', '山梨県', '長野県', '岐阜県', '静岡県',
+  '愛知県', '三重県', '滋賀県', '京都府', '大阪府', '兵庫県', '奈良県', '和歌山県', '鳥取県', '島根県', '岡山県', '広島県',
+  '山口県', '徳島県', '香川県', '愛媛県', '高知県', '福岡県', '佐賀県', '長崎県', '熊本県', '大分県', '宮崎県', '鹿児島県', '沖縄県'];
+// 数字・ハイフン類（番地の数字の並び。候補 5・6 はこの並びの途中では切らない）
+const B2_DIGIT_HYPHEN_RE = /[0-9０-９\-－ー‐−]/;
+function b2StripSpaces(s) { return String(s == null ? '' : s).replace(/[ 　]/g, ''); }
+// 建物名欄の空白：連続を半角空白1つにまとめ、前後は除く（B2 は建物名の空白を通している）
+function b2CollapseSpaces(s) { return String(s == null ? '' : s).replace(/[ 　]+/g, ' ').replace(/^ | $/g, ''); }
+// 市区町村名の照合用の読み替え（ヶ＝ケ・ヵ＝カ・惠＝恵。字数は変えない。
+// 惠：B2 が「糟屋郡須惠町」をそのまま通した例がある＝手順2 の P1）
+function b2MuniKey(s) { return String(s).replace(/ヶ/g, 'ケ').replace(/ヵ/g, 'カ').replace(/惠/g, '恵'); }
+// 市区町村名の一覧（assets/b2-municipalities.js が window.B2_MUNICIPALITIES に入れる）を引きやすい形にする。読めなければ null
+let b2MuniCache = null;
+function b2MuniTable() {
+  if (b2MuniCache) return b2MuniCache;
+  const src = (typeof window !== 'undefined' && window.B2_MUNICIPALITIES) || null;
+  if (!src || typeof src !== 'object') return null;
+  const t = {};
+  for (const p of Object.keys(src)) {
+    const all = (src[p] || []).map(b2MuniKey);
+    t[p] = { all, towns: all.filter(n => /[町村]$/.test(n)) };   // 「〇〇郡」の後ろに来るのは町村だけ
   }
-  return [str.slice(0, i), str.slice(i)];
+  return (b2MuniCache = t);
+}
+// R1：住所（空白は除いて見る）を 都道府県・市区郡町村・残り（町・番地＋建物）に切り分ける。
+// 市区郡町村は総務省「全国地方公共団体コード」の名前で判定し、都道府県の直後から最長一致で
+// 「政令市名＋区名」｜「〇〇郡＋町村名」（郡名は一覧に無いため「郡」の字で認める。東京都は「〇〇島＋町村名」も）｜「市区町村名」を取る。
+// 戻り値 { ok, reason（'pref' 都道府県が無い／'city' 市区郡町村を判定できない／'list' 一覧を読めない）, pref, city, rest }
+function b2SplitPrefCity(s) {
+  const S = b2StripSpaces(s);
+  const pref = B2_PREFECTURES.find(p => S.startsWith(p));
+  if (!pref) return { ok: false, reason: 'pref', pref: '', city: '', rest: S };
+  const R = S.slice(pref.length);
+  const tbl = b2MuniTable();
+  if (!tbl) return { ok: false, reason: 'list', pref, city: '', rest: R };
+  const e = tbl[pref] || { all: [], towns: [] };
+  const K = b2MuniKey(R);
+  let best = 0;
+  for (const n of e.all) if (n.length > best && K.startsWith(n)) best = n.length;
+  // 東京都の島しょは郡の代わりに島の名前を前に書く（例 三宅島三宅村。B2 はそのまま通している＝手順2 の P1）
+  const lead = pref === '東京都' ? /[郡島]/ : /郡/;
+  for (let i = 1; i <= 8 && i < K.length; i++) {
+    if (!lead.test(K[i])) continue;
+    const k2 = K.slice(i + 1);
+    for (const n of e.towns) if (i + 1 + n.length > best && k2.startsWith(n)) best = i + 1 + n.length;
+  }
+  if (!best) return { ok: false, reason: 'city', pref, city: '', rest: R };
+  return { ok: true, reason: '', pref, city: R.slice(0, best), rest: R.slice(best) };
+}
+// R2・R3：モールの欄 → B2 の住所欄・建物名欄。
+//   parts = { pref, city, addr, bldg }。bldg はモールが建物を別の欄で持つときのその値（無ければ ''）。
+//   住所全体（都道府県＋市区郡町村＋addr＋半角空白＋bldg）を1本にし、都道府県＋市区郡町村は住所欄の先頭に入れる。
+//   残り T を「町・番地」と「建物名」に分ける分け目を次の順に試し、町・番地 ≤32u・建物名 ≤32u・町・番地が空でない、
+//   を満たす最初のものを使う（method＝番号）：
+//     1 モールの元の境目（bldg が空でないとき）
+//     2 数字・番・号・地の直後の空白（後ろが - － ー ‐ で始まる空白は飛ばして次を見る）
+//     3 分けない
+//     4 T の中のほかの空白（町・番地が上限内で最も長くなるもの）
+//     5 番地の数字の並び（数字・ハイフン類の連続）が終わった直後（同上）
+//     6 町・番地が上限内で最も長くなる位置（数字・ハイフン類の間では切らない）
+//   住所欄の空白は除き、建物名欄の空白は連続を半角空白1つにまとめる（R3）。
+//   戻り値 { ok, method, reason, address, building, whole（元の住所全体）, addrRaw（住所欄に入れた部分の空白を除く前） }。
+//   ok:false でも address・building は埋める（出力前の検査 b2CheckAddressRow で外れ＝B2 に入れない）。
+function b2FitAddress(parts) {
+  const str = v => String(v == null ? '' : v);
+  const bldg = str(parts.bldg);
+  const head0 = str(parts.pref) + str(parts.city) + str(parts.addr);
+  const hasB = /[^ 　]/.test(bldg);
+  const whole = (head0 && hasB) ? head0 + ' ' + bldg : head0 + bldg;
+  const b1 = (head0 && hasB) ? head0.length + 1 : -1;   // whole の中で bldg が始まる位置
+  const pc = b2SplitPrefCity(whole);
+  if (!pc.ok) {
+    return { ok: false, method: 0, reason: pc.reason, whole, addrRaw: head0,
+             address: b2StripSpaces(head0), building: b2CollapseSpaces(bldg) };
+  }
+  // whole の中で「都道府県＋市区郡町村」が終わる位置（空白でない字を数える）
+  let need = pc.pref.length + pc.city.length, i = 0;
+  while (need > 0 && i < whole.length) { if (!/[ 　]/.test(whole[i])) need--; i++; }
+  while (i < whole.length && /[ 　]/.test(whole[i])) i++;
+  const lead = whole.slice(0, i), T = whole.slice(i);
+  const u = fullwidthCharLength;
+  const tryAt = p => {
+    if (p <= 0 || p > T.length) return null;
+    const town = b2StripSpaces(T.slice(0, p)), b = b2CollapseSpaces(T.slice(p));
+    if (!town || u(town) > B2_TOWN_LIMIT_U || u(b) > B2_BLDG_LIMIT_U) return null;
+    return { p, town, b };
+  };
+  const longest = ps => {
+    let best = null;
+    for (const p of ps) { const r = tryAt(p); if (r && (!best || u(r.town) > u(best.town))) best = r; }
+    return best;
+  };
+  const isSp = c => c === ' ' || c === '　';
+  const cands = [
+    () => (b1 > i ? tryAt(b1 - i) : null),
+    () => {
+      const re = /[0-9０-９番号地]([ 　]+)(?=[^ 　])/g;
+      let m;
+      while ((m = re.exec(T))) {
+        const sp = m.index + 1;
+        if (/[\-－ー‐]/.test(T[sp + m[1].length])) continue;
+        return tryAt(sp);
+      }
+      return null;
+    },
+    () => tryAt(T.length),
+    () => {
+      const ps = [];
+      for (let k = 1; k < T.length; k++) if (isSp(T[k]) && !isSp(T[k - 1])) ps.push(k);
+      return longest(ps);
+    },
+    () => {
+      const ps = [];
+      for (let k = 0; k < T.length;) {
+        if (!B2_DIGIT_HYPHEN_RE.test(T[k])) { k++; continue; }
+        let j = k, dig = false;
+        while (j < T.length && B2_DIGIT_HYPHEN_RE.test(T[j])) { if (/[0-9０-９]/.test(T[j])) dig = true; j++; }
+        if (dig) ps.push(j);
+        k = j;
+      }
+      return longest(ps);
+    },
+    () => {
+      const ps = [];
+      for (let k = 1; k < T.length; k++) {
+        const c = T.charCodeAt(k);
+        if (c >= 0xDC00 && c <= 0xDFFF) continue;   // サロゲートペアの途中
+        if (B2_DIGIT_HYPHEN_RE.test(T[k - 1]) && B2_DIGIT_HYPHEN_RE.test(T[k])) continue;
+        ps.push(k);
+      }
+      return longest(ps);
+    },
+  ];
+  for (let k = 0; k < cands.length; k++) {
+    const r = cands[k]();
+    if (r) return { ok: true, method: k + 1, reason: '', whole, addrRaw: lead + T.slice(0, r.p),
+                    address: pc.pref + pc.city + r.town, building: r.b };
+  }
+  return { ok: false, method: 0, reason: 'over', whole, addrRaw: whole,
+           address: pc.pref + pc.city + b2StripSpaces(T), building: '' };
+}
+// R4：B2用CSVの1行（お届け先 [11][12]・ご依頼主 [22][23]）の出力前の検査。全モール共通。
+//   src = { to: { whole, addrRaw }, from: { whole, addrRaw } }（b2FitAddress の戻り値。店舗設定のご依頼主は無し＝欄の値で見る）
+//   1 住所欄＋建物名欄 から空白を除いたものが、元の住所全体から空白を除いたものと一致
+//   2 R1 で切り分けて 都道府県 ≤8u・市区郡町村 ≤24u・町・番地 ≤32u・建物名 ≤32u
+//   3 住所欄の空白を除くと数字同士がくっつく空白（数字␣数字）が無い
+// 戻り値は外れの配列 [{ party, field, msg }]（空＝合格）
+function b2CheckAddressRow(row, src) {
+  const out = [];
+  const u = fullwidthCharLength;
+  const over = (n, L) => `${n}u（上限${L}u）で ${n - L}u 超え`;
+  const parties = [['お届け先', 11, 12, src && src.to], ['ご依頼主', 22, 23, src && src.from]];
+  for (const [party, ia, ib, s] of parties) {
+    const a = String(row[ia] == null ? '' : row[ia]), b = String(row[ib] == null ? '' : row[ib]);
+    const whole = s ? s.whole : a + b, addrRaw = s ? s.addrRaw : a;
+    const bad = (field, msg) => out.push({ party, field, msg });
+    if (b2StripSpaces(a + b) !== b2StripSpaces(whole)) bad('住所欄・建物名欄', '元の住所と文字が合わない（欠け）');
+    const pc = b2SplitPrefCity(a);
+    if (!pc.ok) {
+      bad(pc.reason === 'pref' ? '都道府県' : '市区郡町村',
+          pc.reason === 'list' ? '市区町村の一覧を読み込めないため判定できない' : '判定できない');
+    } else {
+      if (u(pc.pref) > B2_PREF_LIMIT_U) bad('都道府県', over(u(pc.pref), B2_PREF_LIMIT_U));
+      if (u(pc.city) > B2_CITY_LIMIT_U) bad('市区郡町村', over(u(pc.city), B2_CITY_LIMIT_U));
+      if (u(pc.rest) > B2_TOWN_LIMIT_U) bad('町・番地', over(u(pc.rest), B2_TOWN_LIMIT_U));
+    }
+    if (u(b) > B2_BLDG_LIMIT_U) bad('建物名', over(u(b), B2_BLDG_LIMIT_U));
+    if (/[0-9０-９][ 　]+[0-9０-９]/.test(addrRaw)) bad('住所欄', '空白を除くと数字同士がくっつく（数字␣数字）');
+  }
+  return out;
+}
+
+// 住所1・住所2 が別の欄のモール（Yahoo!ショッピング・メルカリShops）の住所 → b2FitAddress に渡す形。
+// 住所2 をモールの建物の欄とみなす（候補 1 の境目）。ただし数字で始まる住所2（番地を住所2に書いた注文）は
+// 建物の欄とみなさず、住所1と空白1つでつないで住所にする（Amazon の buildAddress と同じ見方）。
+// addr1・addr2 が無い（古い形の）ときは rest を1本で使う
+function b2PartsOf12(r) {
+  r = r || {};
+  if (r.addr1 == null && r.addr2 == null) return { pref: r.pref, city: r.city, addr: r.rest, bldg: '' };
+  const a2 = String(r.addr2 == null ? '' : r.addr2);
+  if (/^[ 　]*[0-9０-９]/.test(a2)) return { pref: r.pref, city: r.city, addr: joinAddress12(r.addr1, a2), bldg: '' };
+  return { pref: r.pref, city: r.city, addr: r.addr1, bldg: a2 };
+}
+// B2用CSV の行（お客様管理番号）→ その行の住所欄・建物名欄の元（b2FitAddress の戻り値）。
+// 出力前の検査（b2GateRows）が「元の住所全体」と「住所欄に入れた部分（空白を除く前）」を見るために持つ。
+// 変換ボタンのたびに s1ConvertRun が空にする。店舗設定のご依頼主は持たない（欄の値そのもので検査する）
+const b2AddrSrc = new Map();
+function b2NoteAddrSrc(orderId, to, from) { b2AddrSrc.set(orderId, { to: to || null, from: from || null }); }
+// 出力前の検査で B2用CSV から外した注文（お客様管理番号）。梱包・発送明細の見出しに「B2 手入力」の印を付ける
+let b2ManualOrders = new Set();
+// R4 を B2用CSV の全行にかける。外れた注文は行ごと（複数個口なら全行）外す。
+// 戻り値 { rows: 合格した行, failed: [{ orderId, party, field, msg }], manual: Set<お客様管理番号> }
+function b2GateRows(rows) {
+  const failed = [], manual = new Set(), seen = new Set();
+  for (const row of rows) {
+    const id = row[0];
+    if (seen.has(id)) continue;
+    seen.add(id);
+    const bad = b2CheckAddressRow(row, b2AddrSrc.get(id));
+    if (bad.length) { manual.add(id); for (const b of bad) failed.push({ orderId: id, ...b }); }
+  }
+  return { rows: rows.filter(r => !manual.has(r[0])), failed, manual };
+}
+// 出力前の検査で外した注文の赤の警告（他の赤の警告と同じ型）。住所の中身は出さない
+function renderB2ManualSection(container, failed) {
+  renderRakutenWarningSection(container, 's1-b2-manual',
+    `⛔ 住所が B2 の上限に収まらない・判定できないため B2用CSV に入れなかった注文（B2 で手入力してください。ピッキングリスト・梱包・発送明細には載せています）: ${new Set(failed.map(x => x.orderId)).size}件`,
+    ['注文番号', '対象', '欄', '内容', '対処'],
+    failed.map(x => [x.orderId, x.party, x.field, x.msg, 'B2 で手入力してください']), 'error');
 }
 
 // 住所を番地の直後の空白で「住所」と「建物名」に分ける（純関数。addrsplit・Kaz 決定 2026-11-20）。
@@ -6904,11 +7143,10 @@ function splitByFullwidthLength(str, limit) {
 //   続く空白（半角・全角。連続は1つとみなす）のうち最初のものを区切りにする。
 //   区切りあり → 区切りより前（空白を消す）を住所の後半、後ろ（空白を消す）を建物名。split:true
 //   区切りなし → すべての空白を消して住所、建物名は空（改修前と同じ）。split:false
-// 都道府県・市区町村の空白は消す。楽天・ヤフショ・メルカリ・Qoo10 の B2（buildRakutenAddress）と
-// クリックポスト（buildClickpostRow の Amazon 以外）が使う。Amazon（住所1〜3 が別の列）は使わない。
+// 都道府県・市区町村の空白は消す。クリックポスト（buildClickpostRow の Amazon 以外）が使う
+// （B2 は addrfit で b2FitAddress に替えた。候補 2 がこの関数と同じ分け目）。Amazon（住所1〜3 が別の列）は使わない。
 const ADDR_SPLIT_RE = /[0-9０-９番号地][ 　]+/;
-// 分けたことを知らせる文言（B2 は警告一覧の見出し、クリックポストは注文ごとの黄の警告）
-const ADDR_SPLIT_AT_SPACE_TEXT = '住所を番地の後ろの空白で住所欄と建物名欄に分けました';
+// 分けたことを知らせる文言（クリックポストの注文ごとの黄の警告）
 const ADDR_SPLIT_AT_SPACE_TEXT_CP = '住所を番地の後ろの空白で住所と建物名に分けました（建物名は住所の次の行から入れています）';
 // 住所1・住所2 が別の列のモール（Yahoo!ショッピング・メルカリShops）で「それ以降」をつなぐ。
 // 両方とも空でなければ半角空白を1つはさむ（splitAddressAtSpace が番地の後ろの空白で住所欄と建物名欄に分けられるように。
@@ -6927,43 +7165,6 @@ function splitAddressAtSpace(pref, city, rest) {
   return { address: built.fullAddress, building: strip(tail), split: !!m };
 }
 
-// 楽天のお届け先住所 → B2の住所欄・建物名欄。
-// buildAddress は Amazon側（parseAmazonTsvGroups）と共用のため一切変更せず、
-// その前後で楽天固有の処理を挟む形にしている。
-//   前処理: 全角・半角スペースを除去。B2の住所欄はスペースが含まれると意図しない箇所で
-//           データが分断・消失する既知の不具合があるため（ヤマト公式FAQ・2026-08-07調査）。
-//           ただし番地の直後の空白だけは消さずに、そこで住所欄と建物名欄に分ける（splitAddressAtSpace。
-//           addrsplit・Kaz 決定 2026-11-20）。分けた注文は addrSplitAtSpace を積む。
-//   後処理: 全角32文字を超えたら、建物名欄が空の場合に限り超過分をそちらへ振り分ける。
-// 出力は止めない。対応できなかったものは issues に積み、呼び出し側が警告一覧に出す。
-// ※裏付けとなる実データが未入手のため想定に基づく事前対策。運用でエラーが観測された
-//   時点で再調整する前提（Kaz確認済み）。過検知で出荷を止めないことを優先する。
-function buildRakutenAddress(pref, city, rest) {
-  const sp = splitAddressAtSpace(pref, city, rest);
-  let addr = sp.address, bldg = sp.building;
-  const issues = [];
-  // 番地の後ろの空白で住所欄と建物名欄に分けた（目視確認に回す。出力は止めない）
-  if (sp.split) issues.push('addrSplitAtSpace');
-  if (fullwidthCharLength(addr) > B2_ADDRESS_LIMIT) {
-    if (bldg) {
-      // 建物名欄が既に埋まっている＝振り分け先が無い（番地の後ろの空白で建物名を分けた注文で起きる）
-      issues.push('addrOverflowBuildingUsed');
-    } else {
-      // 上限ちょうどの位置で機械的に切るため、番地や建物名の途中で割れて印字内容が
-      // 変わりうる（実データで '…17-13-18' が '…17-1' + '3-18…' に割れる例を確認）。
-      // 出力は止めないが、振り分けが起きたこと自体を必ず知らせて目視確認に回す。
-      const [head, tail] = splitByFullwidthLength(addr, B2_ADDRESS_LIMIT);
-      addr = head; bldg = tail;
-      issues.push('addrSplit');
-      // 分割後は必ず上限以内に収まるため通常ここは通らない。分割方法を変えたときに
-      // 超過を見逃さないための保険。
-      if (fullwidthCharLength(addr) > B2_ADDRESS_LIMIT) issues.push('addrOverflowUnresolved');
-    }
-  }
-  if (fullwidthCharLength(bldg) > B2_BUILDING_LIMIT) issues.push('buildingOverflow');
-  return { fullAddress: addr, building: bldg, issues };
-}
-
 // B2のご依頼主に何を使うか（注文単位）。判定は送付先一致フラグのみで、氏名比較はしない
 // （同一人物・別住所の注文も注文者にする。Kaz決定 2026-10-11）。
 //   'orderer'  … フラグ '0' かつ注文者の姓名あり → 注文者
@@ -6977,17 +7178,15 @@ function rakutenSenderSource(order) {
 
 // 楽天市場注文（buildRakutenPickingData の orders 要素）→ B2クラウド1行（95列）。
 // 各列は Amazon側 buildB2Row と同じ位置に同じ種類の値を入れる（データ源の列名のみ異なる）。
-// addressIssues を渡すと、住所欄・建物名欄の上限超過を注文単位で積む（表示用・任意）。
-// ご依頼主住所の超過は party:'ご依頼主' 付きで積む（お届け先の分は party なし）。
+// 住所欄・建物名欄は b2FitAddress で B2 の上限に収める（addrfit）。4つ目の引数（addressIssues）は使わない
+// （上限の警告は出力前の検査 b2CheckAddressRow に1つにした。呼び出しの形は変えない）。
 // ご依頼主（row[19][21][22][23][24]）は rakutenSenderSource が 'orderer' の注文だけ注文者、
 // それ以外は店舗設定。row[39]（請求先顧客コード）・row[41]（運賃管理番号）は常に店舗設定。
 function buildRakutenB2Row(order, shipDate, store, addressIssues) {
   const row = new Array(95).fill('');
   const r = order.recipient || {};
-  const { fullAddress, building, issues } = buildRakutenAddress(r.pref || '', r.city || '', r.rest || '');
-  if (addressIssues && issues.length) {
-    addressIssues.push({ orderNumber: order.orderNumber, issues, fullAddress, building });
-  }
+  const fTo = b2FitAddress({ pref: r.pref, city: r.city, addr: r.rest, bldg: '' });
+  let fFrom = null;
   row[0]  = order.orderNumber;
   row[1]  = rakutenInvoiceCode(order);
   row[4]  = shipDate;
@@ -6999,19 +7198,15 @@ function buildRakutenB2Row(order, shipDate, store, addressIssues) {
   row[6]  = (order.desiredDeliveryTime === '0') ? '' : (order.desiredDeliveryTime || '');
   row[8]  = normalizeJapanesePhone([r.phone1, r.phone2, r.phone3].filter(Boolean).join(''));
   row[10] = [r.postal1, r.postal2].filter(Boolean).join('-');
-  row[11] = fullAddress; row[12] = building;
+  row[11] = fTo.address; row[12] = fTo.building;
   row[15] = [r.lastName, r.firstName].filter(Boolean).join(' ');
   if (rakutenSenderSource(order) === 'orderer') {
     // 注文者≠送付先（送付先一致フラグ '0'）：ご依頼主を注文者にする。書式はお届け先側と同じ。
     const o = order.orderer;
-    const ob = buildRakutenAddress(o.pref || '', o.city || '', o.rest || '');
-    if (addressIssues && ob.issues.length) {
-      addressIssues.push({ orderNumber: order.orderNumber, issues: ob.issues,
-                           fullAddress: ob.fullAddress, building: ob.building, party: 'ご依頼主' });
-    }
+    fFrom = b2FitAddress({ pref: o.pref, city: o.city, addr: o.rest, bldg: '' });
     row[19] = normalizeJapanesePhone([o.phone1, o.phone2, o.phone3].filter(Boolean).join(''));
     row[21] = [o.postal1, o.postal2].filter(Boolean).join('-');
-    row[22] = ob.fullAddress; row[23] = ob.building;
+    row[22] = fFrom.address; row[23] = fFrom.building;
     row[24] = [o.lastName, o.firstName].filter(Boolean).join(' ');
   } else {
     row[19] = store.tel; row[21] = store.postal;
@@ -7021,6 +7216,7 @@ function buildRakutenB2Row(order, shipDate, store, addressIssues) {
   row[32] = buildRakutenKiji(order);
   row[38] = String(order.lines.reduce((a, l) => a + (l.quantity || 0), 0));
   row[39] = store.customerCode; row[41] = store.fareCode;
+  b2NoteAddrSrc(row[0], fTo, fFrom);
   return row;
 }
 
@@ -7849,11 +8045,14 @@ function parseYahooFiles(orderText, itemText) {
       desiredDeliveryRaw, desiredDeliveryDate: desiredDeliveryDate || null, desiredTimeRaw,
       okihai: (isEazy && eazyName && eazyName !== YAHOO_EAZY_FACE_TO_FACE) ? eazyName : '',
       // お届け先・注文者は楽天の recipient と同じ形（クリックポスト用CSV は楽天と同じ道を通る）。
-      // 郵便番号は postal1 に全体を入れ postal2 は空、住所の「それ以降」は ShipAddress1＋ShipAddress2（joinAddress12 で間に空白）
+      // 郵便番号は postal1 に全体を入れ postal2 は空、住所の「それ以降」は ShipAddress1＋ShipAddress2（joinAddress12 で間に空白）。
+      // addr1・addr2 は B2 の住所欄・建物名欄の元（addrfit。ShipAddress2 をモールの建物の欄とみなす）
       recipient: { lastName: g('ShipLastName'), firstName: g('ShipFirstName'), phone: g('ShipPhoneNumber'),
-        postal1: g('ShipZipCode'), postal2: '', pref: g('ShipPrefecture'), city: g('ShipCity'), rest: joinAddress12(g('ShipAddress1'), g('ShipAddress2')) },
+        postal1: g('ShipZipCode'), postal2: '', pref: g('ShipPrefecture'), city: g('ShipCity'), rest: joinAddress12(g('ShipAddress1'), g('ShipAddress2')),
+        addr1: g('ShipAddress1'), addr2: g('ShipAddress2') },
       orderer: { lastName: g('BillLastName'), firstName: g('BillFirstName'), phone: g('BillPhoneNumber'),
-        postal1: g('BillZipCode'), postal2: '', pref: g('BillPrefecture'), city: g('BillCity'), rest: joinAddress12(g('BillAddress1'), g('BillAddress2')) },
+        postal1: g('BillZipCode'), postal2: '', pref: g('BillPrefecture'), city: g('BillCity'), rest: joinAddress12(g('BillAddress1'), g('BillAddress2')),
+        addr1: g('BillAddress1'), addr2: g('BillAddress2') },
       lines: items.map(({ lineId, ...l }) => l),
     };
     if (!yahooIsMethodOption(initialMethod)) unknownMethods.push({ orderNumber, method: shipMethodRaw || '（空）', productName });
@@ -7944,11 +8143,12 @@ function buildYahooKiji(order, issues) {
 }
 // ヤフショの注文 → B2クラウド1行（95列）。各列は楽天の buildRakutenB2Row と同じ位置に同じ種類の値を入れる。
 // 置き配は B2 の置き配の欄には渡さない（記事欄の印だけ）
+// 住所欄・建物名欄は b2FitAddress で B2 の上限に収める（addrfit）。addressIssues は使わない（呼び出しの形は変えない）
 function buildYahooB2Row(order, shipDate, store, addressIssues, kijiIssues) {
   const row = new Array(95).fill('');
   const r = order.recipient || {};
-  const { fullAddress, building, issues } = buildRakutenAddress(r.pref || '', r.city || '', r.rest || '');
-  if (addressIssues && issues.length) addressIssues.push({ orderNumber: order.orderNumber, issues, fullAddress, building });
+  const fTo = b2FitAddress(b2PartsOf12(r));
+  let fFrom = null;
   row[0]  = order.orderNumber;   // お客様管理番号＝Id（例 mampukudo-10000001）
   row[1]  = yahooInvoiceCode(order);
   row[4]  = shipDate;
@@ -7956,17 +8156,14 @@ function buildYahooB2Row(order, shipDate, store, addressIssues, kijiIssues) {
   row[6]  = yahooB2TimeCode(order.desiredTimeRaw) || '';   // 解釈できない値は空（指定なし。画面で警告）
   row[8]  = normalizeJapanesePhone(r.phone);
   row[10] = yahooFormatZip(r.postal1);
-  row[11] = fullAddress; row[12] = building;
+  row[11] = fTo.address; row[12] = fTo.building;
   row[15] = [r.lastName, r.firstName].filter(Boolean).join(' ');
   if (yahooSenderSource(order) === 'orderer') {
     const o = order.orderer;
-    const ob = buildRakutenAddress(o.pref || '', o.city || '', o.rest || '');
-    if (addressIssues && ob.issues.length) {
-      addressIssues.push({ orderNumber: order.orderNumber, issues: ob.issues, fullAddress: ob.fullAddress, building: ob.building, party: 'ご依頼主' });
-    }
+    fFrom = b2FitAddress(b2PartsOf12(o));
     row[19] = normalizeJapanesePhone(o.phone);
     row[21] = yahooFormatZip(o.postal1);
-    row[22] = ob.fullAddress; row[23] = ob.building;
+    row[22] = fFrom.address; row[23] = fFrom.building;
     row[24] = [o.lastName, o.firstName].filter(Boolean).join(' ');
   } else {
     row[19] = store.tel; row[21] = store.postal;
@@ -7976,6 +8173,7 @@ function buildYahooB2Row(order, shipDate, store, addressIssues, kijiIssues) {
   row[32] = buildYahooKiji(order, kijiIssues);
   row[38] = String(order.lines.reduce((a, l) => a + (l.quantity || 0), 0));
   row[39] = store.customerCode; row[41] = store.fareCode;
+  b2NoteAddrSrc(row[0], fTo, fFrom);
   return row;
 }
 
@@ -8554,7 +8752,9 @@ function parseMercariFile(text) {
       // 氏名は姓名が1つの欄（shipping_name）のため lastName に全体を入れ firstName は空。郵便番号は postal1 に全体
       recipient: { lastName: p0('shipping_name'), firstName: '', phone: p0('shipping_phone_number'),
         postal1: p0('shipping_postal_code'), postal2: '', pref: p0('shipping_state'), city: p0('shipping_city'),
-        rest: joinAddress12(p0('shipping_address_1'), p0('shipping_address_2')) },
+        rest: joinAddress12(p0('shipping_address_1'), p0('shipping_address_2')),
+        // B2 の住所欄・建物名欄の元（addrfit。shipping_address_2 をモールの建物の欄とみなす）
+        addr1: p0('shipping_address_1'), addr2: p0('shipping_address_2') },
       billing,
       multiDest: isMultiDest, billingDiff: isBillingDiff,
       lines: ps.map(p => {
@@ -8621,11 +8821,11 @@ function getMercariSenderStore() {
 // メルカリの注文 → B2クラウド1行（95列）。各列は楽天の buildRakutenB2Row・ヤフショの buildYahooB2Row と同じ位置に同じ種類の値を入れる。
 // ご依頼主（row[19][21][22][23][24]）・請求先顧客コード・運賃管理番号は常に store（依頼主設定のメルカリ欄）。
 // 請求先（billing_*）はお届け先の写しで注文者を表さないため、ご依頼主には使わない（設計 §4-5・Kaz 指示 2026-11-11）
+// 住所欄・建物名欄は b2FitAddress で B2 の上限に収める（addrfit）。addressIssues は使わない（呼び出しの形は変えない）
 function buildMercariB2Row(order, shipDate, store, addressIssues) {
   const row = new Array(95).fill('');
   const r = order.recipient || {};
-  const { fullAddress, building, issues } = buildRakutenAddress(r.pref || '', r.city || '', r.rest || '');
-  if (addressIssues && issues.length) addressIssues.push({ orderNumber: order.orderNumber, issues, fullAddress, building });
+  const fTo = b2FitAddress(b2PartsOf12(r));
   row[0]  = order.orderNumber;   // お客様管理番号＝order_id（例 order_xxxxxxxxxxxxxxxxxxxxxx）
   row[1]  = mercariInvoiceCode(order);
   row[4]  = shipDate;
@@ -8633,7 +8833,7 @@ function buildMercariB2Row(order, shipDate, store, addressIssues) {
   row[6]  = mercariB2TimeCode(order.desiredTimeRaw) || '';   // 解釈できない値は空（指定なし。画面で警告）
   row[8]  = normalizeJapanesePhone(r.phone);
   row[10] = yahooFormatZip(r.postal1);   // 数字7桁なら 123-4567 の形にそろえる（ヤフショと同じ）
-  row[11] = fullAddress; row[12] = building;
+  row[11] = fTo.address; row[12] = fTo.building;
   row[15] = String(r.lastName || '').trim();   // shipping_name（姓名が1つの欄）をそのまま
   row[19] = store.tel; row[21] = store.postal;
   row[22] = store.address; row[23] = store.building; row[24] = store.name;
@@ -8641,6 +8841,7 @@ function buildMercariB2Row(order, shipDate, store, addressIssues) {
   row[32] = buildRakutenKiji(order, 'M-000');
   row[38] = String(order.lines.reduce((a, l) => a + (l.quantity || 0), 0));
   row[39] = store.customerCode; row[41] = store.fareCode;
+  b2NoteAddrSrc(row[0], fTo, null);
   return row;
 }
 
@@ -9325,18 +9526,18 @@ function getQoo10SenderStore() {
 // Qoo10 のカート → B2クラウド1行（95列）。各列はメルカリの buildMercariB2Row と同じ位置に同じ種類の値を入れる。
 // ご依頼主（row[19][21][22][23][24]）・請求先顧客コード・運賃管理番号は常に store（依頼主設定の Qoo10 欄）。
 // 配達時間帯の列は配送管理ファイルに無いため空（指定なし）
+// 住所欄・建物名欄は b2FitAddress で B2 の上限に収める（addrfit）。addressIssues は使わない（呼び出しの形は変えない）
 function buildQoo10B2Row(order, shipDate, store, addressIssues) {
   const row = new Array(95).fill('');
   const r = order.recipient || {};
-  const { fullAddress, building, issues } = buildRakutenAddress(r.pref || '', '', r.rest || '');
-  if (addressIssues && issues.length) addressIssues.push({ orderNumber: order.orderNumber, issues, fullAddress, building });
+  const fTo = b2FitAddress({ pref: r.pref, city: '', addr: r.rest, bldg: '' });
   row[0]  = order.orderNumber;   // お客様管理番号＝qoo10-{カート番号}
   row[1]  = qoo10InvoiceCode(order);
   row[4]  = shipDate;
   row[5]  = order.desiredDeliveryDate ? (formatB2DeliveryDate(order.desiredDeliveryDate) || '') : '';
   row[8]  = normalizeJapanesePhone(r.phone);
   row[10] = yahooFormatZip(r.postal1);   // 数字7桁なら 123-4567 の形にそろえる（ヤフショ・メルカリと同じ）
-  row[11] = fullAddress; row[12] = building;
+  row[11] = fTo.address; row[12] = fTo.building;
   row[15] = String(r.lastName || '').trim();   // 受取人名（1つの欄）をそのまま
   row[19] = store.tel; row[21] = store.postal;
   row[22] = store.address; row[23] = store.building; row[24] = store.name;
@@ -9344,6 +9545,7 @@ function buildQoo10B2Row(order, shipDate, store, addressIssues) {
   row[32] = buildRakutenKiji(order, 'Q-000');
   row[38] = String(order.lines.reduce((a, l) => a + (l.quantity || 0), 0));
   row[39] = store.customerCode; row[41] = store.fareCode;
+  b2NoteAddrSrc(row[0], fTo, null);
   return row;
 }
 
