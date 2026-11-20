@@ -2985,7 +2985,7 @@ function cpContentText(gNums, name) {
 // 戻り値 { ok:true, cells, warnings } または { ok:false, reason }。warnings は黄の警告（出力はする）。
 function buildClickpostRow(cpRec) {
   const src = cpRec.src || {};
-  let postalRaw, name, fullAddress, building, content;
+  let postalRaw, name, fullAddress, building, content, splitAtSpace = false;
   if (cpRec.mall === 'amazon') {
     const cp = src.cp || {};
     postalRaw = cp.postal;
@@ -2997,10 +2997,13 @@ function buildClickpostRow(cpRec) {
     const r = src.recipient || {};
     postalRaw = String(r.postal1 || '') + String(r.postal2 || '');
     name = r.firstName ? `${r.lastName || ''}　${r.firstName}` : String(r.lastName || '');
-    // buildRakutenAddress と同じく全角・半角スペースを除いてから buildAddress を通す
-    const a = buildAddress(cpStripSpaces(r.pref), cpStripSpaces(r.city), cpStripSpaces(r.rest), '', '');
-    fullAddress = a.fullAddress;
+    // buildRakutenAddress と同じ規則（splitAddressAtSpace）：空白は消し、番地の直後の空白だけで住所と建物名に分ける。
+    // 建物名は下の「建物名があれば新しい行から」で住所の次の行に入る。照合キー（clickpostKey）は住所1〜4行目を
+    // 連結して空白を消すため、分けても分けなくても同じ値になる（過去の記録との照合を壊さない）
+    const a = splitAddressAtSpace(r.pref, r.city, r.rest);
+    fullAddress = a.address;
     building = a.building;
+    splitAtSpace = a.split;
     content = String((src.lines && src.lines[0] && src.lines[0].name) || '');
   }
   const warnings = [];
@@ -3013,6 +3016,7 @@ function buildClickpostRow(cpRec) {
   if (!lines.length) return { ok: false, reason: '住所が空' };
   if (lines.length > CLICKPOST_ADDRESS_LINES) return { ok: false, reason: '住所が4行に収まらない' };
   while (lines.length < CLICKPOST_ADDRESS_LINES) lines.push('');
+  if (splitAtSpace) warnings.push(ADDR_SPLIT_AT_SPACE_TEXT_CP);
   if (cpCharLength(name) > CLICKPOST_LINE_CHARS) {
     warnings.push(`氏名が${CLICKPOST_LINE_CHARS}字を超えたため切り詰めました（元：${name}）`);
     name = cpSlice(name, CLICKPOST_LINE_CHARS);
@@ -4773,6 +4777,9 @@ async function s1ConvertRun(auth) {
       renderRakutenWarningSection(s1Results, 's1-rk-addr-split',
         `📍 住所が全角${B2_ADDRESS_LIMIT}文字を超えたため建物名欄へ自動振り分けしました（番地の途中で割れる場合があります。印字内容を確認してください）: ${hasIssue('addrSplit').length}件`,
         issueCols, hasIssue('addrSplit').map(issueRow), 'warn');
+      renderRakutenWarningSection(s1Results, 's1-rk-addr-space',
+        `📍 ${ADDR_SPLIT_AT_SPACE_TEXT}（それ以外の空白は消しています。印字内容を確認してください）: ${hasIssue('addrSplitAtSpace').length}件`,
+        issueCols, hasIssue('addrSplitAtSpace').map(issueRow), 'warn');
       // ご依頼主を注文者にした注文（送付先一致フラグ '0'）。B2へは出力済み・確認用の一覧。
       const joinName = p => [p.lastName, p.firstName].filter(Boolean).join(' ');
       const senderOrderer = usable.filter(o => rakutenSenderSource(o) === 'orderer');
@@ -4869,6 +4876,9 @@ async function s1ConvertRun(auth) {
       renderRakutenWarningSection(s1Results, 's1-yh-addr-split',
         `📍 Yahoo!ショッピング：住所が全角${B2_ADDRESS_LIMIT}文字を超えたため建物名欄へ自動振り分けしました（番地の途中で割れる場合があります。印字内容を確認してください）: ${hasIssue('addrSplit').length}件`,
         issueCols, hasIssue('addrSplit').map(issueRow), 'warn');
+      renderRakutenWarningSection(s1Results, 's1-yh-addr-space',
+        `📍 Yahoo!ショッピング：${ADDR_SPLIT_AT_SPACE_TEXT}（それ以外の空白は消しています。印字内容を確認してください）: ${hasIssue('addrSplitAtSpace').length}件`,
+        issueCols, hasIssue('addrSplitAtSpace').map(issueRow), 'warn');
       renderRakutenWarningSection(s1Results, 's1-yh-kiji',
         `⚠ Yahoo!ショッピング：B2の記事欄（全角22文字）に置き配の印が収まらないため、印を付けずに出力しました（梱包・発送明細には印があります）: ${kijiIssues.length}件`,
         ['注文番号', '記事欄', '置き配'], kijiIssues.map(x => [x.orderNumber, x.kiji, x.okihai]), 'warn');
@@ -4968,6 +4978,9 @@ async function s1ConvertRun(auth) {
       renderRakutenWarningSection(s1Results, 's1-mc-addr-split',
         `📍 メルカリShops：住所が全角${B2_ADDRESS_LIMIT}文字を超えたため建物名欄へ自動振り分けしました（番地の途中で割れる場合があります。印字内容を確認してください）: ${hasIssue('addrSplit').length}件`,
         issueCols, hasIssue('addrSplit').map(issueRow), 'warn');
+      renderRakutenWarningSection(s1Results, 's1-mc-addr-space',
+        `📍 メルカリShops：${ADDR_SPLIT_AT_SPACE_TEXT}（それ以外の空白は消しています。印字内容を確認してください）: ${hasIssue('addrSplitAtSpace').length}件`,
+        issueCols, hasIssue('addrSplitAtSpace').map(issueRow), 'warn');
       // お届け先と請求先が違う注文：ご依頼主は店舗のまま（請求先には切り替えない）。確認用の一覧
       const billingDiff = usable.filter(o => o.billingDiff);
       renderRakutenWarningSection(s1Results, 's1-mc-billing-diff',
@@ -5060,6 +5073,9 @@ async function s1ConvertRun(auth) {
       renderRakutenWarningSection(s1Results, 's1-qo-addr-split',
         `📍 Qoo10：住所が全角${B2_ADDRESS_LIMIT}文字を超えたため建物名欄へ自動振り分けしました（番地の途中で割れる場合があります。印字内容を確認してください）: ${hasIssue('addrSplit').length}件`,
         issueCols, hasIssue('addrSplit').map(issueRow), 'warn');
+      renderRakutenWarningSection(s1Results, 's1-qo-addr-space',
+        `📍 Qoo10：${ADDR_SPLIT_AT_SPACE_TEXT}（それ以外の空白は消しています。印字内容を確認してください）: ${hasIssue('addrSplitAtSpace').length}件`,
+        issueCols, hasIssue('addrSplitAtSpace').map(issueRow), 'warn');
     } catch(e) {
       item.className = 'result-item error';
       item.textContent = `⚠ Qoo10：${e.message}`;
@@ -6870,23 +6886,48 @@ function splitByFullwidthLength(str, limit) {
   return [str.slice(0, i), str.slice(i)];
 }
 
+// 住所を番地の直後の空白で「住所」と「建物名」に分ける（純関数。addrsplit・Kaz 決定 2026-11-20）。
+// 空白をすべて消すと番地の後ろの建物・階・部屋番号が番地にくっつく（'…5-8 3Ｆ' → '…5-83Ｆ'）ため。
+//   rest の前後の空白を除き、直前の文字が数字（0-9・０-９）か「番」「号」「地」で、後ろに空白でない文字が
+//   続く空白（半角・全角。連続は1つとみなす）のうち最初のものを区切りにする。
+//   区切りあり → 区切りより前（空白を消す）を住所の後半、後ろ（空白を消す）を建物名。split:true
+//   区切りなし → すべての空白を消して住所、建物名は空（改修前と同じ）。split:false
+// 都道府県・市区町村の空白は消す。楽天・ヤフショ・メルカリ・Qoo10 の B2（buildRakutenAddress）と
+// クリックポスト（buildClickpostRow の Amazon 以外）が使う。Amazon（住所1〜3 が別の列）は使わない。
+const ADDR_SPLIT_RE = /[0-9０-９番号地][ 　]+/;
+// 分けたことを知らせる文言（B2 は警告一覧の見出し、クリックポストは注文ごとの黄の警告）
+const ADDR_SPLIT_AT_SPACE_TEXT = '住所を番地の後ろの空白で住所欄と建物名欄に分けました';
+const ADDR_SPLIT_AT_SPACE_TEXT_CP = '住所を番地の後ろの空白で住所と建物名に分けました（建物名は住所の次の行から入れています）';
+function splitAddressAtSpace(pref, city, rest) {
+  const strip = s => String(s == null ? '' : s).replace(/[ 　]/g, '');
+  const r = String(rest == null ? '' : rest).replace(/^[ 　]+|[ 　]+$/g, '');
+  const m = ADDR_SPLIT_RE.exec(r);
+  const head = m ? r.slice(0, m.index + 1) : r;
+  const tail = m ? r.slice(m.index + m[0].length) : '';
+  const built = buildAddress(strip(pref), strip(city), strip(head), '', '');
+  return { address: built.fullAddress, building: strip(tail), split: !!m };
+}
+
 // 楽天のお届け先住所 → B2の住所欄・建物名欄。
 // buildAddress は Amazon側（parseAmazonTsvGroups）と共用のため一切変更せず、
 // その前後で楽天固有の処理を挟む形にしている。
 //   前処理: 全角・半角スペースを除去。B2の住所欄はスペースが含まれると意図しない箇所で
 //           データが分断・消失する既知の不具合があるため（ヤマト公式FAQ・2026-08-07調査）。
+//           ただし番地の直後の空白だけは消さずに、そこで住所欄と建物名欄に分ける（splitAddressAtSpace。
+//           addrsplit・Kaz 決定 2026-11-20）。分けた注文は addrSplitAtSpace を積む。
 //   後処理: 全角32文字を超えたら、建物名欄が空の場合に限り超過分をそちらへ振り分ける。
 // 出力は止めない。対応できなかったものは issues に積み、呼び出し側が警告一覧に出す。
 // ※裏付けとなる実データが未入手のため想定に基づく事前対策。運用でエラーが観測された
 //   時点で再調整する前提（Kaz確認済み）。過検知で出荷を止めないことを優先する。
 function buildRakutenAddress(pref, city, rest) {
-  const strip = s => String(s == null ? '' : s).replace(/[ 　]/g, '');
-  const built = buildAddress(strip(pref), strip(city), strip(rest), '', '');
-  let addr = built.fullAddress, bldg = built.building;
+  const sp = splitAddressAtSpace(pref, city, rest);
+  let addr = sp.address, bldg = sp.building;
   const issues = [];
+  // 番地の後ろの空白で住所欄と建物名欄に分けた（目視確認に回す。出力は止めない）
+  if (sp.split) issues.push('addrSplitAtSpace');
   if (fullwidthCharLength(addr) > B2_ADDRESS_LIMIT) {
     if (bldg) {
-      // 建物名欄が既に埋まっている＝振り分け先が無い（現状の楽天経路では発生しない）
+      // 建物名欄が既に埋まっている＝振り分け先が無い（番地の後ろの空白で建物名を分けた注文で起きる）
       issues.push('addrOverflowBuildingUsed');
     } else {
       // 上限ちょうどの位置で機械的に切るため、番地や建物名の途中で割れて印字内容が
