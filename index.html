@@ -1757,6 +1757,7 @@ function renderCombinedPickingHTML(amazon, rakuten, seq, load, yahoo, mercari, q
   // 「本日出荷しない」の注文は商品別集計に載せないため数えない（multiOrders＝識別子ごとの残った注文数）
   const multiParcels = new Map();
   const multiOrders = new Map();
+  const multiMethods = new Map();   // 識別子 → { mall, set: Set<確定配送方法> }（集約行の配送方法の印）
   {
     const aById = new Map(((amazon && amazon.single) || []).map(o => [o.orderId, o]));
     const rById = new Map(((rakuten && rakuten.orders) || []).map(o => [o.orderNumber, o]));
@@ -1773,6 +1774,12 @@ function renderCombinedPickingHTML(amazon, rakuten, seq, load, yahoo, mercari, q
         : r.mall === 'mercari' ? mercariParcelCount(o) : r.mall === 'qoo10' ? qoo10ParcelCount(o) : rakutenParcelCount(o);
       multiParcels.set(r.multi, (multiParcels.get(r.multi) || 0) + n);
       multiOrders.set(r.multi, (multiOrders.get(r.multi) || 0) + 1);
+      if (o) {
+        const m = r.mall === 'amazon' ? amazonResolvedMethod(o) : r.mall === 'yahoo' ? yahooResolvedMethod(o)
+          : r.mall === 'mercari' ? mercariResolvedMethod(o) : r.mall === 'qoo10' ? qoo10ResolvedMethod(o) : rakutenResolvedMethod(o);
+        if (!multiMethods.has(r.multi)) multiMethods.set(r.multi, { mall: r.mall, set: new Set() });
+        multiMethods.get(r.multi).set.add(m);
+      }
     }
   }
 
@@ -1780,11 +1787,14 @@ function renderCombinedPickingHTML(amazon, rakuten, seq, load, yahoo, mercari, q
   // Amazon・楽天市場で同じ列順・同じ体裁にする（モールで分岐させないこと）。
   // 画像欄に識別子（.multi-id。16pt 太字）、出荷個口数（注文数）にその識別子の注文の個口数の合計（注文数）、
   // 商品名欄に中身（G番号×数量 ＋ … の後に各商品名を短く）。数量は「—」のため
-  // qtyCellCls（黒地反転＝数量不一致の印）は通さない。配送方法・SKU重複バッジも出さない。
+  // qtyCellCls（黒地反転＝数量不一致の印）は通さない。商品名欄の末尾に、その識別子の注文（本日出荷しないを除く）の
+  // 配送方法の印を出す（ネコポスは出さない。Amazon は amazonSkuBadges、他のモールは楽天と同じ順・同じ印）。SKU重複の印は出さない。
+  // badgeFor＝配送方法の集合 → 印。楽天側の RAKUTEN_BADGE_ORDER・rakutenMethodBadge はこれより後で const 定義されるため、
+  // ここでは直接参照せず、各モールの表を組むときに渡す（Amazon の表では楽天側の定数に触れない＝TDZ にならない）。
   const shortName = s => { const t = String(s == null ? '' : s); return t.length > 20 ? t.slice(0, 20) + '…' : t; };
   // 「本日出荷しない」だけの識別子は行ごと出さない（除く注文が無い日は g.count と multiOrders は同じ値）
-  const multiGroupRows = groups => (groups || []).filter(g => multiOrders.has(g.id)).map(g =>
-    `<tr><td class="thumb-cell"><span class="multi-id">${esc(g.id)}</span></td><td class="num">—</td><td class="qty">—</td><td class="cnt">${cntInner(multiParcels.get(g.id) || multiOrders.get(g.id), multiOrders.get(g.id))}</td><td class="name">${esc(g.lines.map(l => `${l.num}×${l.quantity}`).join(' ＋ '))}　${esc(g.lines.map(l => shortName(l.name)).join(' ／ '))}</td></tr>`
+  const multiGroupRows = (groups, badgeFor) => (groups || []).filter(g => multiOrders.has(g.id)).map(g =>
+    `<tr><td class="thumb-cell"><span class="multi-id">${esc(g.id)}</span></td><td class="num">—</td><td class="qty">—</td><td class="cnt">${cntInner(multiParcels.get(g.id) || multiOrders.get(g.id), multiOrders.get(g.id))}</td><td class="name">${esc(g.lines.map(l => `${l.num}×${l.quantity}`).join(' ＋ '))}　${esc(g.lines.map(l => shortName(l.name)).join(' ／ '))}${multiMethods.has(g.id) ? badgeFor(multiMethods.get(g.id).set) : ''}</td></tr>`
   ).join('');
   // 梱包・発送明細の見出しの先頭の行番号（全角括弧で括る。例「（001）」）と、複数商品注文の識別子の札
   const detailNo = (mall, id) => { const r = seqByOrder.get(mall + '\u001e' + id); return r ? `<span class="row-no">（${esc(r.no)}）</span>` : ''; };
@@ -1840,10 +1850,11 @@ function renderCombinedPickingHTML(amazon, rakuten, seq, load, yahoo, mercari, q
     if (!amazonSkuMethods.has(sku)) amazonSkuMethods.set(sku, new Set());
     amazonSkuMethods.get(sku).add(m);
   }
+  const amazonSetBadges = s => [AMAZON_COMPACT, AMAZON_CLICKPOST, AMAZON_TAKKYUBIN, AMAZON_NONE].filter(m => s.has(m)).map(amazonSkuBadge).join('');
   const amazonSkuBadges = sku => {
     const s = amazonSkuMethods.get(sku);
     if (!s) return '';
-    return [AMAZON_COMPACT, AMAZON_CLICKPOST, AMAZON_TAKKYUBIN, AMAZON_NONE].filter(m => s.has(m)).map(amazonSkuBadge).join('');
+    return amazonSetBadges(s);
   };
 
   // ---- 商品別合計（A4縦・1段） ----
@@ -1857,7 +1868,7 @@ function renderCombinedPickingHTML(amazon, rakuten, seq, load, yahoo, mercari, q
       const parcels = amazonSkuParcels.has(t.sku) ? amazonSkuParcels.get(t.sku) : t.orderCount;
       return `<tr><td class="thumb-cell">${thumbInner(t.sku)}</td><td class="num">${esc(t.num)}</td><td class="${qtyCellCls(t.totalQty, parcels)}">${esc(t.totalQty)}</td><td class="cnt">${cntInner(parcels, t.orderCount)}</td><td class="name">${esc(t.name)}${skuTag}${amazonSkuBadges(t.sku)}</td></tr>`;
     }).join('');
-    const multiRow = multiGroupRows(seq.amazonGroups);
+    const multiRow = multiGroupRows(seq.amazonGroups, amazonSetBadges);
     return `
   ${band(mallHead('商品別集計', 'Amazon', amazonBandNames, aPick))}
   <table class="total">
@@ -1875,7 +1886,10 @@ function renderCombinedPickingHTML(amazon, rakuten, seq, load, yahoo, mercari, q
     const info = skuInfo ? ` <span class="skuinfo">${esc(skuInfo)}</span>` : '';
     return `${esc(name)}${info} <span class="sku">(${esc(sku)})</span>`;
   };
-  // 楽天：SKU → その SKU を含む注文の確定配送方法の集合。
+  // 楽天：SKU → その SKU の1品の注文（明細が1行の注文）の確定配送方法の集合。
+  // 商品別集計の行に載るのは1品の注文だけ（rakutenKeyParcels と同じ）。複数商品の注文の配送方法は
+  // 集約行（複-xx）に出す（multiMethods）。複数商品の注文まで集めると、1品の注文がすべてネコポスの行に
+  // 複数商品の注文のクリックポスト等の印が付く（2026-11-20 の不具合）。
   // 確定値は rakutenResolvedMethod（プルダウン選択 rakutenShipChoice を解決したもの）を使う。
   // 印刷HTMLはボタン押下時に組まれるため、ここで最新の選択値が読める。
   // キーは商品別合計のクラスタと同じ複合キー（buildRakutenPickingData の lineKey と同一定義）。
@@ -1884,12 +1898,11 @@ function renderCombinedPickingHTML(amazon, rakuten, seq, load, yahoo, mercari, q
   const rakutenClusterKey = l => (l.sku || '') + '\u001f' + (l.itemMgmtNo || '');
   const rakutenSkuMethods = new Map();   // clusterKey → Set<配送方法>
   for (const o of rPickOrders) {
+    if ((o.lines || []).length !== 1) continue;   // 行に載るのは1品の注文だけ（複数商品の注文は集約行に印を出す）
     const m = rakutenResolvedMethod(o);
-    for (const l of o.lines) {
-      const k = rakutenClusterKey(l);
-      if (!rakutenSkuMethods.has(k)) rakutenSkuMethods.set(k, new Set());
-      rakutenSkuMethods.get(k).add(m);
-    }
+    const k = rakutenClusterKey(o.lines[0]);
+    if (!rakutenSkuMethods.has(k)) rakutenSkuMethods.set(k, new Set());
+    rakutenSkuMethods.get(k).add(m);
   }
   // ネコポス以外のみ印を付ける（楽天注文の大多数がネコポスであり、全行に付けると印が意味を失うため）。
   // 色分けは梱包・発送明細と同じ（コンパクト＝黄緑／宅急便＝深緑／クリックポスト・送り状なし＝赤）。
@@ -1900,10 +1913,12 @@ function renderCombinedPickingHTML(amazon, rakuten, seq, load, yahoo, mercari, q
   const rakutenMethodBadge = m =>
     m === RAKUTEN_NEKOPOS ? NEKOPOS_TAG : m === RAKUTEN_COMPACT ? COMPACT_TAG : m === RAKUTEN_TAKKYUBIN ? TAKKYUBIN_TAG
       : m === RAKUTEN_NONE ? NO_LABEL_BADGE : m === RAKUTEN_SKIP ? SKIP_BADGE : m === RAKUTEN_CLICKPOST ? CLICKPOST_BADGE : `<span class="m-tag">${esc(m)}</span>`;
+  // 配送方法の集合 → 印（楽天・ヤフショ・メルカリ・Qoo10 の行と集約行で共通）
+  const rakutenSetBadges = s => RAKUTEN_BADGE_ORDER.filter(m => s.has(m)).map(rakutenMethodBadge).join('');
   const rakutenShipBadges = (clusterKey) => {
     const s = rakutenSkuMethods.get(clusterKey);
     if (!s) return '';
-    return RAKUTEN_BADGE_ORDER.filter(m => s.has(m)).map(rakutenMethodBadge).join('');
+    return rakutenSetBadges(s);
   };
   // 同一SKU管理番号が別商品に使い回されている行の警告（buildRakutenPickingData の dupWarning）。
   // 同じSKUの行が複数並ぶため、どちらを取るかを倉庫側が現物で判断する必要がある。
@@ -1917,7 +1932,7 @@ function renderCombinedPickingHTML(amazon, rakuten, seq, load, yahoo, mercari, q
     <tbody>${rPickTotal.map(t => {
       const parcels = rakutenKeyParcels.has(t.clusterKey) ? rakutenKeyParcels.get(t.clusterKey) : t.orderCount;
       return `<tr><td class="thumb-cell">${thumbInner(t.sku)}</td><td class="num">${esc(t.num)}</td><td class="${qtyCellCls(t.totalQty, parcels)}">${esc(t.totalQty)}</td><td class="cnt">${cntInner(parcels, t.orderCount)}</td><td class="name">${rakutenNameCell(t.name, t.skuInfo, t.sku)}${t.dupWarning ? RAKUTEN_DUP_BADGE : ''}${rakutenShipBadges(t.clusterKey)}</td></tr>`;
-    }).join('')}${multiGroupRows(seq.rakutenGroups)}</tbody>
+    }).join('')}${multiGroupRows(seq.rakutenGroups, rakutenSetBadges)}</tbody>
   </table>${skipNote(rSkip)}
   ${mallEnd('楽天市場', rPick)}`;
 
@@ -1925,12 +1940,11 @@ function renderCombinedPickingHTML(amazon, rakuten, seq, load, yahoo, mercari, q
   // 配送方法の値は楽天と同じ文字列（YAHOO_* ＝ RAKUTEN_*）のため、印は rakutenMethodBadge をそのまま使う。
   const yahooSkuMethods = new Map();   // clusterKey → Set<配送方法>
   for (const o of yPickOrders) {
+    if ((o.lines || []).length !== 1) continue;   // 行に載るのは1品の注文だけ（複数商品の注文は集約行に印を出す）
     const m = yahooResolvedMethod(o);
-    for (const l of o.lines) {
-      const k = rakutenClusterKey(l);
-      if (!yahooSkuMethods.has(k)) yahooSkuMethods.set(k, new Set());
-      yahooSkuMethods.get(k).add(m);
-    }
+    const k = rakutenClusterKey(o.lines[0]);
+    if (!yahooSkuMethods.has(k)) yahooSkuMethods.set(k, new Set());
+    yahooSkuMethods.get(k).add(m);
   }
   const yahooShipBadges = (clusterKey) => {
     const s = yahooSkuMethods.get(clusterKey);
@@ -1946,7 +1960,7 @@ function renderCombinedPickingHTML(amazon, rakuten, seq, load, yahoo, mercari, q
     <tbody>${yPickTotal.map(t => {
       const parcels = yahooKeyParcels.has(t.clusterKey) ? yahooKeyParcels.get(t.clusterKey) : t.orderCount;
       return `<tr><td class="thumb-cell">${thumbInner(t.sku)}</td><td class="num">${esc(t.num)}</td><td class="${qtyCellCls(t.totalQty, parcels)}">${esc(t.totalQty)}</td><td class="cnt">${cntInner(parcels, t.orderCount)}</td><td class="name">${rakutenNameCell(t.name, t.skuInfo, t.sku)}${t.dupWarning ? RAKUTEN_DUP_BADGE : ''}${yahooShipBadges(t.clusterKey)}</td></tr>`;
-    }).join('')}${multiGroupRows(seq.yahooGroups)}</tbody>
+    }).join('')}${multiGroupRows(seq.yahooGroups, rakutenSetBadges)}</tbody>
   </table>${skipNote(ySkip)}
   ${mallEnd('Yahoo!ショッピング', yPick)}`;
 
@@ -1954,12 +1968,11 @@ function renderCombinedPickingHTML(amazon, rakuten, seq, load, yahoo, mercari, q
   // 配送方法の値は楽天と同じ文字列（MERCARI_* ＝ RAKUTEN_*）のため、印は rakutenMethodBadge をそのまま使う。
   const mercariSkuMethods = new Map();   // clusterKey → Set<配送方法>
   for (const o of mPickOrders) {
+    if ((o.lines || []).length !== 1) continue;   // 行に載るのは1品の注文だけ（複数商品の注文は集約行に印を出す）
     const m = mercariResolvedMethod(o);
-    for (const l of o.lines) {
-      const k = rakutenClusterKey(l);
-      if (!mercariSkuMethods.has(k)) mercariSkuMethods.set(k, new Set());
-      mercariSkuMethods.get(k).add(m);
-    }
+    const k = rakutenClusterKey(o.lines[0]);
+    if (!mercariSkuMethods.has(k)) mercariSkuMethods.set(k, new Set());
+    mercariSkuMethods.get(k).add(m);
   }
   const mercariShipBadges = (clusterKey) => {
     const s = mercariSkuMethods.get(clusterKey);
@@ -1975,7 +1988,7 @@ function renderCombinedPickingHTML(amazon, rakuten, seq, load, yahoo, mercari, q
     <tbody>${mPickTotal.map(t => {
       const parcels = mercariKeyParcels.has(t.clusterKey) ? mercariKeyParcels.get(t.clusterKey) : t.orderCount;
       return `<tr><td class="thumb-cell">${thumbInner(t.sku)}</td><td class="num">${esc(t.num)}</td><td class="${qtyCellCls(t.totalQty, parcels)}">${esc(t.totalQty)}</td><td class="cnt">${cntInner(parcels, t.orderCount)}</td><td class="name">${rakutenNameCell(t.name, t.skuInfo, t.sku)}${t.dupWarning ? RAKUTEN_DUP_BADGE : ''}${mercariShipBadges(t.clusterKey)}</td></tr>`;
-    }).join('')}${multiGroupRows(seq.mercariGroups)}</tbody>
+    }).join('')}${multiGroupRows(seq.mercariGroups, rakutenSetBadges)}</tbody>
   </table>${skipNote(mSkip)}
   ${mallEnd('メルカリShops', mPick)}`;
 
@@ -1983,12 +1996,11 @@ function renderCombinedPickingHTML(amazon, rakuten, seq, load, yahoo, mercari, q
   // 配送方法の値は楽天と同じ文字列（QOO10_* ＝ RAKUTEN_*）のため、印は rakutenMethodBadge をそのまま使う。
   const qoo10SkuMethods = new Map();   // clusterKey → Set<配送方法>
   for (const o of qPickOrders) {
+    if ((o.lines || []).length !== 1) continue;   // 行に載るのは1品の注文だけ（複数商品の注文は集約行に印を出す）
     const m = qoo10ResolvedMethod(o);
-    for (const l of o.lines) {
-      const k = rakutenClusterKey(l);
-      if (!qoo10SkuMethods.has(k)) qoo10SkuMethods.set(k, new Set());
-      qoo10SkuMethods.get(k).add(m);
-    }
+    const k = rakutenClusterKey(o.lines[0]);
+    if (!qoo10SkuMethods.has(k)) qoo10SkuMethods.set(k, new Set());
+    qoo10SkuMethods.get(k).add(m);
   }
   const qoo10ShipBadges = (clusterKey) => {
     const s = qoo10SkuMethods.get(clusterKey);
@@ -2004,7 +2016,7 @@ function renderCombinedPickingHTML(amazon, rakuten, seq, load, yahoo, mercari, q
     <tbody>${qPickTotal.map(t => {
       const parcels = qoo10KeyParcels.has(t.clusterKey) ? qoo10KeyParcels.get(t.clusterKey) : t.orderCount;
       return `<tr><td class="thumb-cell">${thumbInner(t.sku)}</td><td class="num">${esc(t.num)}</td><td class="${qtyCellCls(t.totalQty, parcels)}">${esc(t.totalQty)}</td><td class="cnt">${cntInner(parcels, t.orderCount)}</td><td class="name">${rakutenNameCell(t.name, t.skuInfo, t.sku)}${t.dupWarning ? RAKUTEN_DUP_BADGE : ''}${qoo10ShipBadges(t.clusterKey)}</td></tr>`;
-    }).join('')}${multiGroupRows(seq.qoo10Groups)}</tbody>
+    }).join('')}${multiGroupRows(seq.qoo10Groups, rakutenSetBadges)}</tbody>
   </table>${skipNote(qSkip)}
   ${mallEnd('Qoo10', qPick)}`;
 
