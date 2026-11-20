@@ -6898,6 +6898,13 @@ const ADDR_SPLIT_RE = /[0-9０-９番号地][ 　]+/;
 // 分けたことを知らせる文言（B2 は警告一覧の見出し、クリックポストは注文ごとの黄の警告）
 const ADDR_SPLIT_AT_SPACE_TEXT = '住所を番地の後ろの空白で住所欄と建物名欄に分けました';
 const ADDR_SPLIT_AT_SPACE_TEXT_CP = '住所を番地の後ろの空白で住所と建物名に分けました（建物名は住所の次の行から入れています）';
+// 住所1・住所2 が別の列のモール（Yahoo!ショッピング・メルカリShops）で「それ以降」をつなぐ。
+// 両方とも空でなければ半角空白を1つはさむ（splitAddressAtSpace が番地の後ろの空白で住所欄と建物名欄に分けられるように。
+// 例：'…2-2'＋'101号' が '…2-2101号' とくっつかない）。どちらかが空なら空でないほうだけ（addrsplit2・Kaz 決定 2026-11-20）
+function joinAddress12(a1, a2) {
+  const x = String(a1 == null ? '' : a1), y = String(a2 == null ? '' : a2);
+  return (x && y) ? x + ' ' + y : x + y;
+}
 function splitAddressAtSpace(pref, city, rest) {
   const strip = s => String(s == null ? '' : s).replace(/[ 　]/g, '');
   const r = String(rest == null ? '' : rest).replace(/^[ 　]+|[ 　]+$/g, '');
@@ -7830,11 +7837,11 @@ function parseYahooFiles(orderText, itemText) {
       desiredDeliveryRaw, desiredDeliveryDate: desiredDeliveryDate || null, desiredTimeRaw,
       okihai: (isEazy && eazyName && eazyName !== YAHOO_EAZY_FACE_TO_FACE) ? eazyName : '',
       // お届け先・注文者は楽天の recipient と同じ形（クリックポスト用CSV は楽天と同じ道を通る）。
-      // 郵便番号は postal1 に全体を入れ postal2 は空、住所の「それ以降」は ShipAddress1＋ShipAddress2
+      // 郵便番号は postal1 に全体を入れ postal2 は空、住所の「それ以降」は ShipAddress1＋ShipAddress2（joinAddress12 で間に空白）
       recipient: { lastName: g('ShipLastName'), firstName: g('ShipFirstName'), phone: g('ShipPhoneNumber'),
-        postal1: g('ShipZipCode'), postal2: '', pref: g('ShipPrefecture'), city: g('ShipCity'), rest: g('ShipAddress1') + g('ShipAddress2') },
+        postal1: g('ShipZipCode'), postal2: '', pref: g('ShipPrefecture'), city: g('ShipCity'), rest: joinAddress12(g('ShipAddress1'), g('ShipAddress2')) },
       orderer: { lastName: g('BillLastName'), firstName: g('BillFirstName'), phone: g('BillPhoneNumber'),
-        postal1: g('BillZipCode'), postal2: '', pref: g('BillPrefecture'), city: g('BillCity'), rest: g('BillAddress1') + g('BillAddress2') },
+        postal1: g('BillZipCode'), postal2: '', pref: g('BillPrefecture'), city: g('BillCity'), rest: joinAddress12(g('BillAddress1'), g('BillAddress2')) },
       lines: items.map(({ lineId, ...l }) => l),
     };
     if (!yahooIsMethodOption(initialMethod)) unknownMethods.push({ orderNumber, method: shipMethodRaw || '（空）', productName });
@@ -8523,7 +8530,7 @@ function parseMercariFile(text) {
     }
     const isMultiDest = ps.some(p => destKey(p) !== destKey(p0));
     const billing = { name: p0('billing_name'), postal: p0('billing_postal_code'), pref: p0('billing_state'), city: p0('billing_city'),
-      rest: p0('billing_address_1') + p0('billing_address_2') };
+      rest: joinAddress12(p0('billing_address_1'), p0('billing_address_2')) };
     const isBillingDiff = ns(p0('shipping_name')) !== ns(billing.name) || nd(p0('shipping_postal_code')) !== nd(billing.postal)
       || ns(p0('shipping_state') + p0('shipping_city') + p0('shipping_address_1') + p0('shipping_address_2'))
          !== ns(billing.pref + billing.city + billing.rest);
@@ -8535,7 +8542,7 @@ function parseMercariFile(text) {
       // 氏名は姓名が1つの欄（shipping_name）のため lastName に全体を入れ firstName は空。郵便番号は postal1 に全体
       recipient: { lastName: p0('shipping_name'), firstName: '', phone: p0('shipping_phone_number'),
         postal1: p0('shipping_postal_code'), postal2: '', pref: p0('shipping_state'), city: p0('shipping_city'),
-        rest: p0('shipping_address_1') + p0('shipping_address_2') },
+        rest: joinAddress12(p0('shipping_address_1'), p0('shipping_address_2')) },
       billing,
       multiDest: isMultiDest, billingDiff: isBillingDiff,
       lines: ps.map(p => {
