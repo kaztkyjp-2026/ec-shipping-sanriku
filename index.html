@@ -607,7 +607,7 @@
     <div class="info-box">
       Amazon: <strong>{店舗名}_amazon_shipment_confirm_{出荷予定日YYYYMMDD}_HHMMSS.txt</strong>（読み込んだ発行済データのファイルごと・店舗ごとに1ファイル。同じ名前になるときは末尾に _2・_3…）<br>
       楽天市場: <strong>rakuten_shipping_report_{作成日YYYYMMDD}_HHMMSS.csv</strong>（1ファイル）<br>
-      Yahoo!ショッピング: <strong>yahoo_odstats_ship_{作成日YYYYMMDD}_HHMMSS.csv</strong>（①出荷完了）と <strong>yahoo_odstats_complete_{作成日YYYYMMDD}_HHMMSS.csv</strong>（②注文の完了）。ストアクリエイターPro の［注文管理］→［注文処理実績アップロード］で、①を上げて反映を確かめてから②を上げてください。<br>
+      Yahoo!ショッピング: <strong>yahoo_odstats_ship_{作成日YYYYMMDD}_HHMMSS.csv</strong>（①出荷完了・1ファイル）。ストアクリエイターPro の［注文管理］→［注文処理実績アップロード］で①だけを上げ、続けて［注文処理状況］の「注文完了待ち」で自社発送の注文だけを選び、注文ステータスを「完了」にして「同時に出荷通知メール送信」にチェックを入れて更新してください（アップロードでは出荷通知メールが送られません）。<br>
       メルカリShops: <strong>mercari_bulk_ship_{作成日YYYYMMDD}_HHMMSS.csv</strong>（1ファイル）。ショップ管理画面の［注文］→［CSV一括機能］→［一括発送通知］で上げてください。<br>
       Qoo10: <strong>qoo10_bulk_ship_{作成日YYYYMMDD}_HHMMSS.csv</strong>（1ファイル）。QSM［配送管理］→ 下の［発送処理(一括発送)］タブ →［注文番号でExcel一括発送(ポップアップ)］で上げてください。<br>
       ブラウザのダウンロードとして直接保存されます（フォルダ選択なし）。<br>
@@ -5704,7 +5704,7 @@ async function s2ConvertRun(auth) {
     }
   }
 
-  // ---- ヤフショ分：注文処理実績アップロード用の2ファイル（①出荷完了・②注文の完了） ----
+  // ---- ヤフショ分：注文処理実績アップロード用の①出荷完了（注文の完了と出荷通知メールは画面で行う） ----
   // 送付先ID のような STEP 1 の情報は要らない（STEP 1 を読み込んでいれば出荷漏れの候補だけ出す）
   if (allYahoo.length) {
     const rep = buildYahooShipReport(allYahoo, yahooStoreAccount(), s1YahooParsed ? s1YahooParsed.orders : null, essToday());
@@ -5712,13 +5712,14 @@ async function s2ConvertRun(auth) {
     item.id = 's2-yahoo-result';
     item.className = rep.orderCount ? 'result-item success' : 'result-item error';
     item.textContent = rep.orderCount
-      ? `✓ Yahoo!ショッピング：${rep.orderCount}件（①出荷完了 ${rep.shipRows}行・②完了 ${rep.completeRows}行`
+      ? `✓ Yahoo!ショッピング：${rep.orderCount}件（①出荷完了 ${rep.shipRows}行`
         + (rep.multiParcelCount ? `・うち複数個口 ${rep.multiParcelCount}件` : '') + '）'
       : '⚠ Yahoo!ショッピング：出力対象が0件のため、ファイルは生成していません';
     s2Results.appendChild(item);
     if (rep.orderCount) {
-      const order = essResultItem('', 'Yahoo!ショッピング：ストアクリエイターPro の［注文管理］→［注文処理実績アップロード］で、'
-        + '①出荷完了（yahoo_odstats_ship_…）を上げて反映を確かめてから、②完了（yahoo_odstats_complete_…）を上げてください');
+      const order = essResultItem('', 'Yahoo!ショッピング：ストアクリエイターPro の［注文管理］→［注文処理実績アップロード］で '
+        + '①出荷完了（yahoo_odstats_ship_…）だけを上げてください。続けて［注文処理状況］の「注文完了待ち」で自社発送の注文だけを選び、'
+        + '注文ステータスを「完了」にし、「同時に出荷通知メール送信」にチェックを入れて更新してください（アップロードでは出荷通知メールが送られません）');
       order.id = 's2-yahoo-order';
       order.style.cssText = 'display:block;margin-top:6px;background:#fffbeb;border:1px solid #fcd34d;color:#92400e;font-weight:700;';
       s2Results.appendChild(order);
@@ -5727,7 +5728,6 @@ async function s2ConvertRun(auth) {
     if (rep.orderCount) {
       const ymd = nowStamp().ymd;
       outputFiles.push({ baseFilename: `yahoo_odstats_ship_${ymd}`, ext: 'csv', mime: 'text/csv', data: toSjisUint8(rep.shipCsv) });
-      outputFiles.push({ baseFilename: `yahoo_odstats_complete_${ymd}`, ext: 'csv', mime: 'text/csv', data: toSjisUint8(rep.completeCsv) });
     }
   }
 
@@ -7619,7 +7619,7 @@ function renderRakutenReportWarnings(container, rep) {
 // ==== YAHOO (ヤフショ＝Yahoo!ショッピング) — BEGIN ====
 // ストアクリエイターPro の注文データダウンロード（テンプレート「出荷ツール_全項目」＝注文情報・
 // 「出荷ツール_商品全項目」＝商品情報。Shift_JIS・CR+LF・1行目は英字の列名）→ ピッキング・B2・クリックポスト、
-// B2発行済データ → 注文処理実績アップロード用の2ファイル（①出荷完了・②注文の完了）。
+// B2発行済データ → 注文処理実績アップロード用の①出荷完了（注文の完了と出荷通知メールはストアクリエイターPro の画面で行う）。
 // 原則：楽天と同じ規則・同じ見た目（迷ったら楽天と同じ）。配送方法の値も楽天と同じ文字列を使う。
 // 列は列名で参照する（列番号を使わない）。必須列が無いファイルは黙って0件にせずエラーで止める。
 // ============================================================
@@ -7660,9 +7660,7 @@ const YAHOO_CARRIER_YAMATO = '1001';
 const YAHOO_CARRIER_JAPANPOST = '1003';
 const YAHOO_REPORT_MAX_INVOICES = 2;   // ShipInvoiceNumber1・2。3本目以降は入れずに警告（ヤフショへ問い合わせ中）
 const YAHOO_SHIP_HEADER = ['OrderId', 'ShipStatus', 'ShipCompanyCode', 'ShipInvoiceNumber1', 'ShipInvoiceNumber2', 'ShipDate'];
-const YAHOO_COMPLETE_HEADER = ['OrderId', 'OrderStatus'];
 const YAHOO_SHIP_STATUS_DONE = '3';          // ShipStatus：出荷完了
-const YAHOO_ORDER_STATUS_COMPLETE = '完了';  // OrderStatus：完了（クレジットカードの売上確定）
 
 // CSV（decodeBuffer 済み）→ { headers, idx:{列名→番号}, rows }。データが無ければ rows は空
 function yahooCsvTable(text) {
@@ -8229,13 +8227,13 @@ if (yDropzone && yFileInput) {
   yRenderFileState();
 }
 
-// STEP2：B2発行済データ（とクリックポスト）のヤフショの行 → 注文処理実績アップロード用の2ファイル。
+// STEP2：B2発行済データ（とクリックポスト）のヤフショの行 → 注文処理実績アップロード用の①出荷完了。
 // rows    … [{ orderNumber（＝Id）, trackingRaw, shipDateRaw, carrier?, partial? }]（クリックポストの行だけ carrier＝1003）
 // account … 依頼主設定のヤフショのストアアカウント（OrderId は Id から「account-」を外した数値）
 // orders  … STEP 1 のヤフショの出荷対象（s1YahooParsed.orders。無ければ null＝出荷漏れの候補を出さない）
 // 共通：Shift_JIS（呼び出し側で toSjisUint8）・CR+LF・1行目は英字の列名・1注文1行。
 //   ①出荷完了 … OrderId,ShipStatus(3),ShipCompanyCode(1001/1003),ShipInvoiceNumber1,ShipInvoiceNumber2,ShipDate(yyyy/mm/dd)
-//   ②注文の完了 … OrderId,OrderStatus(完了)。①に入れた注文だけ（①に入らなかった注文は②にも入れない）
+//   注文の完了は作らない（アップロードでは出荷通知メールが送られないため、「注文完了待ち」の画面で完了＋出荷通知メール送信を行う）
 // 伝票が3本以上の注文は2本まで入れて警告。一部の個口だけ伝票番号が入った注文（partial）は除外して警告（楽天と同じ）
 function buildYahooShipReport(rows, account, orders, today) {
   const byOrder = new Map();   // Id → { trackings:[]（重複なし・出てきた順）, shipDateRaw, shipDate, carrier, partial }
@@ -8253,7 +8251,7 @@ function buildYahooShipReport(rows, account, orders, today) {
     if (r.partial) e.partial = r.partial;
   }
   const prefix = account ? account + '-' : '';
-  const shipRows = [], completeRows = [];
+  const shipRows = [];
   const multiParcel = [], tooMany = [], invalidShipDate = [], badId = [];
   let multiParcelCount = 0;
   for (const [orderNumber, e] of byOrder) {
@@ -8263,7 +8261,6 @@ function buildYahooShipReport(rows, account, orders, today) {
     if (!/^\d+$/.test(oid)) { badId.push({ orderNumber }); continue; }
     if (e.trackings.length > YAHOO_REPORT_MAX_INVOICES) tooMany.push({ orderNumber, trackings: e.trackings });
     shipRows.push([oid, YAHOO_SHIP_STATUS_DONE, e.carrier, e.trackings[0], e.trackings[1] || '', e.shipDate]);
-    completeRows.push([oid, YAHOO_ORDER_STATUS_COMPLETE]);
     if (e.trackings.length > 1) multiParcelCount++;
   }
   // 出荷漏れの候補（楽天と同じ考え方）：STEP 1 の出荷対象で B2 に出したはずの注文に伝票が無い
@@ -8275,8 +8272,8 @@ function buildYahooShipReport(rows, account, orders, today) {
     }
   }
   const csvOf = (head, body) => [head, ...body].map(r => r.map(cpCsvCell).join(',')).join('\r\n') + '\r\n';
-  return { shipCsv: csvOf(YAHOO_SHIP_HEADER, shipRows), completeCsv: csvOf(YAHOO_COMPLETE_HEADER, completeRows),
-           shipRows: shipRows.length, completeRows: completeRows.length, orderCount: shipRows.length, multiParcelCount,
+  return { shipCsv: csvOf(YAHOO_SHIP_HEADER, shipRows),
+           shipRows: shipRows.length, orderCount: shipRows.length, multiParcelCount,
            multiParcel, tooMany, invalidShipDate, badId, notShipped };
 }
 
