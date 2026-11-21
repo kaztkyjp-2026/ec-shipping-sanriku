@@ -7064,8 +7064,10 @@ function b2FitAddress(parts) {
     if (r) return { ok: true, method: k + 1, reason: '', whole, addrRaw: lead + T.slice(0, r.p),
                     address: pc.pref + pc.city + r.town, building: r.b };
   }
-  return { ok: false, method: 0, reason: 'over', whole, addrRaw: whole,
-           address: pc.pref + pc.city + b2StripSpaces(T), building: '' };
+  // どの分け方でも上限に収まらないときは、モールのデータの元の分け方のまま出す（建物名欄を空にしない。
+  // 上限を超えた分は B2 の取り込みエラーで知らせてもらう。nogate・Kaz 決定 2026-11-21）
+  return { ok: false, method: 0, reason: 'over', whole, addrRaw: head0,
+           address: b2StripSpaces(head0), building: b2CollapseSpaces(bldg) };
 }
 // R4：B2用CSVの1行（お届け先 [11][12]・ご依頼主 [22][23]）の出力前の検査。全モール共通。
 //   src = { to: { whole, addrRaw }, from: { whole, addrRaw } }（b2FitAddress の戻り値。店舗設定のご依頼主は無し＝欄の値で見る）
@@ -7127,14 +7129,16 @@ function b2GateRows(rows) {
     const bad = b2CheckAddressRow(row, b2AddrSrc.get(id));
     if (bad.length) { manual.add(id); for (const b of bad) failed.push({ orderId: id, ...b }); }
   }
-  return { rows: rows.filter(r => !manual.has(r[0])), failed, manual };
+  // 外れた注文も B2用CSV から外さない（nogate・Kaz 決定 2026-11-21）。おかしな住所は B2 の取り込みエラーで知らせてもらう。
+  // 「B2 手入力」の印も付けない（manual は空で返す）
+  return { rows, failed, manual: new Set() };
 }
 // 出力前の検査で外した注文の赤の警告（他の赤の警告と同じ型）。住所の中身は出さない
 function renderB2ManualSection(container, failed) {
   renderRakutenWarningSection(container, 's1-b2-manual',
-    `⛔ 住所が B2 の上限に収まらない・判定できないため B2用CSV に入れなかった注文（B2 で手入力してください。ピッキングリスト・梱包・発送明細には載せています）: ${new Set(failed.map(x => x.orderId)).size}件`,
+    `⚠ 住所が B2 の上限に収まらない・判定できない注文（B2用CSV には入れています。B2 の取り込みでエラーになったら B2 の画面で直してください。建物名欄は空にしないこと）: ${new Set(failed.map(x => x.orderId)).size}件`,
     ['注文番号', '対象', '欄', '内容', '対処'],
-    failed.map(x => [x.orderId, x.party, x.field, x.msg, 'B2 で手入力してください']), 'error');
+    failed.map(x => [x.orderId, x.party, x.field, x.msg, 'B2 でエラーなら画面で直す（建物名欄は空にしない）']), 'orange');
 }
 
 // 住所を番地の直後の空白で「住所」と「建物名」に分ける（純関数。addrsplit・Kaz 決定 2026-11-20）。
