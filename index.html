@@ -984,7 +984,79 @@ function parcelHeadText(counts) {
 // buildPickingItems の single 要素のいずれでもよい（orderId と initialMethod を持つ）。
 function amazonResolvedMethod(o) {
   if (!o) return AMAZON_NEKOPOS;
-  return amazonShipChoice.get(o.orderId) || o.initialMethod || AMAZON_NEKOPOS;
+  return amazonShipChoice.get(o.orderId) || amazonInitialMethod(o);
+}
+
+// backorder（2026-11-26）：入荷待ちの可能性がある注文。
+// 未出荷レポートの promise-date（例 2026-11-26T14:59:59+00:00）の JST の日付が STEP 1 の出荷予定日の
+// 「2日後」以降なら（案B。Kaz 決定 2026-11-26）、発送方法の初期値を「発行しない」（表示名 送り状なし）にする
+// ＝B2用CSV・クリックポスト用CSV に入れない。ピッキング・梱包発送明細には「出荷予定日 M/D（入荷待ちの可能性）」の印を付けて残す。
+// 「翌日」の注文は、締め時刻の後に入った普通の注文（当日に出している。過去40日で45件中44件）のため
+// 初期値を変えず、印「出荷予定日 M/D」だけ出す（「入荷待ちの可能性」は付けない）。
+// プルダウンで選び直せば今までどおり出せる（前倒しで送ってよい。Kaz 決定 2026-11-20）。
+// promise-date が空・読めない明細が1つでもある注文は判定しない（初期値を変えない）。
+const AMAZON_BACKORDER_HOLD_DAYS = 2;   // 出荷予定日＋この日数以降の promise-date で初期値を「発行しない」にする
+// promise-date 1セル → JST の 'YYYY-MM-DD'。空・読めないときは ''
+function amazonPromiseDateJst(raw) {
+  const s = String(raw == null ? '' : raw).trim();
+  const m = /^(\d{4})-(\d{2})-(\d{2})(?:[T ](\d{2}):(\d{2})(?::(\d{2})(?:\.\d+)?)?\s*(Z|[+-]\d{2}:?\d{2})?)?$/.exec(s);
+  if (!m) return '';
+  if (m[4] == null) return `${m[1]}-${m[2]}-${m[3]}`;   // 日付だけ（時刻なし）はその日
+  // 時差なしの時刻は JST とみなす
+  const tz = m[7] == null ? '+09:00' : m[7] === 'Z' ? 'Z' : m[7].replace(/^([+-]\d{2})(\d{2})$/, '$1:$2');
+  const t = Date.parse(`${m[1]}-${m[2]}-${m[3]}T${m[4]}:${m[5]}:${m[6] || '00'}${tz}`);
+  if (!isFinite(t)) return '';
+  const j = new Date(t + 9 * 3600 * 1000).toISOString().slice(0, 10);
+  // 2026-02-30 等の存在しない日付は Date が繰り上げるため、日付部分が入力と同じときだけ受ける（時差で日付が変わる分は許す）
+  const d0 = new Date(Date.UTC(+m[1], +m[2] - 1, +m[3]));
+  if (d0.getUTCMonth() !== +m[2] - 1 || d0.getUTCDate() !== +m[3]) return '';
+  return j;
+}
+// 注文の判定に使う promise-date（明細の中で最も早い日付）。読めない明細があれば ''
+function amazonOrderPromiseDate(dates) {
+  if (!dates || !dates.length || dates.some(d => !d)) return '';
+  return dates.slice().sort()[0];
+}
+// STEP 1 の出荷予定日（'YYYY-MM-DD'）。欄が空・読めないときは ''
+function amazonShipDateValue() {
+  const ship = (document.getElementById('s1-shipDate') || {}).value || '';
+  return /^\d{4}-\d{2}-\d{2}$/.test(ship) ? ship : '';
+}
+// 出荷予定日（STEP 1 の欄）より後の promise-date なら その日付、そうでなければ ''（印を出す注文）
+function amazonBackorderDate(o) {
+  const pd = o && o.promiseDate;
+  if (!pd) return '';
+  const ship = amazonShipDateValue();
+  if (!ship) return '';
+  return pd > ship ? pd : '';
+}
+// 'YYYY-MM-DD' に n 日足した 'YYYY-MM-DD'
+function amazonAddDays(date, n) {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(date || '');
+  if (!m) return '';
+  return new Date(Date.UTC(+m[1], +m[2] - 1, +m[3] + n)).toISOString().slice(0, 10);
+}
+// promise-date（印を出す日付）が出荷予定日＋AMAZON_BACKORDER_HOLD_DAYS 日以降か＝初期値を「発行しない」にするか
+function amazonBackorderDateHolds(date) {
+  const ship = amazonShipDateValue();
+  return !!(date && ship && date >= amazonAddDays(ship, AMAZON_BACKORDER_HOLD_DAYS));
+}
+function amazonBackorderHold(o) { return amazonBackorderDateHolds(amazonBackorderDate(o)); }
+// 'YYYY-MM-DD' → 'M/D'
+function amazonMd(date) {
+  const m = /^\d{4}-(\d{2})-(\d{2})$/.exec(date || '');
+  return m ? `${Number(m[1])}/${Number(m[2])}` : '';
+}
+// 印の文面（画面・帳票で同じ）。＋2日以降は「出荷予定日 M/D（入荷待ちの可能性）」、翌日は「出荷予定日 M/D」
+function amazonBackorderDateText(date) {
+  if (!date) return '';
+  return `出荷予定日 ${amazonMd(date)}` + (amazonBackorderDateHolds(date) ? '（入荷待ちの可能性）' : '');
+}
+function amazonBackorderText(o) { return amazonBackorderDateText(amazonBackorderDate(o)); }
+// 発送方法の初期値（プルダウンを操作していないときの確定値）
+function amazonInitialMethod(o) {
+  if (amazonBackorderHold(o)) return AMAZON_NONE;
+  return o.initialMethod || AMAZON_NEKOPOS;
 }
 
 // 確定発送方法 → B2送り状種類コード。B2から除外する注文（宅急便・別発行／発行しない／本日出荷しない）は null。
@@ -1036,10 +1108,14 @@ function parseAmazonTsvGroups(tsvText) {
         // address-3 が空なら数字で始まらない address-2）。fullAddress・building（クリックポスト・帳票）は変えない
         addrParts: amazonAddrParts(gc(cols,'ship-state'), gc(cols,'ship-city'),
           gc(cols,'ship-address-1'), gc(cols,'ship-address-2'), gc(cols,'ship-address-3')),
-        initialMethod: null   // 発送方法の判定値（確定値は amazonResolvedMethod で解決する）
+        initialMethod: null,  // 発送方法の判定値（確定値は amazonResolvedMethod で解決する）
+        promiseDates: [],     // backorder：明細ごとの promise-date（JST の日付。読めなければ ''）
+        promiseDate: ''       // backorder：注文の promise-date（amazonOrderPromiseDate）
       });
     }
     const g = groups.get(key);
+    g.promiseDates.push(amazonPromiseDateJst(gc(cols, 'promise-date')));
+    g.promiseDate = amazonOrderPromiseDate(g.promiseDates);
     // 1注文に複数の判定が混ざったら強い方を採る（1明細でも別発行なら注文ごと別発行）
     g.initialMethod = amazonStrongerMethod(g.initialMethod, lineMethod);
     g.products.push(gc(cols,'product-name'));
@@ -1107,6 +1183,7 @@ function amazonOrderCore(g, storeIndex) {
   return {
     orderId: g.orderId,                            // 発送方法プルダウンの引きキー
     initialMethod: g.initialMethod || AMAZON_NEKOPOS,
+    promiseDate: g.promiseDate || '',   // backorder：初期値の判定（amazonInitialMethod）に使う
     storeIndex, sku, qty, isMulti,
     firstItemId: g.itemIds[0] || '',   // 単一商品注文の記事欄に付与する order-item-id
     picking: { orderId: g.orderId, lines }
@@ -1373,6 +1450,7 @@ function buildPickingItems(records, skuNumMap) {
     // 発送方法は値を焼き込まず、確定値の材料（判定値）だけ持たせる。印刷HTMLはボタン押下時に
     // amazonResolvedMethod() で解決する＝プルダウンの選択がそのまま帳票に反映される。
     initialMethod: r.initialMethod,
+    promiseDate: r.promiseDate || '',   // backorder：初期値と「入荷待ちの可能性」の印
     lines: r.picking.lines.map(l => ({
       ...l, num: (skuNumMap && skuNumMap.get(l.sku)) || ''
     }))
@@ -1663,6 +1741,16 @@ function renderCombinedPickingHTML(amazon, rakuten, seq, load, yahoo, mercari, q
   const parcelTag = n => n >= 2 ? `<span class="parcel-tag">${n}個口</span>` : '';
   // 出力前の検査で B2用CSV に入れなかった注文（b2ManualOrders）の印。送り状を B2 で手入力する（赤の .mp-badge）
   const b2ManualTag = id => b2ManualOrders.has(id) ? `<span class="mp-badge">⚠ B2 手入力</span>` : '';
+  // backorder（2026-11-26）：Amazon の promise-date が出荷予定日より後の注文の印。発送方法を選び直しても出す（日付の事実のため）。
+  //   ＋2日以降＝「⚠ 出荷予定日 M/D（入荷待ちの可能性）」（「送り状なし」等と同じ赤の .mp-badge）
+  //   翌日＝「出荷予定日 M/D」（普通の注文のため ⚠ を付けず、配送方法の表記と同じ黒の細枠 .m-tag。帳票の CSS は増やさない。
+  //   pd-tag は見分けるための名前だけで、CSS の規則は持たない）
+  const backorderDateTag = d => !d ? '' : amazonBackorderDateHolds(d)
+    ? `<span class="mp-badge">⚠ ${esc(amazonBackorderDateText(d))}</span>`
+    : `<span class="m-tag pd-tag">${esc(amazonBackorderDateText(d))}</span>`;
+  const backorderTag = o => backorderDateTag(amazonBackorderDate(o));
+  // 日付の集合 → 印（商品別集計の行・集約行。日付の昇順）
+  const backorderTags = set => Array.from(set).sort().map(backorderDateTag).join('');
 
   // 商品別集計（ピッキング）の対象。「本日出荷しない」の注文は当日ピッキングしないため除く
   // （梱包・発送明細には載せる＝aOrders／rOrders・行番号 seq は全注文のまま）。
@@ -1777,6 +1865,7 @@ function renderCombinedPickingHTML(amazon, rakuten, seq, load, yahoo, mercari, q
   const multiParcels = new Map();
   const multiOrders = new Map();
   const multiMethods = new Map();   // 識別子 → { mall, set: Set<確定配送方法> }（集約行の配送方法の印）
+  const multiBackorder = new Map(); // backorder：識別子 → Set<出荷予定日 'YYYY-MM-DD'>（Amazon の入荷待ちの可能性の印）
   {
     const aById = new Map(((amazon && amazon.single) || []).map(o => [o.orderId, o]));
     const rById = new Map(((rakuten && rakuten.orders) || []).map(o => [o.orderNumber, o]));
@@ -1798,6 +1887,11 @@ function renderCombinedPickingHTML(amazon, rakuten, seq, load, yahoo, mercari, q
           : r.mall === 'mercari' ? mercariResolvedMethod(o) : r.mall === 'qoo10' ? qoo10ResolvedMethod(o) : rakutenResolvedMethod(o);
         if (!multiMethods.has(r.multi)) multiMethods.set(r.multi, { mall: r.mall, set: new Set() });
         multiMethods.get(r.multi).set.add(m);
+        // backorder：入荷待ちの可能性がある Amazon の注文の出荷予定日（集約行の印）
+        if (r.mall === 'amazon' && amazonBackorderDate(o)) {
+          if (!multiBackorder.has(r.multi)) multiBackorder.set(r.multi, new Set());
+          multiBackorder.get(r.multi).add(amazonBackorderDate(o));
+        }
       }
     }
   }
@@ -1813,7 +1907,7 @@ function renderCombinedPickingHTML(amazon, rakuten, seq, load, yahoo, mercari, q
   const shortName = s => { const t = String(s == null ? '' : s); return t.length > 20 ? t.slice(0, 20) + '…' : t; };
   // 「本日出荷しない」だけの識別子は行ごと出さない（除く注文が無い日は g.count と multiOrders は同じ値）
   const multiGroupRows = (groups, badgeFor) => (groups || []).filter(g => multiOrders.has(g.id)).map(g =>
-    `<tr><td class="thumb-cell"><span class="multi-id">${esc(g.id)}</span></td><td class="num">—</td><td class="qty">—</td><td class="cnt">${cntInner(multiParcels.get(g.id) || multiOrders.get(g.id), multiOrders.get(g.id))}</td><td class="name">${esc(g.lines.map(l => `${l.num}×${l.quantity}`).join(' ＋ '))}　${esc(g.lines.map(l => shortName(l.name)).join(' ／ '))}${multiMethods.has(g.id) ? badgeFor(multiMethods.get(g.id).set) : ''}</td></tr>`
+    `<tr><td class="thumb-cell"><span class="multi-id">${esc(g.id)}</span></td><td class="num">—</td><td class="qty">—</td><td class="cnt">${cntInner(multiParcels.get(g.id) || multiOrders.get(g.id), multiOrders.get(g.id))}</td><td class="name">${esc(g.lines.map(l => `${l.num}×${l.quantity}`).join(' ＋ '))}　${esc(g.lines.map(l => shortName(l.name)).join(' ／ '))}${multiMethods.has(g.id) ? badgeFor(multiMethods.get(g.id).set) : ''}${multiBackorder.has(g.id) ? backorderTags(multiBackorder.get(g.id)) : ''}</td></tr>`
   ).join('');
   // 梱包・発送明細の見出しの先頭の行番号（全角括弧で括る。例「（001）」）と、複数商品注文の識別子の札
   const detailNo = (mall, id) => { const r = seqByOrder.get(mall + '\u001e' + id); return r ? `<span class="row-no">（${esc(r.no)}）</span>` : ''; };
@@ -1869,11 +1963,19 @@ function renderCombinedPickingHTML(amazon, rakuten, seq, load, yahoo, mercari, q
     if (!amazonSkuMethods.has(sku)) amazonSkuMethods.set(sku, new Set());
     amazonSkuMethods.get(sku).add(m);
   }
+  // backorder：sku → Set<出荷予定日>（1品の注文のうち入荷待ちの可能性があるもの）
+  const amazonSkuBackorder = new Map();
+  for (const o of aPickOrders) {
+    if ((o.lines || []).length !== 1 || !amazonBackorderDate(o)) continue;
+    const sku = o.lines[0].sku;
+    if (!amazonSkuBackorder.has(sku)) amazonSkuBackorder.set(sku, new Set());
+    amazonSkuBackorder.get(sku).add(amazonBackorderDate(o));
+  }
   const amazonSetBadges = s => [AMAZON_COMPACT, AMAZON_CLICKPOST, AMAZON_TAKKYUBIN, AMAZON_NONE].filter(m => s.has(m)).map(amazonSkuBadge).join('');
   const amazonSkuBadges = sku => {
     const s = amazonSkuMethods.get(sku);
-    if (!s) return '';
-    return amazonSetBadges(s);
+    const b = amazonSkuBackorder.get(sku);
+    return (s ? amazonSetBadges(s) : '') + (b ? backorderTags(b) : '');
   };
 
   // ---- 商品別合計（A4縦・1段） ----
@@ -2053,7 +2155,7 @@ function renderCombinedPickingHTML(amazon, rakuten, seq, load, yahoo, mercari, q
     // 本日出荷しない注文は表記の代わりに赤い札「⚠ 本日出荷しない」。2個口以上の注文は「N個口」の印も出す。
     // ※ G番号は分けない（商品別合計との突合が壊れるため。冒頭の再発防止コメント参照）。
     return `<section class="order">
-      <h2>${detailNo('amazon', o.orderId)}${esc(o.orderId)}${amazonMethodBadge(amazonResolvedMethod(o))}${parcelTag(amazonParcelCount(o))}${b2ManualTag(o.orderId)}${detailMulti('amazon', o.orderId)}</h2>
+      <h2>${detailNo('amazon', o.orderId)}${esc(o.orderId)}${amazonMethodBadge(amazonResolvedMethod(o))}${backorderTag(o)}${parcelTag(amazonParcelCount(o))}${b2ManualTag(o.orderId)}${detailMulti('amazon', o.orderId)}</h2>
       <table>${detailHead}<tbody>${rows}</tbody></table>
     </section>`;
   }).join('')}</div>
@@ -4705,6 +4807,17 @@ async function s1ConvertRun(auth) {
     s1Results.appendChild(item);
   });
 
+  // backorder（2026-11-26）：出荷予定日が先で初期値の「送り状なし」のままの注文を知らせる（楽天の「送り状なし」の一覧と同じ形）
+  {
+    // 案B：初期値を「発行しない」にした注文（出荷予定日の2日後以降）だけ。翌日の注文は初期値を変えないため出さない
+    const bo = allRecords.filter(r => amazonBackorderHold(r) && amazonResolvedMethod(r) === AMAZON_NONE);
+    renderRakutenWarningSection(s1Results, 's1-am-backorder',
+      `📦 Amazon：promise-date が出荷予定日の2日後以降（入荷待ちの可能性）のため「送り状なし」にしてB2・クリックポストから除外`
+        + `（ピッキング・梱包発送明細には印付きで載せます。送るときは発送方法を選び直してください）: ${bo.length}件`,
+      ['注文番号', '出荷予定日（promise-date）'],
+      bo.map(r => [r.orderId, amazonMd(amazonBackorderDate(r))]), 'warn');
+  }
+
   // 統一ソート：B2 CSV 行順 と ピッキング順 の両方に同一順序を適用。
   // ソートは別発行も含めた全件で行う（ピッキング順は出荷方法で分けない）。
   const sortedAmazon = allRecords.length ? sortOrderRecords(allRecords) : [];
@@ -6005,6 +6118,7 @@ function amazonShipMethodOrders() {
         storeName: store.name,
         orderId: g.orderId,
         initialMethod: core.initialMethod,
+        promiseDate: core.promiseDate,   // backorder：初期値と「入荷待ちの可能性」の印
         qtySum: core.qty,   // 数量合計（2以上なら複数個口の候補の札）
         lines: core.picking.lines.map(l => ({ ...l }))
       });
@@ -6032,6 +6146,7 @@ function renderAmazonShipMethodSection() {
   if (old) old.remove();
 
   const loaded = amazonShipMethodOrders();
+  amazonBackorderKey = amazonBackorderKeyOf(loaded);
   if (!loaded.length) return;
   // 複数個口の候補（数量合計が2以上＝札あり）の群を先頭に置き、その中と札の無い注文は今の順位：
   // 確認が要る注文（確定値がネコポス以外）を上にまとめる。群の中は店舗→読み込み順（安定ソート）。
@@ -6071,7 +6186,9 @@ function renderAmazonShipMethodSection() {
   };
   // 開いて確認が要る注文＝確定値が宅急便（セラーセントラルで発行）、または複数個口の候補（札あり）。
   // 見出しの赤は今どおり別発行だけ（札は見出しの赤／緑・件数に入れない）
-  const needsLook = r => amazonResolvedMethod(r) === AMAZON_TAKKYUBIN || isCand(r);
+  // backorder：出荷予定日が先の注文（初期値 送り状なし）も開いて見せる（B2 に出ないことに気づけるように）
+  // （案B：翌日の注文は普通の注文のため開く理由にしない。印は出す）
+  const needsLook = r => amazonResolvedMethod(r) === AMAZON_TAKKYUBIN || isCand(r) || amazonBackorderHold(r);
   // 初回は自動判定（当たる注文があれば開く）。組み直しでは手の開閉を保ち、新たに当たる注文が出たときだけ開く
   const hits = rows.filter(needsLook).map(r => r.orderId);
   const newHit = hits.some(id => !amazonShipAutoSeen.has(id));
@@ -6089,7 +6206,11 @@ function renderAmazonShipMethodSection() {
     orderId: r.orderId,
     storeLabel: `Amazon（${amazonStoreDisplayNames(r.storeName)}）`,
     badges: shipListParcelHint(r.qtySum),
-    alerts: '',
+    // backorder：2段目の先頭に「出荷予定日 M/D（入荷待ちの可能性）」（楽天の「本日中に出荷が必要」と同じ橙の太字）。
+    // 案B：翌日の注文は初期値を変えないため、灰色の「出荷予定日 M/D」だけ（⚠・「入荷待ちの可能性」は付けない）
+    alerts: amazonBackorderHold(r) ? `<div class="asm-alert-bo">⚠ ${esc(amazonBackorderText(r))}`
+      + `（初期値は送り状なし。B2・クリックポストに出しません。送るときは発送方法を選び直す）</div>`
+      : amazonBackorderDate(r) ? `<div class="asm-alert-pd">${esc(amazonBackorderText(r))}</div>` : '',
     lines: r.lines,
     shipSelect: `<select class="asm-ship" data-order="${esc(r.orderId)}">${optionsHtml(amazonResolvedMethod(r))}</select>`,
     parcelSelect: `<select class="asm-parcel" data-order="${esc(r.orderId)}"${amazonNoParcel(amazonResolvedMethod(r)) ? ' disabled' : ''}>${
@@ -6099,7 +6220,10 @@ function renderAmazonShipMethodSection() {
   })).join('');
 
   sec.innerHTML = `
-    <style>${SHIP_LIST_CSS}</style>
+    <style>${SHIP_LIST_CSS}
+      #amazon-ship-method-wrap .asm-alert-bo { color:#c2410c; font-weight:700; padding:2px 0; }
+      #amazon-ship-method-wrap .asm-alert-pd { color:#475569; padding:2px 0; }
+    </style>
     <table class="asm-table ship-list">${rowsHtml}</table>`;
 
   wrap.appendChild(head);
@@ -6113,7 +6237,8 @@ function renderAmazonShipMethodSection() {
   const refreshHead = () => {
     const n = m => rows.filter(r => amazonResolvedMethod(r) === m).length;
     const separate = n(AMAZON_TAKKYUBIN);
-    const switched = rows.filter(r => amazonResolvedMethod(r) !== r.initialMethod).length;
+    const switched = rows.filter(r => amazonResolvedMethod(r) !== amazonInitialMethod(r)).length;
+    const backorder = rows.filter(r => amazonBackorderHold(r)).length;   // 案B：2日後以降だけ数える
     // 赤（⚠）は開いて確認が要る注文（別発行）があるときだけ。楽天の「不明」と同じ基準にそろえる
     head.className = 'result-item ' + (separate ? 'error' : 'success');
     // 従来の見出しの注意（別発行分はセラーセントラルで発行／いずれもピッキング・梱包の対象）を引き継ぐ
@@ -6122,6 +6247,7 @@ function renderAmazonShipMethodSection() {
       + `／宅急便（別発行） ${separate}／送り状なし ${n(AMAZON_NONE)}／本日出荷しない ${n(AMAZON_SKIP)}`
       + parcelHeadText(rows.filter(r => !amazonNoParcel(amazonResolvedMethod(r))).map(amazonParcelCount))
       + (switched ? `／判定から変更 ${switched}件` : '')
+      + (backorder ? `／出荷予定日が先（入荷待ちの可能性） ${backorder}件` : '')
       + '。いずれもピッキング・梱包の対象には含まれています。'
       + (separate ? '宅急便（別発行）はB2 CSVに出しません。セラーセントラルで配送ラベルを購入して発行してください' : '');
     redo.style.display = s1ShipChoiceStale ? 'block' : 'none';
@@ -6169,6 +6295,31 @@ function renderAmazonShipMethodSection() {
 
   toggle.addEventListener('click', () => setOpen(sec.style.display === 'none'));
 }
+
+// backorder（2026-11-26）：出荷予定日を変えたら、Amazon の発送方法の初期値（入荷待ちの可能性）を組み直す。
+// 初期値（「発行しない」）が変わる注文があり、すでに出力済みなら「変換し直してください」を出す（発送方法の変更と同じ扱い）。
+// 印だけ変わる（翌日の注文の「出荷予定日 M/D」）ときは一覧を組み直すだけ（B2・クリックポストは変わらない）
+// rows → { mark: 印の付く注文と日付, hold: 初期値を「発行しない」にする注文 }
+function amazonBackorderKeyOf(rows) {
+  return {
+    mark: rows.filter(r => amazonBackorderDate(r)).map(r => r.orderId + ':' + amazonBackorderDate(r)).join(','),
+    hold: rows.filter(r => amazonBackorderHold(r)).map(r => r.orderId).join(','),
+  };
+}
+let amazonBackorderKey = { mark: '', hold: '' };
+s1ShipDate.addEventListener('change', () => {
+  if (!Object.values(s1Buffers).some(Boolean)) return;
+  const key = amazonBackorderKeyOf(amazonShipMethodOrders());
+  if (key.mark === amazonBackorderKey.mark && key.hold === amazonBackorderKey.hold) return;
+  const holdChanged = key.hold !== amazonBackorderKey.hold;
+  amazonBackorderKey = key;
+  if (holdChanged && (s1OutputDone || s1ShipChoiceStale)) {
+    s1ShipChoiceStale = true;
+    s1OutputDone = false;
+  }
+  renderAmazonShipMethodSection();
+  updateS1ConvertLabel();
+});
 
 // ============================================================
 // STEP2: お客様管理番号がAmazon形式でも楽天市場形式でもない行の除外警告ブロック。
